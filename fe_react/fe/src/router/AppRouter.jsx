@@ -9,6 +9,17 @@ import Activities from "../pages/public/Activities";
 import About from "../pages/public/About";
 import Partners from "../pages/public/Partners";
 import Profile from "../pages/user/Profile";
+import AdminDashboard from "../pages/admin/AdminDashboard";
+import AdminUsers from "../pages/admin/AdminUsers";
+import AdminHomestays from "../pages/admin/AdminHomestays";
+import AdminBookings from "../pages/admin/AdminBookings";
+import AdminPromotions from "../pages/admin/AdminPromotions";
+import AdminComplaints from "../pages/admin/AdminComplaints";
+import AdminReviews from "../pages/admin/AdminReviews";
+import AdminRevenue from '../pages/admin/AdminRevenue';
+
+
+
 
 // cấu hình điều hướng 
 // localhost:5173/ => index.jsx
@@ -37,6 +48,22 @@ const AppRouter = () => {
             <Route path="/about" element={<About /> } />
             <Route path="/partners" element={<Partners /> } />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/admin" element={<AdminDashboard />} />
+
+            <Route path="/admin">
+            <Route index element={<AdminDashboard />} />
+                <Route path="users" element={<AdminUsers />} />
+                <Route path="homestays" element={<AdminHomestays />} />
+                <Route path="bookings" element={<AdminBookings />} />
+                <Route path="promotions" element={<AdminPromotions />} />
+                <Route path="complaints" element={<AdminComplaints />} />
+                <Route path="reviews" element={<AdminReviews />} />
+                <Route path="revenue" element={<AdminRevenue />} />
+
+
+                
+            </Route>
+            
             </Routes>
         </BrowserRouter>
     );

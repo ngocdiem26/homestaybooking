@@ -124,6 +124,10 @@ body {
     font-family: 'Plus Jakarta Sans', sans-serif;
     background-color: #F4F1EA; /* Màu kem ấm bên ngoài */
 }
+/* ÉP TOÀN BỘ THỂ TIÊU ĐỀ h1, h2, h3 VÀ CLASS font-serif PHẢI CHẠY FONT PLAYFAIR DISPLAY */
+h1, h2, h3, .font-classic, .font-serif {
+    font-family: 'Playfair Display', serif !important;
+}
 
 .font-classic {
     font-family: 'Playfair Display', serif;
