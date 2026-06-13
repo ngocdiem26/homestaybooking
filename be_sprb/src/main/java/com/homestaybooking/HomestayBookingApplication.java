@@ -1,13 +1,12 @@
-package java.lvtn;
+package com.homestaybooking;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class LvtnApplication {
+public class HomestayBookingApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(LvtnApplication.class, args);
+		SpringApplication.run(HomestayBookingApplication.class, args);
 	}
-
 }

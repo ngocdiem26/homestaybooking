@@ -17,6 +17,7 @@ import AdminPromotions from "../pages/admin/AdminPromotions";
 import AdminComplaints from "../pages/admin/AdminComplaints";
 import AdminReviews from "../pages/admin/AdminReviews";
 import AdminRevenue from '../pages/admin/AdminRevenue';
+import HomestayDetail from '../pages/user/HomestayDetail';
 
 
 
@@ -49,7 +50,7 @@ const AppRouter = () => {
             <Route path="/partners" element={<Partners /> } />
             <Route path="/profile" element={<Profile />} />
             <Route path="/admin" element={<AdminDashboard />} />
-
+            <Route path="/homestay/:id" element={<HomestayDetail />} />
             <Route path="/admin">
             <Route index element={<AdminDashboard />} />
                 <Route path="users" element={<AdminUsers />} />

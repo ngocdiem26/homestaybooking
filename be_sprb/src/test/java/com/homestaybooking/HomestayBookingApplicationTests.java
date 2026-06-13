@@ -1,13 +1,12 @@
-package java.lvtn;
+package com.homestaybooking;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class LvtnApplicationTests {
+class HomestayBookingApplicationTests {
 
 	@Test
 	void contextLoads() {
 	}
-
 }
