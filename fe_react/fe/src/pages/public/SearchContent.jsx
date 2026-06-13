@@ -481,8 +481,8 @@
 
 import { useState } from 'react';
 // Import 2 loại card từ thư mục component
-import HorizontalHomestayCard from '../../component/HorizontalHomestayCard';
-import VerticalHomestayCard from '../../component/VerticalHomestayCard';
+import HorizontalHomestayCard from '../../components/homestay/HorizontalHomestayCard';
+import VerticalHomestayCard from '../../components/homestay/VerticalHomestayCard';
 
 export default function SearchContent({ setHasSearched, favorites, toggleFavorite }) {
   const [viewMode, setViewMode] = useState('horizontal');

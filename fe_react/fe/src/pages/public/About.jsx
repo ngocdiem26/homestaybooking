@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import UserLayout from '../../layout/UserLayout';
+import UserLayout from '../../layouts/UserLayout';
 
 export default function About() {
   const navigate = useNavigate();

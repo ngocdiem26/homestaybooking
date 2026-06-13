@@ -1,8 +1,8 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import AdminLayout from '../../layout/AdminLayout';
-import Pagination from '../../component/admin/Pagination';
+import AdminLayout from '../../layouts/AdminLayout';
+import Pagination from '../../components/common/Pagination';
 
 export default function AdminPromotions() {
   const navigate = useNavigate();

@@ -1,5 +1,5 @@
 // import { useState, useRef } from 'react';
-// import UserLayout from '../../layout/UserLayout';
+// import UserLayout from '../../layouts/UserLayout';
 
 // export default function Profile() {
 //   const fileInputRef = useRef(null);
@@ -443,17 +443,17 @@
 //   );
 // }
 import { useState, useRef } from 'react';
-import UserLayout from '../../layout/UserLayout';
+import UserLayout from '../../layouts/UserLayout';
 
 // Import toàn bộ các mảnh ghép component vừa bóc tách
-import ProfileDashboard from './components/ProfileDashboard';
-import ProfileSidebar from './components/ProfileSidebar';
-import AccountInfo from './components/AccountInfo';
-import BookingManager from './components/BookingManager';
-import PaymentManager from './components/PaymentManager';
-import TransactionHistory from './components/TransactionHistory';
-import CustomSchedule from './components/CustomSchedule';
-import ReviewManager from './components/ReviewManager';
+import ProfileDashboard from '../../components/profile/ProfileDashboard';
+import ProfileSidebar from '../../components/profile/ProfileSidebar';
+import AccountInfo from '../../components/profile/AccountInfo';
+import BookingManager from '../../components/profile/BookingManager';
+import PaymentManager from '../../components/profile/PaymentManager';
+import TransactionHistory from '../../components/profile/TransactionHistory';
+import CustomSchedule from '../../components/profile/CustomSchedule';
+import ReviewManager from '../../components/profile/ReviewManager';
 
 export default function Profile() {
   const fileInputRef = useRef(null);

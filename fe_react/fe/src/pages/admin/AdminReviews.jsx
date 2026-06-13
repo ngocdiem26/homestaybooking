@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import AdminLayout from '../../layout/AdminLayout';
-import Pagination from '../../component/admin/Pagination';
+import AdminLayout from '../../layouts/AdminLayout';
+import Pagination from '../../components/common/Pagination';
 import { BiCommentDetail } from "react-icons/bi";
 
 export default function AdminReviews() {

@@ -1,6 +1,6 @@
-import UserLayout from '../../layout/UserLayout';
+import UserLayout from '../../layouts/UserLayout';
 // SỬA TẠI ĐÂY: Import đúng tên component card dọc đã chia module
-import VerticalHomestayCard from '../../component/VerticalHomestayCard';
+import VerticalHomestayCard from '../../components/homestay/VerticalHomestayCard';
 
 export default function Favorites({ favorites, toggleFavorite }) {
   

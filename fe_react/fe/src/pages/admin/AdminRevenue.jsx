@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import AdminLayout from '../../layout/AdminLayout';
-import Pagination from '../../component/admin/Pagination';
+import AdminLayout from '../../layouts/AdminLayout';
+import Pagination from '../../components/common/Pagination';
 
 // Cài đặt đồ thị giả lập bằng Chart.js hoặc Recharts (sử dụng div minh họa để tránh lỗi biên dịch nếu chưa cài thư viện đồ thị)
 // Hướng dẫn tích hợp thực tế: Có thể dùng Recharts hoặc react-chartjs-2
