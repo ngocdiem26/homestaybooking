@@ -1,0 +1,61 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background-color: #F4F1EA;
+}
+
+h1,
+h2,
+h3,
+.font-classic,
+.font-serif {
+  font-family: 'Playfair Display', serif !important;
+}
+
+.font-classic {
+  font-family: 'Playfair Display', serif;
+}
+
+.wood-pattern-bg {
+  background-color: #23150d;
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(35, 21, 13, 0.45) 0%, rgba(20, 11, 7, 0.95) 100%),
+    url('https://images.unsplash.com/photo-1541123437800-1bb1317badc2?q=80&w=1200&auto=format&fit=crop');
+  background-size: cover;
+  background-position: center;
+}
+
+.fade-in-active {
+  animation: fadeInCozy 0.4s forwards ease-in-out;
+}
+
+@keyframes fadeInCozy {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F1EFEA;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C4BCAE;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9E9484;
+}
