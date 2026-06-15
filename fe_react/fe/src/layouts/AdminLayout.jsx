@@ -8,7 +8,7 @@ export default function AdminLayout({ children }) {
 
   const handleLogout = () => {
     if (window.confirm("Bạn có chắc chắn muốn đăng xuất khỏi hệ thống quản trị Cozygo?")) {
-      navigate('/login');
+      navigate('/');
     }
   };
 
