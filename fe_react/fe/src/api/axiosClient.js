@@ -1,7 +1,9 @@
+import { getAuthToken } from '../services/authStorage';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
 function buildHeaders(customHeaders = {}) {
-  const token = localStorage.getItem('auth_token');
+  const token = getAuthToken();
 
   return {
     'Content-Type': 'application/json',

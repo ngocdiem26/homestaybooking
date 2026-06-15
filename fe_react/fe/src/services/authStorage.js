@@ -1,21 +1,64 @@
 const AUTH_USER_KEY = 'auth_user';
 const AUTH_TOKEN_KEY = 'auth_token';
+const AUTH_REMEMBER_KEY = 'auth_remember';
 
-export function saveAuthSession(authResponse) {
-  localStorage.setItem(AUTH_TOKEN_KEY, authResponse.token);
-  localStorage.setItem(AUTH_USER_KEY, JSON.stringify(authResponse));
+function clearStorage(storage) {
+  storage.removeItem(AUTH_TOKEN_KEY);
+  storage.removeItem(AUTH_USER_KEY);
+}
+
+function readStorage(storage) {
+  const rawUser = storage.getItem(AUTH_USER_KEY);
+  const token = storage.getItem(AUTH_TOKEN_KEY);
+
+  if (!token || !rawUser) {
+    return { token: null, user: null };
+  }
+
+  try {
+    return {
+      token,
+      user: JSON.parse(rawUser),
+    };
+  } catch {
+    clearStorage(storage);
+    return { token: null, user: null };
+  }
+}
+
+export function saveAuthSession(authResponse, rememberMe = false) {
+  clearAuthSession();
+
+  const storage = rememberMe ? localStorage : sessionStorage;
+  storage.setItem(AUTH_TOKEN_KEY, authResponse.token);
+  storage.setItem(AUTH_USER_KEY, JSON.stringify(authResponse));
+
+  if (rememberMe) {
+    localStorage.setItem(AUTH_REMEMBER_KEY, 'true');
+  }
 }
 
 export function getAuthSession() {
-  const rawUser = localStorage.getItem(AUTH_USER_KEY);
+  const sessionAuth = readStorage(sessionStorage);
 
-  return {
-    token: localStorage.getItem(AUTH_TOKEN_KEY),
-    user: rawUser ? JSON.parse(rawUser) : null,
-  };
+  if (sessionAuth.token && sessionAuth.user) {
+    return sessionAuth;
+  }
+
+  if (localStorage.getItem(AUTH_REMEMBER_KEY) !== 'true') {
+    clearStorage(localStorage);
+    return { token: null, user: null };
+  }
+
+  return readStorage(localStorage);
+}
+
+export function getAuthToken() {
+  return getAuthSession().token;
 }
 
 export function clearAuthSession() {
-  localStorage.removeItem(AUTH_TOKEN_KEY);
-  localStorage.removeItem(AUTH_USER_KEY);
+  clearStorage(sessionStorage);
+  clearStorage(localStorage);
+  localStorage.removeItem(AUTH_REMEMBER_KEY);
 }
