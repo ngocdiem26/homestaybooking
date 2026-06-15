@@ -2,20 +2,19 @@
 import { useState } from 'react';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
 import Logo from '../components/common/Logo';
-import { clearAuthSession, getAuthSession } from '../services/authStorage';
+import { useAuth } from '../hooks/useAuth';
 
 export default function UserLayout({ children }) {
   const navigate = useNavigate();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const { token, user } = getAuthSession();
-  const isAuthenticated = Boolean(token && user);
+  const { isAuthenticated, logout, user } = useAuth();
   const displayName = user?.fullName || user?.email || 'Tài khoản';
   const avatarLabel = displayName.trim().charAt(0).toUpperCase();
 
   const handleLogout = () => {
-    clearAuthSession();
+    logout();
     setIsUserMenuOpen(false);
-    navigate('/login');
+    navigate('/');
   };
 
   // Hàm tạo class động cho từng mục Menu dựa trên trạng thái trang hiện tại
