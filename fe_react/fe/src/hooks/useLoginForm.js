@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login } from '../services/authService';
-import { saveAuthSession } from '../services/authStorage';
+import { useAuth } from './useAuth';
 
 const initialForm = {
   email: '',
@@ -25,6 +25,7 @@ function getRedirectPath(roleName) {
 
 export function useLoginForm() {
   const navigate = useNavigate();
+  const { login: saveLoginSession } = useAuth();
   const [form, setForm] = useState(initialForm);
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -48,7 +49,7 @@ export function useLoginForm() {
         password: form.password,
       });
 
-      saveAuthSession(authResponse);
+      saveLoginSession(authResponse, form.rememberMe);
       showToast('success', `Chào mừng ${authResponse.fullName || 'bạn'} quay lại Cozygo.`);
 
       setTimeout(() => {
