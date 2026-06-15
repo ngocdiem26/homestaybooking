@@ -8,7 +8,16 @@ import {
 const HOMESTAYS_PER_PAGE = 4;
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1587061949409-02df41d5e562?q=80&w=600&auto=format&fit=crop';
 
+function buildImageList(homestay) {
+  const imageUrls = Array.isArray(homestay.imageUrls) ? homestay.imageUrls.filter(Boolean) : [];
+  const mainImage = homestay.mainImage || imageUrls[0] || FALLBACK_IMAGE;
+
+  return [mainImage, ...imageUrls.filter((imageUrl) => imageUrl !== mainImage)];
+}
+
 function normalizeHomestay(homestay) {
+  const images = buildImageList(homestay);
+
   return {
     id: homestay.homeId,
     code: `HMS-${String(homestay.homeId).padStart(3, '0')}`,
@@ -29,7 +38,8 @@ function normalizeHomestay(homestay) {
     bedCount: homestay.bedCount,
     checkinTime: homestay.checkinTime,
     checkoutTime: homestay.checkoutTime,
-    image: homestay.mainImage || FALLBACK_IMAGE,
+    image: images[0],
+    images,
     ownerId: homestay.ownerId,
     ownerCode: `USR-${String(homestay.ownerId).padStart(3, '0')}`,
     ownerName: homestay.ownerName,

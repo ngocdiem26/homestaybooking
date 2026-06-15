@@ -24,10 +24,13 @@ export default function AdminUserDetailModal({
       <div className="bg-[#F4F1EA] max-w-md w-full rounded-3xl p-6 border border-[#6E473B]/20 shadow-2xl space-y-5 relative font-semibold text-gray-600">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-lg cursor-pointer bg-transparent border-none"
+          className="absolute -top-0 -right-0 w-8 h-8 rounded-full bg-[#2C1E15] hover:bg-[#6E473B] text-white border-2 border-white shadow-lg z-20 flex items-center justify-center cursor-pointer transition active:scale-95"
           type="button"
+          aria-label="Đóng"
         >
-          x
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
         </button>
 
         <div className="text-center border-b border-gray-200 pb-3 space-y-2">
