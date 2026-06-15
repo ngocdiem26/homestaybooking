@@ -6,6 +6,7 @@ import lombok.Getter;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 
 @Getter
 @Builder
@@ -30,6 +31,7 @@ public class AdminHomestayResponse {
     private LocalTime checkinTime;
     private LocalTime checkoutTime;
     private String mainImage;
+    private List<String> imageUrls;
     private Integer ownerId;
     private String ownerName;
     private String ownerEmail;

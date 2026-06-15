@@ -84,6 +84,7 @@ public class AdminHomestayService {
                 .checkinTime(homestay.getCheckinTime())
                 .checkoutTime(homestay.getCheckoutTime())
                 .mainImage(getMainImage(homestay))
+                .imageUrls(getImageUrls(homestay))
                 .ownerId(homestay.getOwner().getUserId())
                 .ownerName(homestay.getOwner().getFullName())
                 .ownerEmail(homestay.getOwner().getEmail())
@@ -100,5 +101,11 @@ public class AdminHomestayService {
                 .map(HomestayImage::getImageUrl)
                 .or(() -> homestay.getImages().stream().findFirst().map(HomestayImage::getImageUrl))
                 .orElse(null);
+    }
+
+    private List<String> getImageUrls(Homestay homestay) {
+        return homestay.getImages().stream()
+                .map(HomestayImage::getImageUrl)
+                .toList();
     }
 }
