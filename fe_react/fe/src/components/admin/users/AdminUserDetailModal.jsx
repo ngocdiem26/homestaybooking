@@ -1,3 +1,4 @@
+import ModalPortal from '../../common/ModalPortal';
 import {
   getAvatarLabel,
   getGenderLabel,
@@ -19,7 +20,7 @@ export default function AdminUserDetailModal({
   const canChangeRole = user.role !== 'ADMIN';
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in text-left text-sm">
+    <ModalPortal>
       <div className="bg-[#F4F1EA] max-w-md w-full rounded-3xl p-6 border border-[#6E473B]/20 shadow-2xl space-y-5 relative font-semibold text-gray-600">
         <button
           onClick={onClose}
@@ -77,7 +78,7 @@ export default function AdminUserDetailModal({
           </button>
         </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }
 
