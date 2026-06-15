@@ -9,3 +9,9 @@ export const ADMIN_USER_ENDPOINTS = {
   STATUS: (userId) => `/api/admin/users/${userId}/status`,
   ROLE: (userId) => `/api/admin/users/${userId}/role`,
 };
+
+export const ADMIN_HOMESTAY_ENDPOINTS = {
+  LIST: '/api/admin/homestays',
+  STATUS: (homeId) => `/api/admin/homestays/${homeId}/status`,
+  DELETE: (homeId) => `/api/admin/homestays/${homeId}`,
+};
