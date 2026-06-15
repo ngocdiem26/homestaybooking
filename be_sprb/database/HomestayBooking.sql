@@ -134,7 +134,12 @@ CREATE TABLE homestay_services (
     service_id INT NOT NULL,
     home_id INT NOT NULL,
     price DECIMAL(12,2) NOT NULL DEFAULT 0,
-    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
+    status ENUM(
+        'PENDING',
+        'APPROVED',
+        'REJECTED',
+        'BLOCKED'
+    ) NOT NULL DEFAULT 'PENDING',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (homestay_service_id),
     UNIQUE KEY uk_homestay_services_home_service (home_id, service_id),
@@ -450,3 +455,173 @@ INSERT INTO roles (role_name, description_role) VALUES
 ('CUSTOMER', 'Customer who books homestays');
 
 
+
+-- 1. Thêm vài tài khoản HOST mẫu
+INSERT INTO users (
+    role_id,
+    full_name,
+    email,
+    password,
+    phone_number,
+    address,
+    gender,
+    user_status
+)
+VALUES
+(2, 'Tran Minh Host', 'host1@gmail.com', '$2a$10$demo_password_hash', '0901111111', 'Đà Lạt, Lâm Đồng', 'Nam', 'ACTIVE'),
+(2, 'Nguyen Thi Host', 'host2@gmail.com', '$2a$10$demo_password_hash', '0902222222', 'Cần Thơ', 'Nữ', 'ACTIVE'),
+(2, 'Le Van Host', 'host3@gmail.com', '$2a$10$demo_password_hash', '0903333333', 'Đà Nẵng', 'Nam', 'ACTIVE');
+
+-- 2. Thêm homestay mẫu
+INSERT INTO homestays (
+    user_id,
+    home_name,
+    home_address,
+    province,
+    home_description,
+    price_per_night,
+    status,
+    discount_percent,
+    max_guest,
+    rating_avg,
+    rating_count,
+    bedroom_count,
+    bathroom_count,
+    kitchen_count,
+    living_room_count,
+    bed_count,
+    checkin_time,
+    checkout_time
+)
+VALUES
+(
+    2,
+    'Bungalow Rừng Thông Đà Lạt',
+    '123 Đường Đồi Thông, Phường 3, Đà Lạt',
+    'Lâm Đồng',
+    'Homestay nằm giữa rừng thông, không gian yên tĩnh, phù hợp nghỉ dưỡng cuối tuần.',
+    850000,
+    'PENDING',
+    10.00,
+    4,
+    4.70,
+    25,
+    2,
+    1,
+    1,
+    1,
+    2,
+    '14:00:00',
+    '12:00:00'
+),
+(
+    2,
+    'Nhà Gỗ Ven Hồ Tuyền Lâm',
+    '45 Khu du lịch Hồ Tuyền Lâm, Đà Lạt',
+    'Lâm Đồng',
+    'Nhà gỗ view hồ, có sân BBQ và khu vực chụp ảnh ngoài trời.',
+    1200000,
+    'PENDING',
+    15.00,
+    6,
+    4.80,
+    38,
+    3,
+    2,
+    1,
+    1,
+    3,
+    '14:00:00',
+    '12:00:00'
+),
+(
+    3,
+    'Mekong Garden Homestay',
+    '88 Đường ven sông, Ninh Kiều, Cần Thơ',
+    'Cần Thơ',
+    'Homestay phong cách miền Tây, có vườn cây và trải nghiệm chèo xuồng.',
+    650000,
+    'PENDING',
+    5.00,
+    5,
+    4.50,
+    19,
+    2,
+    1,
+    1,
+    1,
+    2,
+    '13:00:00',
+    '11:00:00'
+),
+(
+    3,
+    'Cozy River House',
+    '12 Bến Ninh Kiều, Cần Thơ',
+    'Cần Thơ',
+    'Căn nhà nhỏ ven sông, phù hợp cặp đôi hoặc gia đình nhỏ.',
+    720000,
+    'PENDING',
+    0.00,
+    3,
+    4.30,
+    12,
+    1,
+    1,
+    1,
+    1,
+    1,
+    '14:00:00',
+    '12:00:00'
+),
+(
+    4,
+    'Sea Breeze Homestay Đà Nẵng',
+    '25 Võ Nguyên Giáp, Sơn Trà, Đà Nẵng',
+    'Đà Nẵng',
+    'Homestay gần biển, thiết kế hiện đại, đi bộ 5 phút ra bãi biển.',
+    950000,
+    'PENDING',
+    12.00,
+    4,
+    4.60,
+    31,
+    2,
+    2,
+    1,
+    1,
+    2,
+    '14:00:00',
+    '12:00:00'
+);
+
+-- 3. Thêm ảnh cho homestay
+INSERT INTO homestay_images (
+    home_id,
+    image_url,
+    is_main,
+    sort_order
+)
+VALUES
+-- Homestay 1
+(1, 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee', TRUE, 1),
+(1, 'https://images.unsplash.com/photo-1449844908441-8829872d2607', FALSE, 2),
+(1, 'https://images.unsplash.com/photo-1518780664697-55e3ad937233', FALSE, 3),
+
+-- Homestay 2
+(2, 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85', TRUE, 1),
+(2, 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6', FALSE, 2),
+(2, 'https://images.unsplash.com/photo-1510798831971-661eb04b3739', FALSE, 3),
+
+-- Homestay 3
+(3, 'https://images.unsplash.com/photo-1523217582562-09d0def993a6', TRUE, 1),
+(3, 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c', FALSE, 2),
+(3, 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c', FALSE, 3),
+
+-- Homestay 4
+(4, 'https://images.unsplash.com/photo-1494526585095-c41746248156', TRUE, 1),
+(4, 'https://images.unsplash.com/photo-1507089947368-19c1da9775ae', FALSE, 2),
+
+-- Homestay 5
+(5, 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e', TRUE, 1),
+(5, 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750', FALSE, 2);
