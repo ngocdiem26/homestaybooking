@@ -15,3 +15,9 @@ export const ADMIN_HOMESTAY_ENDPOINTS = {
   STATUS: (homeId) => `/api/admin/homestays/${homeId}/status`,
   DELETE: (homeId) => `/api/admin/homestays/${homeId}`,
 };
+
+export const ADMIN_PROMOTION_ENDPOINTS = {
+  LIST: '/api/admin/promotions',
+  DETAIL: (promotionId) => `/api/admin/promotions/${promotionId}`,
+  STATUS: (promotionId) => `/api/admin/promotions/${promotionId}/status`,
+};
