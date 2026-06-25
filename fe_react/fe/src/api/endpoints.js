@@ -21,3 +21,9 @@ export const ADMIN_PROMOTION_ENDPOINTS = {
   DETAIL: (promotionId) => `/api/admin/promotions/${promotionId}`,
   STATUS: (promotionId) => `/api/admin/promotions/${promotionId}/status`,
 };
+
+export const HOST_HOMESTAY_ENDPOINTS = {
+  LIST: '/api/host/homestays',
+  DETAIL: (homeId) => `/api/host/homestays/${homeId}`,
+  UPLOAD_IMAGE: '/api/host/homestays/images/upload',
+};
