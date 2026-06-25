@@ -47,9 +47,7 @@ export default function AppRoutes() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/homestay/:id" element={<HomestayDetail />} />
 
-        <Route path="/host" element={<HostDashboard />} />
-        <Route path="/host/homestays" element={<HomestayManagement />} />
-        <Route path="/host/revenue" element={<HostRevenue />} />
+
 
         <Route path="/admin">
           <Route index element={<AdminDashboard />} />
@@ -61,7 +59,16 @@ export default function AppRoutes() {
           <Route path="reviews" element={<AdminReviews />} />
           <Route path="revenue" element={<AdminRevenue />} />
         </Route>
+        
+        <Route path="/host">
+          <Route index element={<HostDashboard />} />
+          <Route path="homestays" element={<HomestayManagement />} />
+          <Route path="revenue" element={<HostRevenue />} />
+        </Route>
+
       </Routes>
+
+
     </BrowserRouter>
   );
 }
