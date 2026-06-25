@@ -29,4 +29,30 @@ public class JwtUtil {
                 .signWith(getSignKey())
                 .compact();
     }
+
+    public String extractEmail(String token) {
+        return Jwts.parser()
+                .verifyWith(getSignKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .getSubject();
+    }
+
+    public String extractEmailFromAuthorizationHeader(String authorizationHeader) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+            return null;
+        }
+
+        String token = authorizationHeader.substring(7).trim();
+        if (token.isEmpty()) {
+            return null;
+        }
+
+        try {
+            return extractEmail(token);
+        } catch (RuntimeException exception) {
+            return null;
+        }
+    }
 }
