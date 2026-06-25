@@ -1,0 +1,118 @@
+export const initialHostHomestays = [
+  {
+    id: 'HMS-001',
+    name: 'Bungalow Rừng Thông Đà Lạt',
+    city: 'Lâm Đồng',
+    address: '123 Đường Đồi Thông, Phường 3, Đà Lạt, Lâm Đồng',
+    description: 'Không gian nghỉ dưỡng giữa rừng thông, phù hợp gia đình và nhóm bạn.',
+    price: 1200000,
+    discount: 0,
+    guests: 4,
+    bedrooms: 2,
+    bathrooms: 2,
+    livingRoom: 1,
+    kitchen: 1,
+    beds: 2,
+    checkinTime: '14:00',
+    checkoutTime: '12:00',
+    createdAt: '2025-12-03',
+    status: 'Đang hoạt động',
+    images: [
+      { url: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?q=80&w=600', isMain: true },
+      { url: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?q=80&w=600', isMain: false },
+    ],
+    services: [
+      { id: 1, name: 'Tiệc BBQ ngoài trời', price: 350000, status: 'Đang hoạt động' },
+      { id: 2, name: 'Thuê xe máy', price: 120000, status: 'Đang hoạt động' },
+    ],
+    rules: ['Không hút thuốc trong phòng', 'Giữ yên lặng sau 22:00'],
+    amenities: ['Wi-Fi', 'Bếp', 'Chỗ đậu xe', 'Máy giặt', 'Máy lạnh'],
+  },
+  {
+    id: 'HMS-002',
+    name: 'Lavie House',
+    city: 'TP HCM',
+    address: 'Vinhomes Grand Park, Quận 9, TP. HCM',
+    description: 'Căn hộ tiện nghi, gần khu vui chơi và thuận tiện di chuyển trong thành phố.',
+    price: 700000,
+    discount: 0,
+    guests: 2,
+    bedrooms: 1,
+    bathrooms: 1,
+    livingRoom: 1,
+    kitchen: 1,
+    beds: 1,
+    checkinTime: '14:00',
+    checkoutTime: '12:00',
+    createdAt: '2025-12-03',
+    status: 'Đang hoạt động',
+    images: [{ url: 'https://images.unsplash.com/photo-1556020685-ae41abfc9365?q=80&w=600', isMain: true }],
+    services: [],
+    rules: ['Giữ gìn vệ sinh chung'],
+    amenities: ['Wi-Fi', 'Máy lạnh', 'Máy giặt'],
+  },
+];
+
+export const emptyHostHomestayForm = {
+  name: '',
+  city: 'Lâm Đồng',
+  address: '',
+  description: '',
+  price: '',
+  discount: 0,
+  guests: 2,
+  bedrooms: 1,
+  bathrooms: 1,
+  livingRoom: 1,
+  kitchen: 1,
+  beds: 1,
+  checkinTime: '14:00',
+  checkoutTime: '12:00',
+};
+
+export const PRESET_AMENITIES = [
+  'Wi-Fi',
+  'Bếp',
+  'Chỗ đậu xe',
+  'Máy giặt',
+  'Máy lạnh',
+  'TV',
+  'Hồ bơi',
+  'Ban công',
+  'Máy sấy tóc',
+  'Nước nóng',
+];
+
+export const PRESET_RULES = [
+  'Không hút thuốc trong phòng',
+  'Không tổ chức tiệc sau 22:00',
+  'Không mang thú cưng',
+  'Giữ yên lặng sau 22:00',
+  'Không xả rác trong khuôn viên',
+  'Không tự ý di chuyển nội thất',
+  'Xuất trình giấy tờ khi nhận phòng',
+  'Bồi thường nếu làm hư hỏng tài sản',
+];
+
+export const PRESET_SERVICES = [
+  {
+    name: 'Tiệc BBQ ngoài trời',
+    pricePerDay: 350000,
+    description: 'Chuẩn bị bếp nướng, than, dụng cụ nướng và khu vực tổ chức BBQ.',
+  },
+  {
+    name: 'Thuê xe máy',
+    pricePerDay: 120000,
+    description: 'Cho thuê xe máy theo ngày, phù hợp khách muốn tự di chuyển.',
+  },
+  {
+    name: 'Đưa đón sân bay',
+    pricePerDay: 450000,
+    description: 'Hỗ trợ đưa đón khách từ sân bay hoặc bến xe đến homestay.',
+  },
+  {
+    name: 'Dọn phòng hằng ngày',
+    pricePerDay: 150000,
+    description: 'Vệ sinh phòng, thay khăn và thu gom rác trong thời gian lưu trú.',
+  },
+];
