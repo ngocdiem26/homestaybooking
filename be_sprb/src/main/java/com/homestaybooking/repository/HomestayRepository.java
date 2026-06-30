@@ -19,5 +19,7 @@ public interface HomestayRepository extends JpaRepository<Homestay, Integer> {
 
     @EntityGraph(attributePaths = {"owner", "owner.role", "images"})
     Optional<Homestay> findByHomeIdAndOwnerUserIdAndDeletedAtIsNull(Integer homeId, Integer ownerId);
-}
 
+    @EntityGraph(attributePaths = {"owner", "owner.role", "images"})
+    Optional<Homestay> findByHomeIdAndDeletedAtIsNull(Integer homeId);
+}

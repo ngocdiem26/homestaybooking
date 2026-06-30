@@ -27,3 +27,11 @@ export const HOST_HOMESTAY_ENDPOINTS = {
   DETAIL: (homeId) => `/api/host/homestays/${homeId}`,
   UPLOAD_IMAGE: '/api/host/homestays/images/upload',
 };
+
+export const PUBLIC_HOMESTAY_ENDPOINTS = {
+  HOMESTAYS: '/api/public/homestays',
+  HOMESTAY_DETAIL: (homeId) => '/api/public/homestays/' + homeId,
+  DESTINATIONS: '/api/public/destinations',
+};
+
+
