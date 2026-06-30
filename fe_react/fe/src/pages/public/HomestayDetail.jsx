@@ -1,366 +1,489 @@
-
-import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import {
+  HiArrowLeft,
+  HiCalendarDays,
+  HiCheckCircle,
+  HiHomeModern,
+  HiChevronLeft,
+  HiChevronRight,
+  HiMapPin,
+  HiPhoto,
+  HiShieldCheck,
+  HiXMark,
+  HiStar,
+  HiUsers,
+} from 'react-icons/hi2';
 import UserLayout from '../../layouts/UserLayout';
+import HomestaySearchForm from '../../components/homestay/HomestaySearchForm';
+import { getPublicHomestay } from '../../services/homestayService';
 
-export default function HomestayDetail() {
-  const { id } = useParams(); // Lấy ID homestay từ URL
+const fallbackImage = 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?q=80&w=1400&auto=format&fit=crop';
 
+function formatCurrency(value) {
+  return Number(value || 0).toLocaleString('vi-VN') + 'đ';
+}
 
-  // --- MOCK DATA ---
-  const homestay = {
-    id: id || "HS-01",
-    title: "GÂY THƯƠNG NHỚ Homestay (View Sông Lãng Mạn)",
-    location: "Vinhones Grand Park, Quận 9, Hồ Chí Minh",
-    rating: 4.8,
-    reviewCount: 124,
-    pricePerNight: 1250000,
-    maxGuests: 6,
-    bedrooms: 3,
-    beds: 3,
-    bathrooms: 2,
-    host: { name: "Diễm N.", avatar: "https://i.pravatar.cc/150?img=47", joined: "2023" },
-    images: [
-      "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?q=80&w=2070&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?q=80&w=2075&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1484154218962-a197022b5858?q=80&w=2074&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1556020685-ae41abfc9365?q=80&w=1974&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?q=80&w=1951&auto=format&fit=crop"
-    ],
-    description: "Tận hưởng kỳ nghỉ tuyệt vời tại căn homestay nguyên căn sang trọng với tầm nhìn ôm trọn sông ngắm bình minh tuyệt đẹp.\n\nKhông gian yên tĩnh, thiết kế mộc mạc phong cách Cozygo nhưng đầy đủ tiện nghi hiện đại. Rất phù hợp cho gia đình hoặc nhóm bạn tìm kiếm sự riêng tư và thoải mái như ở nhà.",
-    highlights: [
-      { icon: "✨", title: "Tầm nhìn tuyệt đẹp", desc: "Cửa sổ kính sát trần nhìn thẳng ra bờ sông mát mẻ." },
-      { icon: "🍳", title: "Bếp đầy đủ dụng cụ", desc: "Tự do nấu nướng với bếp từ, lò vi sóng, gia vị cơ bản." },
-      { icon: "🔑", title: "Tự nhận phòng", desc: "Nhận phòng cực kỳ dễ dàng bằng khóa mật mã thông minh." }
-    ],
-    amenities: ["Wi-Fi miễn phí tốc độ cao", "Hồ bơi vô cực", "Bãi đỗ xe an toàn", "Máy giặt & sấy", "Ban công / Sân hiên", "Smart TV 55 inch", "Điều hòa nhiệt độ 2 chiều", "Dụng cụ nướng BBQ", "Bồn tắm nước nóng"],
-    reviews: [
-      { id: 1, name: "Minh Tuấn", date: "Tháng 11, 2025", text: "Nhà rất sạch sẽ, view ban công buổi tối cực kỳ xịn xò. Chị chủ nhà hỗ trợ nhiệt tình, 10 điểm cho dịch vụ.", score: 5 },
-      { id: 2, name: "Ngọc Hân", date: "Tháng 10, 2025", text: "Phòng ốc y hình, không gian chung rộng rãi cho nhóm 5 người. Đầy đủ bát đĩa để nấu lẩu, rất ưng ý.", score: 4.5 },
-    ]
-  };
+function formatTime(value, fallback) {
+  if (!value) return fallback;
+  return String(value).slice(0, 5);
+}
 
-  const [checkIn, setCheckIn] = useState('');
-  const [checkOut, setCheckOut] = useState('');
-  const [guests, setGuests] = useState(2);
-  const [activeTab, setActiveTab] = useState('tong-quan');
+function buildSearchParams(search = {}) {
+  const params = new URLSearchParams();
+  Object.entries(search).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  return params;
+}
 
-  useEffect(() => {
-    window.scrollTo(0, 0); // Reset scroll khi vào trang
-  }, [id]);
- 
-  const formatDmy = (dateStr) => {
-    if (!dateStr) return "";
-    const [y, m, d] = dateStr.split("-");
-    return `${d}/${m}/${y}`;
-  };
+function DetailStat({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-2xl border border-[#6E473B]/10 bg-white px-4 py-3 shadow-sm">
+      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-gray-400">
+        <Icon className="h-4 w-4 text-[#6E473B]" />
+        {label}
+      </div>
+      <p className="mt-1 text-base font-black text-[#2C1E15]">{value}</p>
+    </div>
+  );
+}
 
-  const scrollToSection = (sectionId) => {
-    setActiveTab(sectionId);
-    const element = document.getElementById(sectionId);
-    if (element) {
-      const offset = 140; 
-      const bodyRect = document.body.getBoundingClientRect().top;
-      const elementRect = element.getBoundingClientRect().top;
-      const elementPosition = elementRect - bodyRect;
-      const offsetPosition = elementPosition - offset;
+function GalleryModal({ images, homestayName, onClose, onOpenLightbox }) {
+  return (
+    <div className="fixed inset-0 z-[9999] bg-white text-[#2C1E15]">
+      <div className="flex h-full flex-col">
+        <header className="shrink-0 border-b border-gray-200 bg-white px-4 py-4 shadow-sm md:px-8">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-[#B6784F]">Thư viện ảnh</p>
+              <h3 className="mt-1 font-classic text-2xl font-black md:text-3xl">{homestayName}</h3>
+              <p className="mt-1 text-sm font-semibold text-gray-400">{images.length} ảnh homestay. Bấm vào ảnh để xem phóng to.</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-[#2C1E15] shadow-sm transition hover:bg-[#2C3E2B] hover:text-white"
+              aria-label="Đóng thư viện ảnh"
+            >
+              <HiXMark className="h-6 w-6" />
+            </button>
+          </div>
+        </header>
 
-      window.scrollTo({
-        top: offsetPosition,
-        behavior: "smooth"
-      });
-    }
+        <div className="flex-1 overflow-y-auto bg-[#F4F1EA] px-4 py-6 md:px-8">
+          <div className="mx-auto grid max-w-7xl grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {images.map((image, index) => (
+              <button
+                key={image + index}
+                type="button"
+                onClick={() => onOpenLightbox(index)}
+                className="group overflow-hidden rounded-2xl border border-white bg-white p-0 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl"
+              >
+                <div className="aspect-[4/3] overflow-hidden bg-gray-100">
+                  <img src={image} alt={homestayName + ' ảnh ' + (index + 1)} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
+                </div>
+                <div className="flex items-center justify-between px-4 py-3 text-xs font-black text-gray-500">
+                  <span>Ảnh {index + 1}</span>
+                  <span className="text-[#6E473B]">Xem lớn</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LightboxModal({ images, currentIndex, setCurrentIndex, homestayName, onClose }) {
+  const image = images[currentIndex] || images[0] || fallbackImage;
+  const goTo = (direction) => {
+    setCurrentIndex((current) => (current + direction + images.length) % images.length);
   };
 
   return (
-    <UserLayout>
-      <div className="bg-[#F4F1EA] min-h-screen pb-20 font-sans text-gray-800">
-        
-       {/* ==========================================
-            1. THANH TÌM KIẾM (CHUẨN TRANG CHỦ COZYGO)
-           ========================================== */}
-        <div className="pt-6 pb-2 px-4 sm:px-6 lg:px-8 relative z-20 ">
-          <div className="max-w-275 mx-auto ">
-           <form className="bg-[#23150d]/90 backdrop-blur-md p-3 rounded-2xl md:rounded-full border border-white/10 shadow-2xl flex flex-col md:flex-row items-center gap-2 md:gap-4 text-[#F4F1EA]">
-            <div className="w-full md:w-auto px-4 py-2 font-bold text-xs uppercase tracking-wider text-white/50 border-b md:border-b-0 md:border-r border-white/10 whitespace-nowrap">
-              Check Availability
-            </div>
-            <div className="w-full grid grid-cols-1 sm:grid-cols-4 gap-2 flex-grow">
-              <div><input id="destination-input" type="text" required placeholder="📍Điểm đến ?" className="w-full bg-white text-gray-800 text-xs px-4 py-3 rounded-xl focus:outline-none border-0" /></div>
-              <div><input type="text" required placeholder="🗓️ Nhận phòng" onFocus={(e) => e.target.type = 'date'} onBlur={(e) => e.target.type = 'text'} className="w-full bg-white text-gray-800 text-xs px-4 py-3 rounded-xl focus:outline-none border-0" /></div>
-              <div><input type="text" required placeholder="🗓️ Trả phòng" onFocus={(e) => e.target.type = 'date'} onBlur={(e) => e.target.type = 'text'} className="w-full bg-white text-gray-800 text-xs px-4 py-3 rounded-xl focus:outline-none border-0" /></div>
-              <div><input type="text" required placeholder="👤 Số khách" className="w-full bg-white text-gray-800 text-xs px-4 py-3 rounded-xl focus:outline-none border-0" /></div>
-            </div>
-            <button type="submit" className="w-full md:w-auto bg-[#6E473B] hover:bg-[#57362c] text-white font-bold text-xs uppercase tracking-wider px-8 py-3 rounded-xl md:rounded-full shadow-lg shrink-0">Tìm kiếm</button>
-          </form>
-          </div>
+    <div className="fixed inset-0 z-[10000] bg-black/95 text-white">
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute right-5 top-5 z-20 inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur transition hover:bg-white hover:text-black"
+        aria-label="Đóng ảnh phóng to"
+      >
+        <HiXMark className="h-7 w-7" />
+      </button>
+
+      <div className="flex h-full flex-col">
+        <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-16">
+          <button
+            type="button"
+            onClick={() => goTo(-1)}
+            className="absolute left-4 top-1/2 z-20 inline-flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur transition hover:bg-white hover:text-black md:left-8"
+            aria-label="Ảnh trước"
+          >
+            <HiChevronLeft className="h-7 w-7" />
+          </button>
+
+          <img src={image} alt={homestayName + ' ảnh lớn ' + (currentIndex + 1)} className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl" />
+
+          <button
+            type="button"
+            onClick={() => goTo(1)}
+            className="absolute right-4 top-1/2 z-20 inline-flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur transition hover:bg-white hover:text-black md:right-8"
+            aria-label="Ảnh sau"
+          >
+            <HiChevronRight className="h-7 w-7" />
+          </button>
         </div>
-        {/* ========================================== */}
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in space-y-8">
-          
-          {/* 1. TIÊU ĐỀ & ĐÁNH GIÁ NHANH */}
-          <div className="space-y-2">
-            <h1 className="font-serif text-3xl md:text-4xl font-bold text-[#2C1E15] leading-tight">
-              {homestay.title}
-            </h1>
-            <div className="flex flex-wrap items-center gap-3 text-sm font-medium mt-2">
-              <span className="flex items-center text-amber-600 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 font-bold">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 mr-1"><path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" /></svg>
-                {homestay.rating} ({homestay.reviewCount} đánh giá)
-              </span>
-              <span className="text-gray-300">•</span>
-              <span className="flex items-center text-gray-600 hover:text-[#2C3E2B] transition cursor-pointer">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 mr-1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" /></svg>
-                <span className="underline decoration-gray-300 underline-offset-4">{homestay.location}</span>
-              </span>
+        <footer className="shrink-0 border-t border-white/10 bg-black/60 px-4 py-4 backdrop-blur md:px-8">
+          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-black">{homestayName}</p>
+              <p className="text-xs font-semibold text-white/60">Ảnh {currentIndex + 1}/{images.length}</p>
             </div>
-          </div>
-          
-          {/* 2. THƯ VIỆN ẢNH GRID CAO CẤP */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5 h-[300px] md:h-[460px] rounded-[32px] overflow-hidden shadow-sm border border-gray-200/50">
-            <div className="md:col-span-2 md:row-span-2 h-full relative cursor-pointer group">
-              <img src={homestay.images[0]} alt="Main" className="w-full h-full object-cover group-hover:scale-105 transition duration-700 ease-out" />
-              <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition duration-500"></div>
-            </div>
-            <div className="hidden md:block cursor-pointer group relative overflow-hidden"><img src={homestay.images[1]} className="w-full h-full object-cover group-hover:scale-110 transition duration-700 ease-out" alt="view1"/></div>
-            <div className="hidden md:block cursor-pointer group relative overflow-hidden"><img src={homestay.images[2]} className="w-full h-full object-cover group-hover:scale-110 transition duration-700 ease-out" alt="view2"/></div>
-            <div className="hidden md:block cursor-pointer group relative overflow-hidden"><img src={homestay.images[3]} className="w-full h-full object-cover group-hover:scale-110 transition duration-700 ease-out" alt="view3"/></div>
-            <div className="hidden md:block cursor-pointer group relative overflow-hidden">
-              <img src={homestay.images[4]} className="w-full h-full object-cover brightness-75 group-hover:scale-110 group-hover:brightness-90 transition duration-700 ease-out" alt="view4"/>
-              <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/40 transition duration-300">
-                <span className="text-white font-bold border-2 border-white/80 px-5 py-2.5 rounded-xl backdrop-blur-sm shadow-lg">Xem tất cả ảnh</span>
-              </div>
-            </div>
-          </div>
-
-          {/* 3. THANH ĐIỀU HƯỚNG NHANH (Sticky Tabs) */}
-          <div className="sticky top-[76px] z-40 bg-[#F4F1EA]/95 backdrop-blur-md pt-5 pb-3 border-b border-gray-300 mb-8 hidden md:block">
-            <div className="flex gap-8 font-bold text-sm text-gray-500 px-2">
-              {['tong-quan', 'tien-nghi', 'danh-gia', 'chinh-sach'].map(tab => (
-                <button 
-                  key={tab} onClick={() => scrollToSection(tab)}
-                  className={`pb-3 border-b-[3px] transition-all duration-300 cursor-pointer ${activeTab === tab ? 'border-[#2C3E2B] text-[#2C3E2B]' : 'border-transparent hover:text-gray-800'}`}
+            <div className="hidden max-w-[60%] gap-2 overflow-x-auto md:flex">
+              {images.map((thumbnail, index) => (
+                <button
+                  key={thumbnail + index}
+                  type="button"
+                  onClick={() => setCurrentIndex(index)}
+                  className={'h-14 w-20 shrink-0 overflow-hidden rounded-xl border-2 p-0 transition ' + (currentIndex === index ? 'border-white' : 'border-white/20 opacity-60 hover:opacity-100')}
                 >
-                  {tab === 'tong-quan' ? 'Tổng quan' : tab === 'tien-nghi' ? 'Cơ sở vật chất' : tab === 'danh-gia' ? 'Đánh giá' : 'Chính sách'}
+                  <img src={thumbnail} alt={'Thumbnail ' + (index + 1)} className="h-full w-full object-cover" />
                 </button>
               ))}
             </div>
           </div>
+        </footer>
+      </div>
+    </div>
+  );
+}
 
-          {/* 4. NỘI DUNG CHÍNH CHIA 2 CỘT */}
-          <div className="flex flex-col lg:flex-row gap-12 mt-8 md:mt-2">
-            
-            {/* CỘT TRÁI: THÔNG TIN CHI TIẾT */}
-            <div className="lg:w-2/3 space-y-12">
-              
-              {/* Mục Tổng quan */}
-              <div id="tong-quan">
-                <div className="flex justify-between items-start border-b border-gray-200 pb-8">
-                  <div>
-                    <h2 className="text-2xl font-bold text-[#2C1E15] font-serif">Toàn bộ căn nhà - Thuê nguyên căn</h2>
-                    <p className="text-gray-600 mt-3 font-medium flex flex-wrap gap-x-3 gap-y-2 text-sm items-center">
-                      <span className="bg-white border border-gray-200 px-3 py-1 rounded-xl shadow-sm">Tối đa {homestay.maxGuests} khách</span>
-                      <span className="bg-white border border-gray-200 px-3 py-1 rounded-xl shadow-sm">{homestay.bedrooms} phòng ngủ</span>
-                      <span className="bg-white border border-gray-200 px-3 py-1 rounded-xl shadow-sm">{homestay.beds} giường</span>
-                      <span className="bg-white border border-gray-200 px-3 py-1 rounded-xl shadow-sm">{homestay.bathrooms} phòng tắm</span>
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 shrink-0 ml-4">
-                    <img src={homestay.host.avatar} alt="Host" className="w-14 h-14 rounded-full border-2 border-white shadow-md object-cover" />
-                    <span className="text-[11px] text-gray-500 font-bold uppercase tracking-wide mt-1">Chủ nhà</span>
-                    <span className="text-xs font-bold text-[#2C1E15]">{homestay.host.name}</span>
-                  </div>
-                </div>
+export default function HomestayDetail() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [homestay, setHomestay] = useState(null);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(null);
+  const [checkIn, setCheckIn] = useState('');
+  const [checkOut, setCheckOut] = useState('');
+  const [guests, setGuests] = useState(2);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
 
-                {/* Điểm nổi bật */}
-                <div className="py-8 border-b border-gray-200 space-y-6">
-                  <h3 className="font-bold text-xl text-[#2C1E15] font-serif">Điểm nổi bật nhất</h3>
-                  <div className="space-y-5">
-                    {homestay.highlights.map((hl, idx) => (
-                      <div key={idx} className="flex gap-5 items-start bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                        <span className="text-3xl drop-shadow-sm">{hl.icon}</span>
-                        <div>
-                          <h4 className="font-bold text-gray-800 text-base">{hl.title}</h4>
-                          <p className="text-sm text-gray-500 mt-1 leading-relaxed">{hl.desc}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+  useEffect(() => {
+    let isMounted = true;
 
-                {/* Mô tả */}
-                <div className="py-8 border-b border-gray-200 space-y-4">
-                  <h3 className="font-bold text-xl text-[#2C1E15] font-serif">Về không gian này</h3>
-                  <p className="text-gray-600 text-[15px] leading-relaxed whitespace-pre-line">{homestay.description}</p>
-                  <button className="font-bold text-[#6E473B] underline text-sm mt-2 hover:text-[#2C1E15] transition cursor-pointer border-none bg-transparent">Đọc thêm chi tiết</button>
-                </div>
-              </div>
+    async function loadHomestay() {
+      try {
+        setIsLoading(true);
+        setErrorMessage('');
+        const data = await getPublicHomestay(id);
+        if (!isMounted) return;
+        setHomestay(data);
+        setActiveImageIndex(0);
+        setIsGalleryOpen(false);
+        setLightboxIndex(null);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (error) {
+        if (!isMounted) return;
+        setErrorMessage(error.message || 'Không tải được chi tiết homestay');
+        setHomestay(null);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
 
-              {/* Cơ sở vật chất */}
-              <div id="tien-nghi" className="py-8 border-b border-gray-200">
-                <h3 className="font-bold text-xl text-[#2C1E15] mb-6 font-serif">Nơi này có những gì cho bạn</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-y-5 gap-x-6 text-sm text-gray-700 font-medium">
-                  {homestay.amenities.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center shadow-sm shrink-0">
-                        <svg className="w-4 h-4 text-[#2C3E2B]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7"></path></svg>
-                      </div>
-                      <span>{item}</span>
-                    </div>
-                  ))}
-                </div>
-                <button className="mt-8 px-6 py-3 rounded-xl border border-gray-300 font-bold text-sm hover:bg-gray-100 transition shadow-sm bg-white text-gray-700 cursor-pointer">
-                  Hiển thị tất cả 24 tiện nghi
-                </button>
-              </div>
+    loadHomestay();
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
 
-              {/* Đánh giá */}
-              <div id="danh-gia" className="py-8 border-b border-gray-200">
-                <h3 className="font-bold text-xl text-[#2C1E15] mb-8 font-serif">Bài đánh giá từ khách thật</h3>
-                
-                <div className="flex flex-col md:flex-row gap-10 bg-white p-8 rounded-3xl shadow-sm border border-gray-100 mb-8">
-                  <div className="flex flex-col items-center justify-center md:border-r border-gray-200 pb-6 md:pb-0 md:pr-10 shrink-0">
-                    <div className="bg-[#2C3E2B] text-white text-5xl font-extrabold w-24 h-24 flex items-center justify-center rounded-[28px] shadow-xl shadow-[#2C3E2B]/20">
-                      {homestay.rating}
-                    </div>
-                    <span className="font-black text-xl mt-4 text-[#2C1E15] uppercase tracking-wide">Tuyệt vời</span>
-                    <span className="text-xs text-gray-500 font-medium mt-1">Dựa trên {homestay.reviewCount} đánh giá</span>
-                  </div>
-                  
-                  <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
-                    {[ 
-                      {label: "Độ sạch sẽ", score: 4.9}, 
-                      {label: "Dịch vụ chủ nhà", score: 4.8}, 
-                      {label: "Vị trí địa lý", score: 4.7}, 
-                      {label: "Đáng tiền", score: 4.9} 
-                    ].map(stat => (
-                      <div key={stat.label}>
-                        <div className="flex justify-between text-xs font-bold mb-2 text-gray-700 uppercase tracking-wide">
-                          <span>{stat.label}</span>
-                          <span>{stat.score}</span>
-                        </div>
-                        <div className="w-full bg-gray-100 rounded-full h-2">
-                          <div className="bg-[#2C3E2B] h-2 rounded-full" style={{ width: `${(stat.score / 5) * 100}%` }}></div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+  const images = useMemo(() => {
+    const sourceImages = homestay?.images?.length
+      ? homestay.images.map((image) => image.url || image.imageUrl).filter(Boolean)
+      : [homestay?.img || fallbackImage];
+    return sourceImages.length ? sourceImages : [fallbackImage];
+  }, [homestay]);
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {homestay.reviews.map(review => (
-                    <div key={review.id} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-between">
-                      <div>
-                        <div className="flex justify-between items-start mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-600 text-lg border-2 border-white shadow-sm">{review.name.charAt(0)}</div>
-                            <div>
-                              <p className="font-bold text-sm text-[#2C1E15]">{review.name}</p>
-                              <p className="text-[11px] text-gray-400 font-mono mt-0.5">{review.date}</p>
-                            </div>
-                          </div>
-                          <div className="bg-amber-50 text-amber-600 px-2.5 py-1 rounded-lg text-xs font-bold border border-amber-100 flex items-center gap-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5"><path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" /></svg>
-                            {review.score}
-                          </div>
-                        </div>
-                        <p className="text-[13px] text-gray-600 leading-relaxed italic">"{review.text}"</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <button className="mt-8 font-bold text-[#6E473B] underline text-sm hover:text-[#2C1E15] transition">Đọc toàn bộ {homestay.reviewCount} bài đánh giá</button>
-              </div>
+  const activeImage = images[activeImageIndex] || images[0] || fallbackImage;
+  const galleryPreviewImages = images.slice(1, 5);
+  const remainingImageCount = Math.max(0, images.length - 5);
+  const maxGuests = Math.max(1, Number(homestay?.maxGuest || 1));
+  const serviceItems = homestay?.serviceItems?.length
+    ? homestay.serviceItems
+    : (homestay?.services || []).map((name) => ({ name, serviceName: name }));
 
-              {/* Chính sách */}
-              <div id="chinh-sach" className="py-8 mb-10">
-                <h3 className="font-bold text-xl text-[#2C1E15] mb-6 font-serif">Quy định của chỗ nghỉ</h3>
-                <div className="bg-white rounded-[32px] border border-gray-200 p-8 grid grid-cols-1 md:grid-cols-2 gap-8 text-sm shadow-sm">
-                  <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100">
-                    <div className="flex items-center gap-2 font-bold mb-3 text-gray-800 text-base"><span className="text-2xl">🕒</span> Nhận phòng</div>
-                    <p className="text-gray-600 font-mono text-lg font-medium">14:00 - 22:00</p>
-                  </div>
-                  <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100">
-                    <div className="flex items-center gap-2 font-bold mb-3 text-gray-800 text-base"><span className="text-2xl">🕛</span> Trả phòng</div>
-                    <p className="text-gray-600 font-mono text-lg font-medium">Trước 12:00 trưa</p>
-                  </div>
-                  <div className="md:col-span-2 pt-6 border-t border-gray-100">
-                    <div className="font-bold mb-4 text-gray-800 text-base">Lưu ý quan trọng từ chủ nhà:</div>
-                    <ul className="list-none space-y-3">
-                      {["Không mang theo vật nuôi / thú cưng.", "Không tổ chức tiệc tùng sầm uất gây ồn ào sau 22:00.", "Yêu cầu đặt cọc 1.000.000đ khi nhận nhà, hoàn trả khi check-out."].map((rule, idx) => (
-                         <li key={idx} className="flex gap-3 text-gray-600 items-start">
-                           <svg className="w-5 h-5 text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                           {rule}
-                         </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </div>
+  const handleSearch = (search = {}) => {
+    const params = buildSearchParams(search);
+    navigate('/search' + (params.toString() ? '?' + params.toString() : ''));
+  };
 
-            </div>
+  const openGallery = (index = 0) => {
+    setActiveImageIndex(index);
+    setIsGalleryOpen(true);
+  };
 
-            {/* CỘT PHẢI: FORM ĐẶT PHÒNG STICKY (30%) */}
-            <div className="lg:w-1/3 relative hidden lg:block">
-              <div className="sticky top-[180px] bg-white p-7 rounded-[32px] border border-gray-200 shadow-2xl shadow-[#2C1E15]/5">
-                
-                <div className="flex items-end gap-1.5 mb-6">
-                  <span className="text-3xl font-black text-[#2C1E15] tracking-tight">{homestay.pricePerNight.toLocaleString('vi-VN')}đ</span>
-                  <span className="text-sm text-gray-500 font-medium mb-1.5">/ đêm</span>
-                </div>
+  const openLightbox = (index) => {
+    setLightboxIndex(index);
+  };
 
-                {/* Box Chọn ngày & Khách */}
-                <div className="border-2 border-gray-200 rounded-2xl overflow-hidden mb-6">
-                  <div className="flex border-b-2 border-gray-200 divide-x-2 divide-gray-200">
-                    <div className="w-1/2 p-3 bg-gray-50 hover:bg-gray-100 transition cursor-pointer relative">
-                      <label className="block text-[10px] font-black uppercase tracking-wider text-gray-800 mb-1">Nhận phòng</label>
-                      <input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} className="w-full bg-transparent text-[13px] outline-none font-mono cursor-pointer absolute inset-0 opacity-0" />
-                      <div className="text-[13px] font-mono text-gray-600">{checkIn ? formatDmy(checkIn) : "Chọn ngày"}</div>
-                    </div>
-                    <div className="w-1/2 p-3 bg-gray-50 hover:bg-gray-100 transition cursor-pointer relative">
-                      <label className="block text-[10px] font-black uppercase tracking-wider text-gray-800 mb-1">Trả phòng</label>
-                      <input type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} className="w-full bg-transparent text-[13px] outline-none font-mono cursor-pointer absolute inset-0 opacity-0" />
-                      <div className="text-[13px] font-mono text-gray-600">{checkOut ? formatDmy(checkOut) : "Chọn ngày"}</div>
-                    </div>
-                  </div>
-                  <div className="p-3 bg-gray-50 hover:bg-gray-100 transition cursor-pointer">
-                    <label className="block text-[10px] font-black uppercase tracking-wider text-gray-800 mb-1">Số khách</label>
-                    <select value={guests} onChange={(e) => setGuests(e.target.value)} className="w-full bg-transparent text-[13px] outline-none cursor-pointer font-bold text-gray-700">
-                      {[1,2,3,4,5,6].map(num => (
-                        <option key={num} value={num}>{num} khách</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <button className="w-full py-4 bg-[#2C3E2B] text-white rounded-2xl font-bold text-base shadow-lg shadow-[#2C3E2B]/20 hover:bg-opacity-90 hover:scale-[1.02] transition-all active:scale-[0.98] cursor-pointer border-none">
-                  Đặt phòng ngay
-                </button>
-
-                <p className="text-center text-xs text-gray-500 mt-4 font-medium">Bạn sẽ không bị trừ tiền ngay lúc này</p>
-
-                {/* Tính toán giá minh bạch */}
-                <div className="mt-6 space-y-3.5 text-sm text-gray-600 border-t border-gray-100 pt-5">
-                  <div className="flex justify-between items-center">
-                    <span className="underline decoration-gray-300 underline-offset-2">1.250.000đ x 2 đêm</span>
-                    <span className="font-medium text-gray-800">2.500.000đ</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="underline decoration-gray-300 underline-offset-2">Phí dọn dẹp</span>
-                    <span className="font-medium text-gray-800">150.000đ</span>
-                  </div>
-                  <div className="flex justify-between font-black text-lg text-[#2C1E15] pt-4 border-t border-gray-200 mt-2">
-                    <span>Tổng tiền</span>
-                    <span>2.650.000đ</span>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
+  return (
+    <UserLayout>
+      <div className="min-h-screen bg-[#F4F1EA] pb-16 text-[#2C1E15]">
+        <section className="relative bg-[#202c3c] px-4 pb-10 pt-7 shadow-lg">
+          <div className="mx-auto max-w-5xl text-center">
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-[#E3B17A]">Cozygo Homestay</p>
+            <h1 className="mt-2 font-classic text-2xl font-black text-white md:text-4xl">Chi tiết chỗ nghỉ</h1>
+            <p className="mt-2 text-sm font-medium text-white/60">Xem thông tin, hình ảnh, tiện nghi và chọn ngày lưu trú phù hợp.</p>
           </div>
-        </div>
+          <div className="absolute inset-x-4 bottom-0 z-20 mx-auto max-w-5xl translate-y-1/2">
+            <HomestaySearchForm onSearch={handleSearch} />
+          </div>
+        </section>
+
+        <div className="h-16" />
+
+        <main className="mx-auto max-w-7xl px-4 md:px-8">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#6E473B]/10 bg-white px-4 py-2 text-xs font-black text-[#2C3E2B] shadow-sm transition hover:bg-[#2C3E2B] hover:text-white"
+          >
+            <HiArrowLeft className="h-4 w-4" />
+            Quay lại
+          </button>
+
+          {isLoading && (
+            <div className="rounded-[28px] border border-gray-100 bg-white p-8 shadow-sm">
+              <div className="h-8 w-2/3 animate-pulse rounded bg-gray-100" />
+              <div className="mt-6 h-[420px] animate-pulse rounded-3xl bg-gray-100" />
+            </div>
+          )}
+
+          {!isLoading && errorMessage && (
+            <div className="rounded-[28px] border border-red-100 bg-white p-10 text-center shadow-sm">
+              <p className="text-lg font-black text-red-600">{errorMessage}</p>
+              <p className="mt-2 text-sm font-semibold text-gray-400">Kiểm tra lại backend hoặc homestay có còn được hiển thị công khai không.</p>
+            </div>
+          )}
+
+          {!isLoading && homestay && (
+            <div className="space-y-8">
+              <header className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-[#B6784F]">{homestay.code || 'HMS-' + homestay.id}</p>
+                  <h2 className="mt-2 font-classic text-3xl font-black leading-tight text-[#2C1E15] md:text-5xl">{homestay.name}</h2>
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-sm font-bold text-gray-500">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-amber-700 ring-1 ring-amber-100">
+                      <HiStar className="h-4 w-4" />
+                      {homestay.score || homestay.rating || '0.0'} ({homestay.reviewCount || 0} đánh giá)
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <HiMapPin className="h-4 w-4 text-[#6E473B]" />
+                      {homestay.address || homestay.location}
+                    </span>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-[#6E473B]/10 bg-white px-5 py-4 text-right shadow-sm">
+                  <p className="text-xs font-bold uppercase tracking-wide text-gray-400">Giá mỗi đêm</p>
+                  <p className="mt-1 text-2xl font-black text-[#6E473B]">{formatCurrency(homestay.pricePerNight)}</p>
+                </div>
+              </header>
+
+              <section className="grid gap-2 overflow-hidden rounded-[30px] bg-white p-2 shadow-sm md:grid-cols-[1.08fr_1fr]">
+                <button
+                  type="button"
+                  onClick={() => openGallery(0)}
+                  className="group relative h-[320px] overflow-hidden rounded-[24px] bg-gray-100 p-0 text-left md:h-[500px]"
+                >
+                  <img src={activeImage} alt={homestay.name} className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
+                  <div className="absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
+                  <div className="absolute bottom-4 left-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-[#0B4DBC] shadow-lg">
+                    <HiPhoto className="h-5 w-5" />
+                    Xem tất cả ảnh
+                  </div>
+                </button>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {galleryPreviewImages.map((image, previewIndex) => {
+                    const actualIndex = previewIndex + 1;
+                    const isLastPreview = previewIndex === galleryPreviewImages.length - 1;
+                    return (
+                      <button
+                        key={image + actualIndex}
+                        type="button"
+                        onClick={() => openGallery(actualIndex)}
+                        className="group relative h-[154px] overflow-hidden rounded-2xl bg-gray-100 p-0 md:h-[246px]"
+                      >
+                        <img src={image} alt={homestay.name + ' ảnh ' + (actualIndex + 1)} className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
+                        <div className="absolute inset-0 bg-black/0 transition group-hover:bg-black/15" />
+                        {isLastPreview && remainingImageCount > 0 && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-center text-white backdrop-blur-[1px]">
+                            <span className="rounded-full bg-black/45 px-5 py-2 text-lg font-black shadow-lg">+{remainingImageCount} ảnh</span>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="grid gap-8 lg:grid-cols-[1fr_360px]">
+                <div className="space-y-8">
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                    <DetailStat icon={HiUsers} label="Sức chứa" value={maxGuests + ' khách'} />
+                    <DetailStat icon={HiHomeModern} label="Phòng ngủ" value={(homestay.bedroomCount || 0) + ' phòng'} />
+                    <DetailStat icon={HiHomeModern} label="Giường" value={(homestay.bedCount || 0) + ' giường'} />
+                    <DetailStat icon={HiHomeModern} label="Phòng tắm" value={(homestay.bathroomCount || 0) + ' phòng'} />
+                    <DetailStat icon={HiHomeModern} label="Bếp" value={(homestay.kitchenCount || 0) + ' bếp'} />
+                  </div>
+
+                  <article className="rounded-[28px] border border-[#6E473B]/10 bg-white p-6 shadow-sm md:p-8">
+                    <h3 className="font-classic text-2xl font-black">Về homestay này</h3>
+                    <p className="mt-4 whitespace-pre-line text-sm font-medium leading-7 text-gray-600">
+                      {homestay.description || 'Chưa có mô tả chi tiết cho homestay này.'}
+                    </p>
+                    <div className="mt-6 flex flex-wrap gap-3 text-xs font-black text-[#2C3E2B]">
+                      <span className="rounded-full bg-[#2C3E2B]/10 px-3 py-1.5">Check-in {formatTime(homestay.checkinTime, '14:00')}</span>
+                      <span className="rounded-full bg-[#2C3E2B]/10 px-3 py-1.5">Check-out {formatTime(homestay.checkoutTime, '12:00')}</span>
+                      <span className="rounded-full bg-[#2C3E2B]/10 px-3 py-1.5">Chủ nhà: {homestay.ownerName || 'Cozygo Host'}</span>
+                    </div>
+                  </article>
+
+                  <section className="rounded-[28px] border border-[#6E473B]/10 bg-white p-6 shadow-sm md:p-8">
+                    <h3 className="font-classic text-2xl font-black">Tiện nghi</h3>
+                    {homestay.amenities?.length ? (
+                      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        {homestay.amenities.map((amenity) => (
+                          <div key={amenity} className="inline-flex items-center gap-3 rounded-2xl border border-gray-100 bg-[#F8F6F0] px-4 py-3 text-sm font-bold text-[#2C1E15]">
+                            <HiCheckCircle className="h-5 w-5 text-emerald-600" />
+                            {amenity}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-4 text-sm font-semibold text-gray-400">Homestay chưa cập nhật tiện nghi.</p>
+                    )}
+                  </section>
+
+                  <section className="rounded-[28px] border border-[#6E473B]/10 bg-white p-6 shadow-sm md:p-8">
+                    <h3 className="font-classic text-2xl font-black">Dịch vụ bổ sung</h3>
+                    {serviceItems.length ? (
+                      <div className="mt-5 grid gap-3 md:grid-cols-2">
+                        {serviceItems.map((service, index) => (
+                          <div key={(service.serviceName || service.name || 'service') + index} className="rounded-2xl border border-gray-100 bg-[#F8F6F0] p-4">
+                            <p className="font-black text-[#2C1E15]">{service.serviceName || service.name}</p>
+                            {service.price !== undefined && service.price !== null && (
+                              <p className="mt-1 text-sm font-black text-[#6E473B]">{formatCurrency(service.price)} / ngày</p>
+                            )}
+                            {service.description && <p className="mt-2 text-xs font-semibold leading-5 text-gray-500">{service.description}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-4 text-sm font-semibold text-gray-400">Homestay chưa có dịch vụ bổ sung.</p>
+                    )}
+                  </section>
+
+                  <section className="rounded-[28px] border border-[#6E473B]/10 bg-white p-6 shadow-sm md:p-8">
+                    <h3 className="font-classic text-2xl font-black">Nội quy homestay</h3>
+                    {homestay.rules?.length ? (
+                      <div className="mt-5 grid gap-3 md:grid-cols-2">
+                        {homestay.rules.map((rule) => (
+                          <div key={rule} className="flex items-start gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm font-bold text-gray-700">
+                            <HiShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#6E473B]" />
+                            {rule}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-4 text-sm font-semibold text-gray-400">Chưa có nội quy riêng.</p>
+                    )}
+                  </section>
+                </div>
+
+                <aside className="lg:sticky lg:top-24 lg:self-start">
+                  <div className="rounded-[28px] border border-[#6E473B]/10 bg-white p-6 shadow-xl shadow-[#2C1E15]/10">
+                    <div className="flex items-end justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wide text-gray-400">Tạm tính từ</p>
+                        <p className="text-2xl font-black text-[#6E473B]">{formatCurrency(homestay.pricePerNight)}</p>
+                      </div>
+                      <div className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700">
+                        <HiStar className="h-4 w-4" /> {homestay.score || '0.0'}
+                      </div>
+                    </div>
+
+                    <div className="mt-5 overflow-hidden rounded-2xl border border-gray-200">
+                      <div className="grid grid-cols-2 divide-x divide-gray-200 border-b border-gray-200">
+                        <label className="p-3">
+                          <span className="text-[10px] font-black uppercase text-gray-500">Nhận phòng</span>
+                          <input type="date" value={checkIn} onChange={(event) => setCheckIn(event.target.value)} className="mt-1 w-full bg-transparent text-xs font-bold outline-none" />
+                        </label>
+                        <label className="p-3">
+                          <span className="text-[10px] font-black uppercase text-gray-500">Trả phòng</span>
+                          <input type="date" value={checkOut} onChange={(event) => setCheckOut(event.target.value)} className="mt-1 w-full bg-transparent text-xs font-bold outline-none" />
+                        </label>
+                      </div>
+                      <label className="block p-3">
+                        <span className="text-[10px] font-black uppercase text-gray-500">Số khách</span>
+                        <select value={guests} onChange={(event) => setGuests(Number(event.target.value))} className="mt-1 w-full bg-transparent text-sm font-bold outline-none">
+                          {Array.from({ length: maxGuests }).map((_, index) => (
+                            <option key={index + 1} value={index + 1}>{index + 1} khách</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+
+                    <button type="button" className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#2C3E2B] text-sm font-black text-white shadow-lg transition hover:bg-[#223322]">
+                      <HiCalendarDays className="h-5 w-5" />
+                      Đặt phòng ngay
+                    </button>
+
+                    <div className="mt-5 space-y-3 border-t border-gray-100 pt-5 text-sm font-semibold text-gray-500">
+                      <div className="flex justify-between">
+                        <span>{formatCurrency(homestay.pricePerNight)} x 1 đêm</span>
+                        <span className="font-black text-[#2C1E15]">{formatCurrency(homestay.pricePerNight)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Phí dịch vụ cơ bản</span>
+                        <span className="font-black text-[#2C1E15]">0đ</span>
+                      </div>
+                      <div className="flex justify-between border-t border-gray-100 pt-3 text-base font-black text-[#2C1E15]">
+                        <span>Tổng tạm tính</span>
+                        <span>{formatCurrency(homestay.pricePerNight)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </aside>
+              </section>
+            </div>
+          )}
+        </main>
+
+        {isGalleryOpen && (
+          <GalleryModal
+            images={images}
+            homestayName={homestay?.name || 'Homestay'}
+            onClose={() => setIsGalleryOpen(false)}
+            onOpenLightbox={openLightbox}
+          />
+        )}
+
+        {lightboxIndex !== null && (
+          <LightboxModal
+            images={images}
+            currentIndex={lightboxIndex}
+            setCurrentIndex={setLightboxIndex}
+            homestayName={homestay?.name || 'Homestay'}
+            onClose={() => setLightboxIndex(null)}
+          />
+        )}
       </div>
     </UserLayout>
   );
