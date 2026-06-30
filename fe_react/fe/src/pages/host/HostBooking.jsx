@@ -1,0 +1,521 @@
+import { useMemo, useState } from 'react';
+import {
+  HiOutlineHome,
+  HiOutlineFilter,
+  HiOutlineChevronDown,
+  HiOutlineChevronRight,
+  HiOutlineCheckCircle,
+  HiOutlineClock,
+  HiOutlineXCircle,
+  HiOutlineBan,
+  HiOutlineX,
+  HiOutlineCash,
+  HiOutlineCalendar,
+  HiOutlineUsers,
+
+  HiOutlineClipboardList,
+  HiOutlineCube,
+
+  HiOutlineStar,
+} from 'react-icons/hi';
+import HostLayout from '../../layouts/HostLayout';
+import ModalPortal from '../../components/common/ModalPortal';
+import Pagination from '../../components/common/Pagination';
+import SearchBar from '../../components/common/SearchBar';
+
+// ─── Mock data ─────────────────────────────────────────────────────────────
+const MOCK_BOOKINGS = [
+  {
+    id: '#325', homestay: 'Lofi Homestay', homestayId: 'HMS-001',
+    checkin: '22/12/2025', checkout: '25/12/2025', guests: 2,
+    status: 'Chờ duyệt', paymentMethod: 'Thanh toán tại chỗ', paymentStatus: 'Chờ thanh toán',
+    createdAt: '15/11/2025', note: 'Cần chỗ để xe máy',
+    roomPrice: 1200000, discount: 100000, totalPrice: 3080000,
+    services: [
+      { name: 'Thuê xe máy', unitPrice: 120000, qty: 2, total: 240000 },
+      { name: 'Bữa sáng (BBQ)', unitPrice: 350000, qty: 2, total: 700000 },
+      { name: 'Hướng dẫn viên cá nhân', unitPrice: 450000, qty: 2, total: 900000 },
+    ],
+  },
+  {
+    id: '#324', homestay: 'Lofi Homestay', homestayId: 'HMS-001',
+    checkin: '18/12/2025', checkout: '20/12/2025', guests: 4,
+    status: 'Hoàn thành', paymentMethod: 'VNPay', paymentStatus: 'Đã thanh toán',
+    createdAt: '14/11/2025', note: '',
+    roomPrice: 1200000, discount: 0, totalPrice: 1440000,
+    services: [],
+  },
+  {
+    id: '#323', homestay: 'Lofi Homestay', homestayId: 'HMS-001',
+    checkin: '12/12/2025', checkout: '15/12/2025', guests: 2,
+    status: 'Chờ duyệt', paymentMethod: 'MoMo', paymentStatus: 'Chờ thanh toán',
+    createdAt: '13/11/2025', note: '',
+    roomPrice: 1200000, discount: 0, totalPrice: 2335000,
+    services: [{ name: 'Thuê xe máy', unitPrice: 120000, qty: 1, total: 120000 }],
+  },
+  {
+    id: '#322', homestay: 'Lavie House', homestayId: 'HMS-002',
+    checkin: '10/12/2025', checkout: '12/12/2025', guests: 3,
+    status: 'Chờ duyệt', paymentMethod: 'Tiền mặt', paymentStatus: 'Chờ thanh toán',
+    createdAt: '10/11/2025', note: 'Tới muộn khoảng 22h',
+    roomPrice: 700000, discount: 0, totalPrice: 4000000,
+    services: [{ name: 'Bữa sáng', unitPrice: 250000, qty: 3, total: 750000 }],
+  },
+  {
+    id: '#321', homestay: 'Lavie House', homestayId: 'HMS-002',
+    checkin: '05/12/2025', checkout: '08/12/2025', guests: 2,
+    status: 'Chờ duyệt', paymentMethod: 'VNPay', paymentStatus: 'Chờ thanh toán',
+    createdAt: '08/11/2025', note: '',
+    roomPrice: 700000, discount: 0, totalPrice: 1963000,
+    services: [],
+  },
+  {
+    id: '#320', homestay: 'Lofi Homestay', homestayId: 'HMS-001',
+    checkin: '01/12/2025', checkout: '03/12/2025', guests: 2,
+    status: 'Hoàn thành', paymentMethod: 'MoMo', paymentStatus: 'Đã thanh toán',
+    createdAt: '05/11/2025', note: '',
+    roomPrice: 1200000, discount: 0, totalPrice: 1200000,
+    services: [],
+  },
+  {
+    id: '#319', homestay: 'Lofi Homestay', homestayId: 'HMS-001',
+    checkin: '28/11/2025', checkout: '30/11/2025', guests: 1,
+    status: 'Hoàn thành', paymentMethod: 'VNPay', paymentStatus: 'Đã thanh toán',
+    createdAt: '02/11/2025', note: '',
+    roomPrice: 1200000, discount: 200000, totalPrice: 897000,
+    services: [],
+  },
+  {
+    id: '#318', homestay: 'Lavie House', homestayId: 'HMS-002',
+    checkin: '15/11/2025', checkout: '18/11/2025', guests: 2,
+    status: 'Chờ duyệt', paymentMethod: 'Tiền mặt', paymentStatus: 'Chờ thanh toán',
+    createdAt: '01/11/2025', note: '',
+    roomPrice: 700000, discount: 0, totalPrice: 412000,
+    services: [],
+  },
+];
+
+const STATUS_CONFIG = {
+  'Chờ duyệt':  { bg: '#FEF9EE', text: '#B45309', border: '#FCD34D', icon: HiOutlineClock },
+  'Đã xác nhận':{ bg: '#EFF6FF', text: '#1D4ED8', border: '#93C5FD', icon: HiOutlineCheckCircle },
+  'Hoàn thành': { bg: '#ECFDF5', text: '#065F46', border: '#6EE7B7', icon: HiOutlineCheckCircle },
+  'Đã hủy':     { bg: '#FEF2F2', text: '#991B1B', border: '#FECACA', icon: HiOutlineXCircle },
+  'Bị chặn':    { bg: '#F3F4F6', text: '#374151', border: '#D1D5DB', icon: HiOutlineBan },
+};
+
+const PAYMENT_STATUS_CONFIG = {
+  'Đã thanh toán':   { bg: '#ECFDF5', text: '#065F46', border: '#6EE7B7' },
+  'Chờ thanh toán':  { bg: '#FEF9EE', text: '#B45309', border: '#FCD34D' },
+  'Hoàn tiền':       { bg: '#EFF6FF', text: '#1D4ED8', border: '#93C5FD' },
+};
+
+const PAGE_SIZE = 5;
+
+function fmt(n) { return new Intl.NumberFormat('vi-VN').format(n) + ' đ'; }
+
+// ─── Shared UI ─────────────────────────────────────────────────────────────
+const brand = { dark:'#1C2B2B', forest:'#2C3E2B', terra:'#8B4A2F', cream:'#F4F1EA', warm:'#6E473B' };
+
+function StatusBadge({ status, small }) {
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG['Chờ duyệt'];
+  const Icon = cfg.icon;
+  return (
+    <span className={`inline-flex items-center gap-1 font-bold border rounded-full ${small ? 'text-[10px] px-2 py-0.5' : 'text-xs px-2.5 py-1'}`}
+      style={{ background: cfg.bg, color: cfg.text, borderColor: cfg.border }}>
+      <Icon size={small ? 10 : 12} />{status}
+    </span>
+  );
+}
+
+function PaymentBadge({ status }) {
+  const cfg = PAYMENT_STATUS_CONFIG[status] || PAYMENT_STATUS_CONFIG['Chờ thanh toán'];
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold border rounded-full px-2 py-0.5"
+      style={{ background: cfg.bg, color: cfg.text, borderColor: cfg.border }}>
+      {status}
+    </span>
+  );
+}
+
+// ─── Main component ────────────────────────────────────────────────────────
+export default function HostBookings() {
+  const [bookings, setBookings] = useState(MOCK_BOOKINGS);
+  const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('Tất cả');
+  const [filterPayment, setFilterPayment] = useState('Tất cả');
+  const [filterHomestay, setFilterHomestay] = useState('Tất cả');
+  const [expandedId, setExpandedId] = useState(null);
+  const [detailId, setDetailId] = useState(null);
+  const [page, setPage] = useState(1);
+
+  const homestayOptions = ['Tất cả', ...Array.from(new Set(bookings.map(b => b.homestay)))];
+
+  const filtered = useMemo(() => {
+    const kw = search.trim().toLowerCase();
+    return bookings.filter(b =>
+      (!kw || b.id.toLowerCase().includes(kw) || b.homestay.toLowerCase().includes(kw))
+      && (filterStatus === 'Tất cả' || b.status === filterStatus)
+      && (filterPayment === 'Tất cả' || b.paymentStatus === filterPayment)
+      && (filterHomestay === 'Tất cả' || b.homestay === filterHomestay)
+    );
+  }, [bookings, search, filterStatus, filterPayment, filterHomestay]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const detailBooking = bookings.find(b => b.id === detailId) || null;
+
+  const updateStatus = (id, status) => {
+    setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
+    if (detailBooking?.id === id) setDetailId(null);
+  };
+
+  const stats = {
+    total: bookings.length,
+    pending: bookings.filter(b => b.status === 'Chờ duyệt').length,
+    done: bookings.filter(b => b.status === 'Hoàn thành').length,
+    revenue: bookings.filter(b => b.paymentStatus === 'Đã thanh toán').reduce((s, b) => s + b.totalPrice, 0),
+  };
+
+  return (
+    <HostLayout>
+      <div className="animate-fade-in text-sm -mt-6" style={{ fontFamily: "'Be Vietnam Pro', 'Inter', sans-serif" }}>
+
+        {/* ── Page header ── */}
+        <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-5 mb-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: brand.warm }}>Bảng điều khiển</p>
+            <h2 className="font-serif text-2xl md:text-3xl font-bold" style={{ color: '#2C1E15' }}>Quản lý đơn đặt phòng</h2>
+            <p className="text-xs text-gray-400 mt-1">
+              Theo dõi và cập nhật trạng thái tất cả các đơn đặt homestay của bạn.
+              <span className="ml-2 font-semibold" style={{ color: brand.warm }}>{bookings.length} đơn tổng • {stats.pending} chờ duyệt</span>
+            </p>
+          </div>
+          {/* Stats chips */}
+          <div className="flex gap-3 flex-wrap">
+            {[
+              { label: 'Chờ duyệt', value: stats.pending, color: '#B45309', bg: '#FEF9EE', border: '#FCD34D' },
+              { label: 'Hoàn thành', value: stats.done, color: '#065F46', bg: '#ECFDF5', border: '#6EE7B7' },
+              { label: 'Doanh thu', value: fmt(stats.revenue), color: brand.forest, bg: '#F0FDF4', border: '#86EFAC' },
+            ].map(s => (
+              <div key={s.label} className="rounded-xl px-4 py-2.5 border text-center min-w-[100px]" style={{ background: s.bg, borderColor: s.border }}>
+                <p className="text-[10px] font-bold uppercase tracking-wide mb-0.5" style={{ color: '#9CA3AF' }}>{s.label}</p>
+                <p className="font-black text-sm" style={{ color: s.color }}>{s.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Filters ── */}
+        <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-4 mb-4 flex flex-col xl:flex-row xl:items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap flex-1">
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500">
+              <HiOutlineFilter size={14}/>Lọc:
+            </span>
+            {[
+              { label:'Trạng thái', value: filterStatus, setter: setFilterStatus, opts:['Tất cả','Chờ duyệt','Đã xác nhận','Hoàn thành','Đã hủy'] },
+              { label:'Thanh toán', value: filterPayment, setter: setFilterPayment, opts:['Tất cả','Đã thanh toán','Chờ thanh toán','Hoàn tiền'] },
+              { label:'Homestay',   value: filterHomestay, setter: setFilterHomestay, opts: homestayOptions },
+            ].map(f => (
+              <label key={f.label} className="inline-flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-gray-400 border border-gray-200" style={{ background: brand.cream }}>
+                <span>{f.label}:</span>
+                <select className="bg-transparent outline-none cursor-pointer font-black" style={{ color: brand.forest }}
+                  value={f.value} onChange={e => { f.setter(e.target.value); setPage(1); }}>
+                  {f.opts.map(o => <option key={o}>{o}</option>)}
+                </select>
+              </label>
+            ))}
+          </div>
+          <SearchBar
+            value={search}
+            onChange={(nextSearch) => {
+              setSearch(nextSearch);
+              setPage(1);
+            }}
+            placeholder="Tìm mã đơn, tên homestay..."
+            onReset={() => {
+              setSearch('');
+              setFilterStatus('Tất cả');
+              setFilterPayment('Tất cả');
+              setFilterHomestay('Tất cả');
+              setPage(1);
+            }}
+          />
+        </div>
+
+        {/* ── Main area: table + side panel ── */}
+        <div className="flex gap-4" style={{ alignItems: 'flex-start' }}>
+
+          {/* Table */}
+          <div className="flex-1 min-w-0 bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden">
+            {/* Table header */}
+            <div className="grid border-b border-gray-100" style={{ gridTemplateColumns:'40px 110px 1fr 130px 120px 180px 1fr', background:'#F9F8F6' }}>
+              {['', 'Mã đơn', 'Trạng thái', 'Tổng tiền', 'Tạo lúc', 'Thanh toán', 'Thao tác'].map((h, i) => (
+                <div key={i} className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">{h}</div>
+              ))}
+            </div>
+
+            {paginated.length === 0 && (
+              <div className="py-16 text-center">
+                <HiOutlineClipboardList size={36} className="mx-auto mb-3 opacity-30 text-gray-400"/>
+                <p className="text-sm text-gray-400 italic">Không có đơn nào phù hợp.</p>
+              </div>
+            )}
+
+            {paginated.map((b) => {
+              const expanded = expandedId === b.id;
+              const isDetail = detailId === b.id;
+              return (
+                <div key={b.id} className={`border-b border-gray-100 last:border-b-0 transition-colors ${isDetail ? 'bg-[#F4F1EA]/60' : 'hover:bg-gray-50/50'}`}>
+                  {/* Main row */}
+                  <div className="grid items-center" style={{ gridTemplateColumns:'40px 110px 1fr 130px 120px 180px 1fr' }}>
+                    {/* Expand toggle */}
+                    <div className="px-3 py-3.5 flex items-center justify-center">
+                      <button onClick={()=>setExpandedId(expanded ? null : b.id)} className="w-6 h-6 rounded-lg flex items-center justify-center transition hover:bg-gray-100" style={{ color:'#9CA3AF' }}>
+                        {expanded ? <HiOutlineChevronDown size={14}/> : <HiOutlineChevronRight size={14}/>}
+                      </button>
+                    </div>
+
+                    {/* ID */}
+                    <div className="px-2 py-3.5">
+                      <p className="font-black text-sm" style={{ color: brand.terra }}>{b.id}</p>
+                      <p className="text-[10px] text-gray-400 font-mono mt-0.5">{b.homestay}</p>
+                    </div>
+
+                    {/* Status */}
+                    <div className="px-2 py-3.5">
+                      <StatusBadge status={b.status}/>
+                    </div>
+
+                    {/* Total */}
+                    <div className="px-2 py-3.5">
+                      <span className="font-black text-sm" style={{ color:'#2C1E15' }}>{fmt(b.totalPrice)}</span>
+                    </div>
+
+                    {/* Created */}
+                    <div className="px-2 py-3.5">
+                      <p className="text-xs text-gray-400 font-mono">{b.createdAt}</p>
+                    </div>
+
+                    {/* Payment */}
+                    <div className="px-2 py-3.5">
+                      <PaymentBadge status={b.paymentStatus}/>
+                      <p className="text-[10px] text-gray-400 mt-0.5">{b.paymentMethod}</p>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="px-3 py-3.5 flex items-center gap-1.5 justify-end">
+                      <button
+                        onClick={()=>setDetailId(b.id)}
+                        className="h-8 px-3 rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 transition border"
+                        style={isDetail
+                          ? { background: brand.forest, color:'#fff', borderColor: brand.forest }
+                          : { background:'#F4F1EA', color: brand.warm, borderColor:'#E5DDD4' }
+                        }
+                      >
+                        <HiOutlineClipboardList size={13}/>Chi tiết
+                      </button>
+                      {b.status === 'Chờ duyệt' && (
+                        <>
+                          <button onClick={()=>updateStatus(b.id,'Đã xác nhận')} className="h-8 px-3 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 border transition" style={{ background:'#ECFDF5', color:'#065F46', borderColor:'#6EE7B7' }}>
+                            Duyệt
+                          </button>
+                          <button onClick={()=>updateStatus(b.id,'Đã hủy')} className="h-8 px-2 rounded-lg text-[11px] font-bold inline-flex items-center border transition" style={{ background:'#FEF2F2', color:'#991B1B', borderColor:'#FECACA' }}>
+                            Hủy
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Expanded mini-detail */}
+                  {expanded && (
+                    <div className="mx-4 mb-3 rounded-xl border p-4 grid grid-cols-2 md:grid-cols-4 gap-3" style={{ background:'#FDFCF9', borderColor:'#EDE9E1' }}>
+                      {[
+                        { label:'Check-in', value: b.checkin, icon: HiOutlineCalendar },
+                        { label:'Check-out', value: b.checkout, icon: HiOutlineCalendar },
+                        { label:'Số khách', value: `${b.guests} khách`, icon: HiOutlineUsers },
+                        { label:'Homestay', value: b.homestay, icon: HiOutlineHome },
+                      ].map(({ label, value, icon: Icon }) => (
+                        <div key={label}>
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-0.5">{label}</p>
+                          <p className="text-sm font-bold flex items-center gap-1.5" style={{ color:'#2C1E15' }}>
+                            <Icon size={12} style={{ color: brand.terra }}/>{value}
+                          </p>
+                        </div>
+                      ))}
+                      {b.note && (
+                        <div className="col-span-full mt-1 text-xs text-gray-500 italic">
+                          Ghi chú: "{b.note}"
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              setCurrentPage={setPage}
+              totalItems={filtered.length}
+              indexOfFirstItem={(page - 1) * PAGE_SIZE}
+              indexOfLastItem={page * PAGE_SIZE}
+              itemName="đơn đặt"
+            />
+          </div>
+
+          {/* ── Slide-in detail modal ── */}
+          {detailBooking && (
+            <ModalPortal
+              className="fixed inset-0 z-[9999] bg-black/65 backdrop-blur-sm flex justify-end animate-fade-in text-left text-sm"
+              onBackdropClick={() => setDetailId(null)}
+            >
+              <div
+                className="ml-auto h-full w-full max-w-[420px] bg-white shadow-2xl border-l border-gray-200 overflow-hidden animate-slide-in-from-right flex flex-col"
+                onClick={(event) => event.stopPropagation()}
+              >
+              {/* Panel header */}
+              <div className="relative px-5 py-4 pl-16" style={{ background: brand.dark }}>
+                <button
+                  onClick={()=>setDetailId(null)}
+                  className="absolute left-4 top-4 w-9 h-9 rounded-full flex items-center justify-center transition hover:bg-white/15 shrink-0"
+                  style={{ color:'#fff', border:'1px solid rgba(255,255,255,0.18)', background:'rgba(255,255,255,0.08)' }}
+                  aria-label="Đóng chi tiết đơn"
+                >
+                  <HiOutlineX size={18}/>
+                </button>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] mb-1 text-white/75">Chi tiết đơn đặt</p>
+                  <h3 className="text-2xl font-black leading-tight text-white">{detailBooking.id}</h3>
+                  <p className="text-base font-extrabold mt-1 text-white">{detailBooking.homestay}</p>
+                </div>
+              </div>
+
+              {/* Status strip */}
+              <div className="px-5 py-2.5 flex items-center justify-between gap-2" style={{ background:'#FDFCF9', borderBottom:'1px solid #EDE9E1' }}>
+                <StatusBadge status={detailBooking.status}/>
+                <PaymentBadge status={detailBooking.paymentStatus}/>
+              </div>
+
+              <div className="p-5 space-y-4 flex-1 min-h-0 overflow-y-auto">
+
+                {/* Date & meta */}
+                <div className="rounded-xl p-3 space-y-2" style={{ background: brand.cream, border:'1px solid #EDE9E1' }}>
+                  {[
+                    ['Check-in', detailBooking.checkin, HiOutlineCalendar],
+                    ['Check-out', detailBooking.checkout, HiOutlineCalendar],
+                    ['Số khách', `${detailBooking.guests} khách`, HiOutlineUsers],
+                    ['Tạo lúc', detailBooking.createdAt, HiOutlineClock],
+                  ].map(([lbl, val, Icon]) => (
+                    <div key={lbl} className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500 font-medium flex items-center gap-1.5"><Icon size={12} style={{ color: brand.terra }}/>{lbl}</span>
+                      <span className="font-bold" style={{ color:'#2C1E15' }}>{val}</span>
+                    </div>
+                  ))}
+                  {detailBooking.note && (
+                    <div className="pt-2 border-t border-[#EDE9E1]">
+                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wide mb-0.5">Ghi chú</p>
+                      <p className="text-xs italic text-gray-600">"{detailBooking.note}"</p>
+                    </div>
+                  )}
+                </div>
+                {/* Services breakdown */}
+                {detailBooking.services.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-wider mb-2 flex items-center gap-1.5" style={{ color:'#9CA3AF' }}>
+                      <HiOutlineCube size={13}/> Dịch vụ đi kèm
+                    </p>
+                    <div className="space-y-2">
+                      {detailBooking.services.map((svc, i) => (
+                        <div key={i} className="rounded-xl border border-gray-200 px-4 py-2.5 bg-white">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="text-xs font-bold" style={{ color:'#2C1E15' }}>{svc.name}</p>
+                              <p className="text-[10px] text-gray-400 mt-0.5">Giá / đơn vị: {fmt(svc.unitPrice)}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[10px] text-gray-400">x{svc.qty}</p>
+                              <p className="text-xs font-black" style={{ color: brand.terra }}>{fmt(svc.total)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Price breakdown */}
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider mb-2 flex items-center gap-1.5" style={{ color:'#9CA3AF' }}>
+                    <HiOutlineCash size={13}/> Bảng giá
+                  </p>
+                  <div className="rounded-xl overflow-hidden border border-gray-200">
+                    <div className="divide-y divide-gray-100">
+                      <PriceRow label="Tiền phòng" value={fmt(detailBooking.roomPrice)} />
+                      {detailBooking.services.length > 0 && (
+                        <PriceRow label="Dịch vụ thêm" value={fmt(detailBooking.services.reduce((s,sv)=>s+sv.total,0))} />
+                      )}
+                      {detailBooking.discount > 0 && (
+                        <PriceRow label="Giảm giá" value={`- ${fmt(detailBooking.discount)}`} accent />
+                      )}
+                    </div>
+                    <div className="px-4 py-2.5 flex items-center justify-between" style={{ background: brand.dark }}>
+                      <span className="text-xs font-bold text-white">Tổng cộng</span>
+                      <span className="font-black text-sm text-white">{fmt(detailBooking.totalPrice)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                
+
+                {/* Payment info */}
+                <div className="rounded-xl border p-3 space-y-2" style={{ background:'#FDFCF9', borderColor:'#EDE9E1' }}>
+                  <p className="text-[10px] font-black uppercase tracking-wider" style={{ color:'#9CA3AF' }}>Thanh toán</p>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500">Phương thức</span>
+                    <span className="font-bold" style={{ color:'#2C1E15' }}>{detailBooking.paymentMethod}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500">Trạng thái</span>
+                    <PaymentBadge status={detailBooking.paymentStatus}/>
+                  </div>
+                </div>
+
+                {/* Action buttons */}
+                <div className="space-y-2 pt-1">
+                  {detailBooking.status === 'Chờ duyệt' && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={()=>updateStatus(detailBooking.id,'Đã xác nhận')} className="h-10 rounded-xl text-xs font-bold text-white shadow transition hover:opacity-90 active:scale-95 inline-flex items-center justify-center gap-1.5" style={{ background: brand.forest }}>
+                        <HiOutlineCheckCircle size={14}/> Xác nhận
+                      </button>
+                      <button onClick={()=>updateStatus(detailBooking.id,'Đã hủy')} className="h-10 rounded-xl text-xs font-bold border transition hover:bg-red-50 active:scale-95 inline-flex items-center justify-center gap-1.5" style={{ color:'#991B1B', borderColor:'#FECACA', background:'#FEF2F2' }}>
+                        <HiOutlineXCircle size={14}/> Hủy đơn
+                      </button>
+                    </div>
+                  )}
+                  {detailBooking.status === 'Đã xác nhận' && (
+                    <button onClick={()=>updateStatus(detailBooking.id,'Hoàn thành')} className="w-full h-10 rounded-xl text-xs font-bold text-white shadow transition hover:opacity-90 active:scale-95 inline-flex items-center justify-center gap-1.5" style={{ background: brand.forest }}>
+                      <HiOutlineStar size={14}/> Đánh dấu hoàn thành
+                    </button>
+                  )}
+                </div>
+              </div>
+              </div>
+            </ModalPortal>
+          )}
+        </div>
+      </div>
+    </HostLayout>
+  );
+}
+
+function PriceRow({ label, value, accent }) {
+  return (
+    <div className="px-4 py-2 flex items-center justify-between bg-white">
+      <span className="text-xs text-gray-500 font-medium">{label}</span>
+      <span className={`text-xs font-bold ${accent ? 'text-emerald-600' : ''}`} style={!accent ? { color:'#2C1E15' } : undefined}>
+        {value}
+      </span>
+    </div>
+  );
+}
