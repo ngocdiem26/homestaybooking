@@ -1,22 +1,24 @@
-import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import banner from '../../assets/images/nha5.jpg';
 
 // Import đúng component card dọc đã được chia tách ra thư mục riêng
 import VerticalHomestayCard from '../../components/homestay/VerticalHomestayCard';
+import HomestaySearchForm from '../../components/homestay/HomestaySearchForm';
 
 // Import Layout chung và các vùng nội dung động
 import UserLayout from '../../layouts/UserLayout'; 
 import HomeDefaultContent from './HomeDefaultContent';
-import SearchContent from './SearchContent';
 
 // SỬA TẠI ĐÂY: Nhận các props favorites và toggleFavorite từ AppRouter truyền xuống
 export default function Home({ favorites, toggleFavorite }) {
-  // Trạng thái kiểm soát việc bấm tìm kiếm (false: hiển thị trang chủ mặc định, true: hiển thị kết quả bộ lọc)
-  const [hasSearched, setHasSearched] = useState(false);
+  const navigate = useNavigate();
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    setHasSearched(true);
+  const goToSearch = (search = {}) => {
+    const params = new URLSearchParams();
+    Object.entries(search).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+    });
+    navigate('/search' + (params.toString() ? '?' + params.toString() : ''));
   };
 
   return (
@@ -26,8 +28,8 @@ export default function Home({ favorites, toggleFavorite }) {
       {/* ==========================================
           1. HERO BANNER & THANH SEARCH BOX CỐ ĐỊNH TRÊN ẢNH
          ========================================== */}
-      <section className="relative h-[540px] flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 z-0">
+      <section className="relative h-[540px] flex items-center justify-center overflow-visible z-20">
+        <div className="absolute inset-0 z-0 overflow-hidden">
           <img src={banner} alt="Cozy Home Banner" className="w-full h-full brightness-[0.8] scale-100 object-cover" />
         </div>
 
@@ -44,40 +46,20 @@ export default function Home({ favorites, toggleFavorite }) {
         </div>
 
         {/* THANH TÌM KIẾM ĐÈ LÊN BANNER CHÂN THỰC */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-4xl px-4 z-20">
-          <form onSubmit={handleSearch} className="bg-[#23150d]/90 backdrop-blur-md p-3 rounded-2xl md:rounded-full border border-white/10 shadow-2xl flex flex-col md:flex-row items-center gap-2 md:gap-4 text-[#F4F1EA]">
-            <div className="w-full md:w-auto px-4 py-2 font-bold text-xs uppercase tracking-wider text-white/50 border-b md:border-b-0 md:border-r border-white/10 whitespace-nowrap">
-              Check Availability
-            </div>
-            <div className="w-full grid grid-cols-1 sm:grid-cols-4 gap-2 flex-grow">
-              <div><input id="destination-input" type="text" required placeholder="📍Điểm đến ?" className="w-full bg-white text-gray-800 text-xs px-4 py-3 rounded-xl focus:outline-none border-0" /></div>
-              <div><input type="text" required placeholder="🗓️ Nhận phòng" onFocus={(e) => e.target.type = 'date'} onBlur={(e) => e.target.type = 'text'} className="w-full bg-white text-gray-800 text-xs px-4 py-3 rounded-xl focus:outline-none border-0" /></div>
-              <div><input type="text" required placeholder="🗓️ Trả phòng" onFocus={(e) => e.target.type = 'date'} onBlur={(e) => e.target.type = 'text'} className="w-full bg-white text-gray-800 text-xs px-4 py-3 rounded-xl focus:outline-none border-0" /></div>
-              <div><input type="text" required placeholder="👤 Số khách" className="w-full bg-white text-gray-800 text-xs px-4 py-3 rounded-xl focus:outline-none border-0" /></div>
-            </div>
-            <button type="submit" className="w-full md:w-auto bg-[#6E473B] hover:bg-[#57362c] text-white font-bold text-xs uppercase tracking-wider px-8 py-3 rounded-xl md:rounded-full shadow-lg shrink-0">Tìm kiếm</button>
-          </form>
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-4xl px-4 z-50">
+          <HomestaySearchForm onSearch={goToSearch} />
         </div>
       </section>
 
       {/* ==========================================
           2. ĐIỀU PHỐI NỘI DUNG ĐỘNG PHÍA DƯỚI BANNER
          ========================================== */}
-      {!hasSearched ? (
-        <HomeDefaultContent 
-          setHasSearched={setHasSearched}
-          favorites={favorites}
-          toggleFavorite={toggleFavorite}
-          // SỬA TẠI ĐÂY: Truyền đúng component card dọc đã tách làm module dùng chung
-          HomestayCard={VerticalHomestayCard} 
-        />
-      ) : (
-        <SearchContent 
-          setHasSearched={setHasSearched}
-          favorites={favorites}
-          toggleFavorite={toggleFavorite}
-        />
-      )}
+      <HomeDefaultContent 
+        setHasSearched={goToSearch}
+        favorites={favorites}
+        toggleFavorite={toggleFavorite}
+        HomestayCard={VerticalHomestayCard} 
+      />
 
     </UserLayout>
   );
