@@ -625,3 +625,103 @@ VALUES
 -- Homestay 5
 (5, 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e', TRUE, 1),
 (5, 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750', FALSE, 2);
+
+
+ALTER TABLE homestays
+ADD COLUMN latitude DECIMAL(10,7) NULL AFTER province,
+ADD COLUMN longitude DECIMAL(10,7) NULL AFTER latitude;
+
+CREATE TABLE activities (
+    activity_id INT NOT NULL AUTO_INCREMENT,
+
+    activity_name VARCHAR(255) NOT NULL,
+    province VARCHAR(100) NOT NULL,
+    district VARCHAR(100),
+    activity_address VARCHAR(255),
+
+    latitude DECIMAL(10,7),
+    longitude DECIMAL(10,7),
+
+    short_description VARCHAR(255),
+    thumbnail_url VARCHAR(255),
+
+    badge_text VARCHAR(100),
+    badge_type VARCHAR(50),
+
+    activity_status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
+    is_featured BOOLEAN NOT NULL DEFAULT FALSE,
+    display_order INT DEFAULT 0,
+
+    created_by INT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
+
+    PRIMARY KEY (activity_id),
+
+    CONSTRAINT fk_activities_created_by
+        FOREIGN KEY (created_by) REFERENCES users(user_id)
+        ON DELETE SET NULL ON UPDATE RESTRICT,
+
+    CONSTRAINT ck_activities_status
+        CHECK (activity_status IN ('ACTIVE', 'HIDDEN', 'DELETED'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE destinations (
+    destination_id INT NOT NULL AUTO_INCREMENT,
+
+    province_name VARCHAR(100) NOT NULL,
+    display_name VARCHAR(255) NOT NULL,
+    slug VARCHAR(150) NOT NULL,
+
+    description VARCHAR(255),
+    thumbnail_url VARCHAR(255),
+
+    display_order INT DEFAULT 0,
+    destination_status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
+
+    PRIMARY KEY (destination_id),
+    UNIQUE KEY uk_destinations_slug (slug),
+
+    CONSTRAINT ck_destinations_status
+        CHECK (destination_status IN ('ACTIVE', 'HIDDEN', 'DELETED'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE promotions
+ADD COLUMN theme ENUM('GREEN', 'PURPLE', 'ORANGE', 'BLUE', 'PINK', 'TEAL', 'DARK')
+NOT NULL DEFAULT 'GREEN';
+
+CREATE TABLE destination_itinerary_items (
+    item_id INT NOT NULL AUTO_INCREMENT,
+
+    destination_id INT NOT NULL,
+
+    start_time TIME NULL,
+    end_time TIME NULL,
+
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    image_url VARCHAR(255),
+
+    display_order INT DEFAULT 0,
+    item_status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
+
+    PRIMARY KEY (item_id),
+
+    KEY idx_itinerary_destination_id (destination_id),
+
+    CONSTRAINT fk_itinerary_destination
+        FOREIGN KEY (destination_id) REFERENCES destinations(destination_id)
+        ON DELETE CASCADE ON UPDATE RESTRICT,
+
+    CONSTRAINT ck_itinerary_status
+        CHECK (item_status IN ('ACTIVE', 'HIDDEN', 'DELETED'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
