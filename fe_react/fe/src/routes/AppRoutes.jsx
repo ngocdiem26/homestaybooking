@@ -21,6 +21,7 @@ import Register from '../pages/public/Register';
 import Search from '../pages/public/SearchContent';
 import Favorite from '../pages/user/Favorite';
 import Profile from '../pages/user/Profile';
+import HostBooking from '../pages/host/HostBooking';
 
 export default function AppRoutes() {
   const [favorites, setFavorites] = useState([]);
@@ -39,7 +40,7 @@ export default function AppRoutes() {
         <Route path="/" element={<Home favorites={favorites} toggleFavorite={toggleFavorite} />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/search" element={<Search />} />
+        <Route path="/search" element={<Search favorites={favorites} toggleFavorite={toggleFavorite} />} />
         <Route path="/favorites" element={<Favorite favorites={favorites} toggleFavorite={toggleFavorite} />} />
         <Route path="/activities" element={<Activities />} />
         <Route path="/about" element={<About />} />
@@ -64,6 +65,7 @@ export default function AppRoutes() {
           <Route index element={<HostDashboard />} />
           <Route path="homestays" element={<HomestayManagement />} />
           <Route path="revenue" element={<HostRevenue />} />
+          <Route path="bookings" element={<HostBooking />} />
         </Route>
 
       </Routes>
