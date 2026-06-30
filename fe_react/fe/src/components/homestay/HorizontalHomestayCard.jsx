@@ -1,10 +1,14 @@
+import { useNavigate } from 'react-router-dom';
 export default function HorizontalHomestayCard({ item, isFav, onFavToggle }) {
+  const navigate = useNavigate();
+  const openDetail = () => navigate('/homestay/' + (item.homeId || item.id));
+
   return (
-    <div className="bg-white rounded-xl border border-[#6E473B]/10 shadow-sm hover:shadow-xl transition-all duration-300 p-4 flex flex-col md:flex-row gap-5 group relative overflow-hidden text-left">
+    <div onClick={openDetail} className="bg-white rounded-xl cursor-pointer border border-[#6E473B]/10 shadow-sm hover:shadow-xl transition-all duration-300 p-4 flex flex-col md:flex-row gap-5 group relative overflow-hidden text-left">
       <div className="w-full md:w-[220px] h-[160px] rounded-lg overflow-hidden shrink-0 relative bg-gray-100">
         <img src={item.img} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
         <button 
-          onClick={() => onFavToggle(item.id)}
+          onClick={(event) => { event.stopPropagation(); onFavToggle(item.id); }}
           className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center text-gray-400 hover:text-red-500 shadow-sm transition"
         >
           <span className="text-xs">{isFav ? '❤️' : '🤍'}</span>
@@ -43,14 +47,14 @@ export default function HorizontalHomestayCard({ item, isFav, onFavToggle }) {
           <span className="text-[10px] text-gray-400 block font-medium">Giá tính cho 2 đêm, 2 người</span>
           <div className="text-sm md:text-base font-black text-[#6E473B] tracking-tight">VND {item.price}</div>
           <div className="text-[9px] text-gray-400 font-semibold block">{item.tax}</div>
-          <button className="w-full mt-2 bg-[#2C3E2B] hover:bg-[#1f2d20] text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center justify-center shadow-sm">
+          <button type="button" onClick={(event) => { event.stopPropagation(); openDetail(); }} className="w-full mt-2 bg-[#2C3E2B] hover:bg-[#1f2d20] text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center justify-center shadow-sm">
             <span>Xem mọi lựa chọn</span>
           </button>
         </div>
       </div>
 
       <div className="absolute inset-0 bg-[#7d9f81]/35 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center z-20 pointer-events-none">
-        <button className="bg-[#6E473B] text-white font-bold text-xs uppercase tracking-widest px-8 py-3.5 rounded-xl shadow-xl pointer-events-auto transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
+        <button type="button" onClick={(event) => { event.stopPropagation(); openDetail(); }} className="bg-[#6E473B] text-white font-bold text-xs uppercase tracking-widest px-8 py-3.5 rounded-xl shadow-xl pointer-events-auto transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
           ⚡ Đặt phòng cấp tốc
         </button>
       </div>
