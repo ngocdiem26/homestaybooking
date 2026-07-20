@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HiChatBubbleLeftRight, HiPencilSquare, HiStar, HiXMark } from 'react-icons/hi2';
 import ModalPortal from '../common/ModalPortal';
@@ -132,7 +132,12 @@ export default function ReviewManager({ errorMessage = '', reviews = [], focused
                 <button type="button" onClick={() => navigate('/homestay/' + review.homeId)} className="block max-w-full truncate text-left text-base font-black text-[#2C1E15] transition hover:text-[#6E473B] hover:underline">
                   {review.homestayName}
                 </button>
-                <p className="mt-0.5 text-[11px] font-semibold text-[#6E473B]">{review.bookingCode}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-semibold text-[#6E473B]">{review.bookingCode}</span>
+                  {review.displayStatusLabel && (
+                    <span className="rounded-full bg-[#F4F1EA] px-2.5 py-1 text-[10px] font-black text-[#2C3E2B]">{review.displayStatusLabel}</span>
+                  )}
+                </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <span className="text-xs text-gray-400 font-medium">{formatDateTime(review.createdAt)}</span>

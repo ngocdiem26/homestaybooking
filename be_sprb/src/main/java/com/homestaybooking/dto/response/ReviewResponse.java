@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Getter
@@ -30,6 +31,27 @@ public class ReviewResponse {
     private Integer rating;
     private String comment;
     private String status;
+    private String reviewStatus;
+    private String adminReviewStatus;
+    private String moderationStatus;
+    private String moderationAction;
+    private String moderationReason;
+    private BigDecimal toxicityScore;
+    private BigDecimal profanityScore;
+    private BigDecimal insultScore;
+    private BigDecimal threatScore;
+    private BigDecimal hateScore;
+    private BigDecimal deathRelatedScore;
+    private BigDecimal spamScore;
+    private BigDecimal privacyScore;
+    private BigDecimal finalScore;
+    private String sentiment;
+    private Boolean ratingCommentMismatch;
+    private String moderationCategories;
+    private LocalDateTime moderatedAt;
+    private Integer moderatedBy;
+    private String hiddenReason;
+    private String displayStatusLabel;
     private Integer replyId;
     private String replyContent;
     private String replyAuthorName;

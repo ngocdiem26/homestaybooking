@@ -1,4 +1,4 @@
-const AUTH_USER_KEY = 'auth_user';
+﻿const AUTH_USER_KEY = 'auth_user';
 const AUTH_TOKEN_KEY = 'auth_token';
 const AUTH_REMEMBER_KEY = 'auth_remember';
 
@@ -61,4 +61,14 @@ export function clearAuthSession() {
   clearStorage(sessionStorage);
   clearStorage(localStorage);
   localStorage.removeItem(AUTH_REMEMBER_KEY);
+}
+
+export function updateAuthUser(partialUser) {
+  const session = getAuthSession();
+  if (!session.token || !session.user) return null;
+
+  const updatedUser = { ...session.user, ...partialUser };
+  const targetStorage = sessionStorage.getItem(AUTH_TOKEN_KEY) ? sessionStorage : localStorage;
+  targetStorage.setItem(AUTH_USER_KEY, JSON.stringify(updatedUser));
+  return updatedUser;
 }
