@@ -20,6 +20,7 @@ import Login from '../pages/public/Login';
 import Partners from '../pages/public/Partners';
 import Register from '../pages/public/Register';
 import Search from '../pages/public/SearchContent';
+import VnpayResult from '../pages/public/VnpayResult';
 import Favorite from '../pages/user/Favorite';
 import Profile from '../pages/user/Profile';
 import HostBooking from '../pages/host/HostBooking';
@@ -105,6 +106,7 @@ export default function AppRoutes() {
         <Route path="/partners" element={<Partners />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/homestay/:id" element={<HomestayDetail favorites={favorites} toggleFavorite={toggleFavorite} />} />
+        <Route path="/payment/result" element={<VnpayResult />} />
 
 
 
@@ -134,4 +136,6 @@ export default function AppRoutes() {
     </BrowserRouter>
   );
 }
+
+
 

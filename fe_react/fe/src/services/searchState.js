@@ -1,4 +1,4 @@
-export const DEFAULT_SEARCH_STATE = {
+﻿export const DEFAULT_SEARCH_STATE = {
   destination: '',
   checkIn: '',
   checkOut: '',

@@ -9,6 +9,7 @@ import com.homestaybooking.dto.response.PublicHomestayServiceResponse;
 import com.homestaybooking.entity.Homestay;
 import com.homestaybooking.entity.HomestayImage;
 import com.homestaybooking.repository.HomestayRepository;
+import com.homestaybooking.repository.BookingJdbcRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -18,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.text.Normalizer;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -31,8 +33,11 @@ import java.util.stream.Collectors;
 public class PublicHomestayService {
 
     private static final List<String> HIDDEN_STATUSES = List.of("REJECTED", "BLOCKED", "DELETED");
+    private static final String DATE_RANGE_BOOKED_MESSAGE = "Kho\u1ea3ng th\u1eddi gian n\u00e0y \u0111\u00e3 c\u00f3 ng\u01b0\u1eddi \u0111\u1eb7t";
+    private static final String DATE_RANGE_AVAILABLE_MESSAGE = "Kho\u1ea3ng th\u1eddi gian n\u00e0y c\u00f2n tr\u1ed1ng";
 
     private final HomestayRepository homestayRepository;
+    private final BookingJdbcRepository bookingRepository;
     private final JdbcTemplate jdbcTemplate;
 
     public List<PublicDestinationResponse> getDestinations() {
@@ -46,8 +51,30 @@ public class PublicHomestayService {
     public PublicHomestayResponse getHomestayDetail(Integer homeId) {
         Homestay homestay = homestayRepository.findByHomeIdAndDeletedAtIsNull(homeId)
                 .filter(this::isVisiblePublicly)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "KhĂ´ng tĂ¬m tháº¥y homestay"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy homestay"));
         return toResponse(homestay);
+    }
+
+    public Map<String, Object> checkAvailability(Integer homeId, String checkIn, String checkOut) {
+        LocalDate checkInDate = parseRequiredDate(checkIn, "Ngày nhận phòng không hợp lệ");
+        LocalDate checkOutDate = parseRequiredDate(checkOut, "Ngày trả phòng không hợp lệ");
+        if (!checkOutDate.isAfter(checkInDate)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ngày trả phòng phải sau ngày nhận phòng");
+        }
+
+        Homestay homestay = homestayRepository.findByHomeIdAndDeletedAtIsNull(homeId)
+                .filter(this::isVisiblePublicly)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy homestay"));
+
+        boolean booked = bookingRepository.hasOverlap(homestay.getHomeId(), checkInDate, checkOutDate);
+        String message = booked ? DATE_RANGE_BOOKED_MESSAGE : DATE_RANGE_AVAILABLE_MESSAGE;
+        return Map.of(
+                "homeId", homeId,
+                "available", !booked,
+                "unavailable", booked,
+                "dateRangeBooked", booked,
+                "message", message
+        );
     }
 
     public List<PublicActivityResponse> getActivities() {
@@ -69,6 +96,8 @@ public class PublicHomestayService {
                     a.activity_name,
                     a.province,
                     a.activity_address,
+                    a.latitude,
+                    a.longitude,
                     a.short_description,
                     a.description,
                     a.hotline,
@@ -103,6 +132,8 @@ public class PublicHomestayService {
                         .activityName(rs.getString("activity_name"))
                         .province(rs.getString("province"))
                         .activityAddress(rs.getString("activity_address"))
+                        .latitude(rs.getBigDecimal("latitude"))
+                        .longitude(rs.getBigDecimal("longitude"))
 
 
                         .shortDescription(rs.getString("short_description"))
@@ -139,20 +170,71 @@ public class PublicHomestayService {
                 })
                 .toList();
     }
+
+    public List<PublicHomestayResponse> getNearbyHomestaysByActivity(Integer activityId, Integer limit, BigDecimal radiusKm) {
+        Map<String, Object> activityCoordinate;
+        try {
+            activityCoordinate = jdbcTemplate.queryForMap(
+                    "select latitude, longitude from activities where activity_id = ? and deleted_at is null",
+                    activityId
+            );
+        } catch (DataAccessException exception) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy hoạt động");
+        }
+
+        BigDecimal activityLatitude = (BigDecimal) activityCoordinate.get("latitude");
+        BigDecimal activityLongitude = (BigDecimal) activityCoordinate.get("longitude");
+        if (activityLatitude == null || activityLongitude == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hoạt động chưa có tọa độ");
+        }
+
+        int safeLimit = limit == null ? 8 : Math.max(1, Math.min(limit, 20));
+        double safeRadiusKm = radiusKm == null ? 0 : radiusKm.doubleValue();
+        boolean hasRadiusFilter = safeRadiusKm > 0;
+        double fromLatitude = activityLatitude.doubleValue();
+        double fromLongitude = activityLongitude.doubleValue();
+
+        return homestayRepository.findByDeletedAtIsNull().stream()
+                .filter(this::isVisiblePublicly)
+                .filter(homestay -> homestay.getLatitude() != null && homestay.getLongitude() != null)
+                .map(homestay -> {
+                    PublicHomestayResponse response = toResponse(homestay);
+                    double distance = calculateDistanceKm(
+                            fromLatitude,
+                            fromLongitude,
+                            homestay.getLatitude().doubleValue(),
+                            homestay.getLongitude().doubleValue()
+                    );
+                    double roundedDistance = Math.round(distance * 10.0) / 10.0;
+                    response.setDistanceKm(roundedDistance);
+                    response.setDistance(formatDistanceKm(roundedDistance) + " từ hoạt động");
+                    return response;
+                })
+                .filter(response -> !hasRadiusFilter || response.getDistanceKm() <= safeRadiusKm)
+                .sorted(Comparator.comparing(PublicHomestayResponse::getDistanceKm, Comparator.nullsLast(Double::compareTo)))
+                .limit(safeLimit)
+                .toList();
+    }
     public List<PublicHomestayResponse> getHomestays(
             String destination,
             BigDecimal maxPrice,
             List<String> amenities,
             List<String> services,
+            String checkIn,
+            String checkOut,
             String sort
     ) {
         String keyword = normalize(destination);
         List<String> normalizedAmenities = normalizeList(amenities);
         List<String> normalizedServices = normalizeList(services);
+        LocalDate checkInDate = parseDateOrNull(checkIn);
+        LocalDate checkOutDate = parseDateOrNull(checkOut);
+        boolean shouldCheckAvailability = isValidDateRange(checkInDate, checkOutDate);
 
         List<PublicHomestayResponse> responses = homestayRepository.findByDeletedAtIsNull().stream()
                 .filter(this::isVisiblePublicly)
                 .map(this::toResponse)
+                .map(item -> markAvailability(item, checkInDate, checkOutDate, shouldCheckAvailability))
                 .filter(item -> matchesDestination(item, keyword))
                 .filter(item -> maxPrice == null || item.getPricePerNight().compareTo(maxPrice) <= 0)
                 .filter(item -> matchesAll(item.getAmenities(), normalizedAmenities))
@@ -161,6 +243,43 @@ public class PublicHomestayService {
 
         responses.sort(resolveComparator(sort));
         return responses;
+    }
+
+    private PublicHomestayResponse markAvailability(PublicHomestayResponse item, LocalDate checkInDate, LocalDate checkOutDate, boolean shouldCheckAvailability) {
+        if (!shouldCheckAvailability || item.getHomeId() == null) {
+            return item;
+        }
+        boolean booked = bookingRepository.hasOverlap(item.getHomeId(), checkInDate, checkOutDate);
+        item.setUnavailable(booked);
+        item.setDateRangeBooked(booked);
+        item.setAvailabilityMessage(booked ? DATE_RANGE_BOOKED_MESSAGE : DATE_RANGE_AVAILABLE_MESSAGE);
+        if (booked) {
+            item.setAlert(DATE_RANGE_BOOKED_MESSAGE);
+        }
+        return item;
+    }
+
+    private LocalDate parseDateOrNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value);
+        } catch (RuntimeException exception) {
+            return null;
+        }
+    }
+
+    private LocalDate parseRequiredDate(String value, String message) {
+        LocalDate parsedDate = parseDateOrNull(value);
+        if (parsedDate == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+        return parsedDate;
+    }
+
+    private boolean isValidDateRange(LocalDate checkInDate, LocalDate checkOutDate) {
+        return checkInDate != null && checkOutDate != null && checkOutDate.isAfter(checkInDate);
     }
 
     private String readString(java.sql.ResultSet rs, String column) {
@@ -453,6 +572,24 @@ public class PublicHomestayService {
         return second == null ? "" : second;
     }
 
+
+    private double calculateDistanceKm(double fromLatitude, double fromLongitude, double toLatitude, double toLongitude) {
+        final double earthRadiusKm = 6371.0;
+        double latitudeDistance = Math.toRadians(toLatitude - fromLatitude);
+        double longitudeDistance = Math.toRadians(toLongitude - fromLongitude);
+        double a = Math.sin(latitudeDistance / 2) * Math.sin(latitudeDistance / 2)
+                + Math.cos(Math.toRadians(fromLatitude)) * Math.cos(Math.toRadians(toLatitude))
+                * Math.sin(longitudeDistance / 2) * Math.sin(longitudeDistance / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return earthRadiusKm * c;
+    }
+
+    private String formatDistanceKm(double distanceKm) {
+        if (distanceKm < 1) {
+            return Math.round(distanceKm * 1000) + " m";
+        }
+        return String.format(Locale.US, "%.1f km", distanceKm);
+    }
     private String formatNumber(BigDecimal value) {
         return String.format(Locale.US, "%,.0f", value == null ? BigDecimal.ZERO : value).replace(',', '.');
     }
@@ -463,10 +600,10 @@ public class PublicHomestayService {
 
     private String toReviewText(BigDecimal rating) {
         double score = defaultMoney(rating).doubleValue();
-        if (score >= 4.8) return "Xuất sắc";
-        if (score >= 4.5) return "Tuyệt vời";
-        if (score >= 4.0) return "Rất tốt";
-        return "Mới trên Cozygo";
+        if (score >= 4.8) return "Xuáº¥t sáº¯c";
+        if (score >= 4.5) return "Tuyá»‡t vá»i";
+        if (score >= 4.0) return "Ráº¥t tá»‘t";
+        return "Má»›i trĂªn Cozygo";
     }
 }
 

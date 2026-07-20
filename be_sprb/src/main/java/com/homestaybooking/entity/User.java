@@ -48,7 +48,7 @@ public class User {
     @Column(name = "user_status", nullable = false, length = 20)
     private String userStatus;
 
-    @Column(name = "avatar")
+    @Column(name = "avatar", columnDefinition = "LONGTEXT")
     private String avatar;
 
     @Column(name = "created_at")

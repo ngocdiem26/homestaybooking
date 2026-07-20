@@ -103,7 +103,7 @@ function getPaymentKey(status) {
 
 function getPaymentMethodLabel(method) {
   const normalized = String(method || '').toUpperCase();
-  if (normalized === 'SEPAY') return 'SePay';
+  if (normalized === 'VNPAY') return 'VNPay';
   if (normalized === 'PAY_AT_PROPERTY') return 'Thanh toán tại chỗ';
   return method || 'Chưa chọn';
 }

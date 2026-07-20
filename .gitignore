@@ -1,0 +1,18 @@
+# Backend secrets/runtime
+be_sprb/.env
+be_sprb/*.env
+be_sprb/uploads/
+be_sprb/target/
+
+# Frontend secrets/runtime
+fe_react/fe/.env
+fe_react/fe/*.env
+fe_react/fe/node_modules/
+fe_react/fe/dist/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log

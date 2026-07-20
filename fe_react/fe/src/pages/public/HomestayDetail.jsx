@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   HiArrowLeft,
@@ -21,7 +21,7 @@ import ModalPortal from '../../components/common/ModalPortal';
 import BookingCheckoutModal from '../../components/booking/BookingCheckoutModal';
 import { useAuth } from '../../hooks/useAuth';
 import HomestaySearchForm from '../../components/homestay/HomestaySearchForm';
-import { getPublicHomestay } from '../../services/homestayService';
+import { checkPublicHomestayAvailability, getPublicHomestay } from '../../services/homestayService';
 import { getHomestayReviews } from '../../services/reviewService';
 import { buildSearchParams, calculateNights, getStoredSearchState, saveSearchState, SEARCH_STATE_EVENT } from '../../services/searchState';
 
@@ -529,6 +529,7 @@ export default function HomestayDetail({ favorites = [], toggleFavorite = () => 
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [reviews, setReviews] = useState([]);
+  const [bookingAvailabilityMessage, setBookingAvailabilityMessage] = useState('');
 
   useEffect(() => {
     const handleSearchStateChange = (event) => {
@@ -595,6 +596,32 @@ export default function HomestayDetail({ favorites = [], toggleFavorite = () => 
   }, [id]);
 
 
+  useEffect(() => {
+    let cancelled = false;
+    const homeId = homestay?.homeId || homestay?.id || id;
+
+    async function verifyAvailability() {
+      if (!homeId || !checkIn || !checkOut || calculateNights(checkIn, checkOut) <= 0) {
+        setBookingAvailabilityMessage('');
+        return;
+      }
+
+      try {
+        const result = await checkPublicHomestayAvailability(homeId, checkIn, checkOut);
+        if (cancelled) return;
+        const isUnavailable = result?.unavailable || result?.dateRangeBooked || result?.available === false;
+        setBookingAvailabilityMessage(isUnavailable ? (result?.message || 'Khoảng thời gian này đã có người đặt') : '');
+      } catch {
+        if (!cancelled) setBookingAvailabilityMessage('');
+      }
+    }
+
+    verifyAvailability();
+    return () => {
+      cancelled = true;
+    };
+  }, [homestay?.homeId, homestay?.id, id, checkIn, checkOut]);
+
   const images = useMemo(() => {
     const sourceImages = homestay?.images?.length
       ? homestay.images.map((image) => image.url || image.imageUrl).filter(Boolean)
@@ -646,6 +673,9 @@ export default function HomestayDetail({ favorites = [], toggleFavorite = () => 
   };
 
   const handleBookNow = () => {
+    if (bookingAvailabilityMessage) {
+      return;
+    }
     if (!isAuthenticated) {
       setShowLoginPrompt(true);
       return;
@@ -935,7 +965,21 @@ export default function HomestayDetail({ favorites = [], toggleFavorite = () => 
                       </div>
                     </div>
 
-                    <button type="button" onClick={handleBookNow} className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#2C3E2B] text-sm font-black text-white shadow-lg transition hover:bg-[#223322]">
+                    {bookingAvailabilityMessage && (
+                      <div className="mt-3 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-xs font-black leading-5 text-red-700">
+                        ⚠ {bookingAvailabilityMessage}
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleBookNow}
+                      disabled={Boolean(bookingAvailabilityMessage)}
+                      className={
+                        'mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-sm font-black text-white shadow-lg transition ' +
+                        (bookingAvailabilityMessage ? 'cursor-not-allowed bg-gray-300 text-gray-500 shadow-none' : 'bg-[#2C3E2B] hover:bg-[#223322]')
+                      }
+                    >
                       <HiCalendarDays className="h-5 w-5" />
                       Đặt phòng ngay
                     </button>

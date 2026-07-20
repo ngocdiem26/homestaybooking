@@ -169,7 +169,9 @@ public class AuthService {
                 .fullName(user.getFullName())
                 .email(user.getEmail())
                 .roleName(user.getRole().getRoleName())
+                .avatar(user.getAvatar())
                 .token(token)
                 .build();
     }
 }
+

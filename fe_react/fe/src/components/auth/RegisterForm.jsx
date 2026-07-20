@@ -18,7 +18,9 @@ export default function RegisterForm({
       <div className="fade-in-active flex-grow flex flex-col justify-start pt-0 h-full">
         <div className="flex items-center gap-4 border-b border-gray-200/50 pb-2 mb-3">
           <div className="flex-shrink-0">
-            <Logo />
+            <Link to="/" >
+              <Logo />
+            </Link>
           </div>
           <div className="text-left flex-grow">
             <h3 className="font-classic text-xl sm:text-2xl font-bold text-[#2C1E15] leading-tight">
@@ -31,7 +33,7 @@ export default function RegisterForm({
         </div>
 
         <form className="flex-grow flex flex-col justify-between mt-3 text-left" onSubmit={onSubmit}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
             <div className="sm:col-span-2 space-y-1">
               <label className="block text-xs font-semibold text-gray-700">
                 <span className="text-red-500">*</span> Loại tài khoản
@@ -131,7 +133,7 @@ export default function RegisterForm({
             disabled={isSubmitting}
             className="w-full bg-[#2C3E2B] hover:bg-[#1a291b] disabled:bg-gray-400 disabled:cursor-not-allowed text-[#F4F1EA] font-semibold py-3 rounded-full shadow-md hover:shadow-lg transform active:scale-[0.98] transition-all duration-200 text-xs mt-4"
           >
-            {isSubmitting ? 'Đang tạo tài khoản...' : 'Tạo tài khoản'}
+            {isSubmitting ? 'Đang tạo tài khoản...' : 'ĐĂNG KÝ'}
           </button>
         </form>
 

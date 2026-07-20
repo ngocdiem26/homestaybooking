@@ -1,8 +1,18 @@
 export default function ProfileSidebar({ currentView, setCurrentView, setIsEditing, userInfo }) {
+  const tabs = [
+    { id: 'info', label: 'Thông tin cá nhân' },
+    { id: 'bookings', label: 'Đơn đặt phòng của bạn' },
+    { id: 'complaints', label: 'Khiếu nại của tôi' },
+    { id: 'payment', label: 'Phương thức thanh toán' },
+    { id: 'transactions', label: 'Giao dịch thanh toán' },
+    { id: 'schedule', label: 'Tự tạo lịch trình riêng' },
+    { id: 'reviews', label: 'Đánh giá của tôi' },
+  ];
+
   return (
     <aside className="lg:col-span-1 space-y-4 sticky top-24 text-left">
       <button onClick={() => setCurrentView('dashboard')} className="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-4 py-3 rounded-xl text-sm font-bold shadow-sm transition flex items-center justify-center gap-2 cursor-pointer">
-        ⬅️ Quay lại tổng quan
+        Quay lại tổng quan
       </button>
       
       <div className="bg-white p-4 rounded-2xl border border-[#6E473B]/10 shadow-sm flex items-center space-x-3">
@@ -13,14 +23,7 @@ export default function ProfileSidebar({ currentView, setCurrentView, setIsEditi
       </div>
 
       <div className="bg-white p-2 rounded-2xl border border-[#6E473B]/10 shadow-sm flex flex-col space-y-1 text-sm font-bold">
-        {[
-          { id: 'info', label: '👤 Thông tin cá nhân' },
-          { id: 'bookings', label: '🧳 Đơn đặt phòng của bạn' },
-          { id: 'payment', label: '💳 Phương thức thanh toán' },
-          { id: 'transactions', label: '📊 Giao dịch thanh toán' },
-          { id: 'schedule', label: '🗺️ Tự tạo lịch trình riêng' },
-          { id: 'reviews', label: '💬 Đánh giá của tôi' }
-        ].map(tab => (
+        {tabs.map(tab => (
           <button 
             key={tab.id}
             onClick={() => { setCurrentView(tab.id); if(tab.id === 'info') setIsEditing(false); }}

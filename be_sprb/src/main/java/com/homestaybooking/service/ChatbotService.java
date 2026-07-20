@@ -40,29 +40,32 @@ public class ChatbotService {
         this.geminiService = geminiService;
     }
 
-    @Transactional
     public ChatResponse handleMessage(ChatRequest request) {
         if (request.getMessage() == null || request.getMessage().trim().isEmpty()) {
-            throw new IllegalArgumentException("Nội dung tin nhắn không được để trống.");
+            throw new IllegalArgumentException("Message content must not be blank.");
         }
 
-        ChatSession session = getOrCreateSession(request);
+        ChatSession session = getOrCreateSessionSafely(request);
+        Integer sessionId = session == null ? request.getSessionId() : session.getSessionId();
         String userMessage = request.getMessage().trim();
         String intent = intentDetectionService.detectIntent(userMessage);
 
-        saveMessage(session.getSessionId(), "USER", userMessage, intent, null);
+        saveMessage(sessionId, "USER", userMessage, intent, null);
 
         ChatResponse response = switch (intent) {
-            case "SEARCH_HOMESTAY" -> handleHomestaySearch(session.getSessionId(), userMessage, intent);
-            case "PROMOTION_LOOKUP" -> handlePromotionLookup(session.getSessionId(), userMessage, intent);
-            case "DESTINATION_SUGGESTION" -> handleDestinationSuggestion(session.getSessionId(), userMessage, intent);
-            case "ACTIVITY_SUGGESTION" -> handleActivitySuggestion(session.getSessionId(), userMessage, intent);
-            case "BOOKING_STATUS" -> handleLoginRequired(session.getSessionId(), intent);
-            default -> handleRagAnswer(session.getSessionId(), userMessage, intent);
+            case "SEARCH_HOMESTAY" -> handleHomestaySearch(sessionId, userMessage, intent);
+            case "PROMOTION_LOOKUP" -> handlePromotionLookup(sessionId, userMessage, intent);
+            case "DESTINATION_SUGGESTION" -> handleDestinationSuggestion(sessionId, userMessage, intent);
+            case "ACTIVITY_SUGGESTION" -> handleActivitySuggestion(sessionId, userMessage, intent);
+            case "BOOKING_STATUS" -> handleLoginRequired(sessionId, intent);
+            case "BOOKING_GUIDE", "VNPAY_GUIDE", "PAY_AT_PROPERTY_GUIDE", "COMPLAINT_GUIDE",
+                    "CANCELLATION_GUIDE", "REVIEW_GUIDE", "HOST_REGISTER_GUIDE", "CONTACT_GUIDE" ->
+                    handleStaticGuide(sessionId, intent);
+            default -> handleRagAnswer(sessionId, userMessage, intent);
         };
 
         saveMessage(
-                session.getSessionId(),
+                sessionId,
                 "BOT",
                 response.getAnswer(),
                 intent,
@@ -130,7 +133,7 @@ public class ChatbotService {
                 intent,
                 "PROMOTION_LIST",
                 promotions,
-                List.of("Hướng dẫn đặt phòng", "Tìm homestay giá rẻ", "Thanh toán SePay là gì?")
+                List.of("Hướng dẫn đặt phòng", "Tìm homestay giá rẻ", "Thanh toán VNPay là gì?")
         );
     }
 
@@ -199,7 +202,7 @@ public class ChatbotService {
         String context = ragService.retrieveContext(userMessage);
 
         String fallback = """
-            Tôi có thể hỗ trợ bạn tìm homestay, hướng dẫn đặt phòng, thanh toán SePay, thanh toán tại chỗ, mã khuyến mãi và khiếu nại. Bạn muốn tôi hỗ trợ nội dung nào?
+            Tôi có thể hỗ trợ bạn tìm homestay, hướng dẫn đặt phòng, thanh toán VNPay, thanh toán tại chỗ, mã khuyến mãi và khiếu nại. Bạn muốn tôi hỗ trợ nội dung nào?
         """;
 
         String prompt = """
@@ -227,7 +230,7 @@ public class ChatbotService {
                 intent,
                 "TEXT",
                 null,
-                List.of("Tìm homestay ở Đà Lạt", "Thanh toán SePay là gì?", "Tôi muốn khiếu nại")
+                List.of("Tìm homestay ở Đà Lạt", "Thanh toán VNPay là gì?", "Tôi muốn khiếu nại")
         );
     }
 
@@ -240,6 +243,83 @@ public class ChatbotService {
                 null,
                 List.of("Đăng nhập", "Hướng dẫn đặt phòng", "Tôi muốn khiếu nại")
         );
+    }
+
+    private ChatResponse handleStaticGuide(Integer sessionId, String intent) {
+        return switch (intent) {
+            case "BOOKING_GUIDE" -> buildResponse(
+                    sessionId,
+                    "Quy trình đặt phòng gồm 4 bước: chọn homestay, chọn ngày nhận/trả phòng và số khách, kiểm tra giá kèm dịch vụ/mã khuyến mãi, sau đó chọn phương thức thanh toán và gửi yêu cầu. Chủ homestay sẽ xác nhận đơn trước khi bạn lưu trú.",
+                    intent,
+                    "TEXT",
+                    null,
+                    List.of("Tìm homestay ở Đà Lạt", "Có mã giảm giá nào không?", "Thanh toán VNPay là gì?")
+            );
+            case "VNPAY_GUIDE" -> buildResponse(
+                    sessionId,
+                    "VNPay là phương thức thanh toán VNPay. Khi chọn VNPay, hệ thống tạo thông tin thanh toán cho đơn. Sau khi giao dịch được ghi nhận, trạng thái thanh toán chuyển sang đã thanh toán và đơn chờ chủ homestay xác nhận.",
+                    intent,
+                    "TEXT",
+                    null,
+                    List.of("Thanh toán tại chỗ là gì?", "Hướng dẫn đặt phòng", "Tôi muốn khiếu nại booking")
+            );
+            case "PAY_AT_PROPERTY_GUIDE" -> buildResponse(
+                    sessionId,
+                    "Thanh toán tại chỗ nghĩa là bạn gửi yêu cầu đặt phòng trước, sau đó thanh toán trực tiếp khi nhận phòng theo quy định của homestay. Chủ homestay có thể xác nhận thanh toán trong trang quản lý đơn.",
+                    intent,
+                    "TEXT",
+                    null,
+                    List.of("Hướng dẫn đặt phòng", "Thanh toán VNPay là gì?", "Xem đơn đặt phòng của tôi")
+            );
+            case "COMPLAINT_GUIDE" -> buildResponse(
+                    sessionId,
+                    "Bạn có thể gửi khiếu nại trong trang cá nhân, mục Đơn đặt phòng của bạn. Mở chi tiết đơn đã hoàn thành, chọn Viết khiếu nại, nhập tiêu đề và nội dung. Admin sẽ xử lý và phản hồi qua email; trạng thái được theo dõi tại mục Khiếu nại của tôi.",
+                    intent,
+                    "TEXT",
+                    null,
+                    List.of("Vào trang cá nhân", "Hướng dẫn đặt phòng", "Liên hệ hỗ trợ")
+            );
+            case "CANCELLATION_GUIDE" -> buildResponse(
+                    sessionId,
+                    "Nếu đơn còn trong trạng thái cho phép, bạn có thể mở chi tiết đơn trong trang cá nhân và chọn yêu cầu hủy. Các khoản hoàn/không hoàn phụ thuộc chính sách của homestay và phương thức thanh toán.",
+                    intent,
+                    "TEXT",
+                    null,
+                    List.of("Xem đơn đặt phòng của tôi", "Tôi muốn khiếu nại booking", "Liên hệ hỗ trợ")
+            );
+            case "REVIEW_GUIDE" -> buildResponse(
+                    sessionId,
+                    "Chỉ khách có đơn đã hoàn thành mới được đánh giá homestay. Trong mục Đơn đặt phòng của bạn, đơn hoàn thành chưa đánh giá sẽ có nút Đánh giá. Mỗi đơn chỉ đánh giá một lần, sau đó bạn có thể xem hoặc sửa đánh giá trong mục Đánh giá của tôi.",
+                    intent,
+                    "TEXT",
+                    null,
+                    List.of("Xem đánh giá của tôi", "Tìm homestay", "Tôi muốn khiếu nại booking")
+            );
+            case "HOST_REGISTER_GUIDE" -> buildResponse(
+                    sessionId,
+                    "Nếu muốn hợp tác làm chủ homestay, bạn đăng ký tài khoản với vai trò Chủ nhà, sau đó vào khu vực Host để thêm homestay, ảnh, tiện nghi, dịch vụ và nội quy. Homestay cần được admin duyệt trước khi hiển thị cho khách.",
+                    intent,
+                    "TEXT",
+                    null,
+                    List.of("Đăng ký", "Quản lý homestay gồm gì?", "Liên hệ hỗ trợ")
+            );
+            default -> buildResponse(
+                    sessionId,
+                    "Bạn có thể liên hệ Cozygo qua mục Hợp tác hoặc gửi khiếu nại từ trang cá nhân nếu vấn đề liên quan đến đơn đặt phòng. Khi cần hỗ trợ nhanh, hãy cung cấp mã đơn để nhân sự kiểm tra chính xác hơn.",
+                    intent,
+                    "TEXT",
+                    null,
+                    List.of("Tôi muốn khiếu nại booking", "Hướng dẫn đặt phòng", "Có mã giảm giá nào không?")
+            );
+        };
+    }
+
+    private ChatSession getOrCreateSessionSafely(ChatRequest request) {
+        try {
+            return getOrCreateSession(request);
+        } catch (Exception exception) {
+            return null;
+        }
     }
 
     private ChatSession getOrCreateSession(ChatRequest request) {
@@ -270,13 +350,21 @@ public class ChatbotService {
     }
 
     private void saveMessage(Integer sessionId, String senderType, String content, String intent, String metadata) {
-        ChatMessage message = new ChatMessage();
-        message.setSessionId(sessionId);
-        message.setSenderType(senderType);
-        message.setMessageContent(content);
-        message.setIntent(intent);
-        message.setMetadata(metadata);
-        chatMessageRepository.save(message);
+        if (sessionId == null) {
+            return;
+        }
+
+        try {
+            ChatMessage message = new ChatMessage();
+            message.setSessionId(sessionId);
+            message.setSenderType(senderType);
+            message.setMessageContent(content);
+            message.setIntent(intent);
+            message.setMetadata(metadata);
+            chatMessageRepository.save(message);
+        } catch (Exception ignored) {
+            // Chat history is useful for analytics, but it must not break the assistant response.
+        }
     }
 
     private ChatResponse buildResponse(

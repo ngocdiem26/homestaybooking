@@ -1,4 +1,4 @@
-export const AUTH_ENDPOINTS = {
+﻿export const AUTH_ENDPOINTS = {
   PING: '/api/auth/ping',
   LOGIN: '/api/auth/login',
   GOOGLE_LOGIN: '/api/auth/google',
@@ -32,6 +32,7 @@ export const HOST_HOMESTAY_ENDPOINTS = {
 export const PUBLIC_HOMESTAY_ENDPOINTS = {
   HOMESTAYS: '/api/public/homestays',
   HOMESTAY_DETAIL: (homeId) => '/api/public/homestays/' + homeId,
+  HOMESTAY_AVAILABILITY: (homeId) => '/api/public/homestays/' + homeId + '/availability',
   DESTINATIONS: '/api/public/destinations',
 };
 
@@ -39,4 +40,14 @@ export const PUBLIC_HOMESTAY_ENDPOINTS = {
 export const CHATBOT_ENDPOINTS = {
   MESSAGE: "/api/public/chatbot/message",
   REINDEX: "/api/public/chatbot/reindex",
+};
+
+export const CUSTOMER_TIER_ENDPOINTS = {
+  ME: '/api/customer/tier/me',
+  OVERVIEW: '/api/customer/tier/overview',
+};
+
+export const PROFILE_ENDPOINTS = {
+  ME: '/api/profile/me',
+  AVATAR: '/api/profile/me/avatar',
 };

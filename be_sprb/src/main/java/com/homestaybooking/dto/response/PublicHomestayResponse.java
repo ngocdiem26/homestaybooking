@@ -30,6 +30,7 @@ public class PublicHomestayResponse {
     private String province;
     private BigDecimal latitude;
     private BigDecimal longitude;
+    private Double distanceKm;
     private String location;
     private String description;
     private String homeDescription;
@@ -57,6 +58,9 @@ public class PublicHomestayResponse {
     private String beds;
     private String distance;
     private String alert;
+    private Boolean unavailable;
+    private Boolean dateRangeBooked;
+    private String availabilityMessage;
     private Integer orders;
     private String tax;
     private String img;

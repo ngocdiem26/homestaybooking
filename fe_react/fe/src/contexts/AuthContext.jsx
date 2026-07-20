@@ -1,5 +1,5 @@
-import { createContext, useMemo, useState } from 'react';
-import { clearAuthSession, getAuthSession, saveAuthSession } from '../services/authStorage';
+﻿import { createContext, useMemo, useState } from 'react';
+import { clearAuthSession, getAuthSession, saveAuthSession, updateAuthUser } from '../services/authStorage';
 
 const AuthContext = createContext(null);
 
@@ -17,6 +17,12 @@ export function AuthProvider({ children }) {
       clearAuthSession();
       setAuthSession({ token: null, user: null });
     },
+    updateUser(partialUser) {
+      const updatedUser = updateAuthUser(partialUser);
+      if (updatedUser) {
+        setAuthSession((current) => ({ ...current, user: updatedUser }));
+      }
+    },
   }), [authSession]);
 
   return (
@@ -27,3 +33,4 @@ export function AuthProvider({ children }) {
 }
 
 export default AuthContext;
+

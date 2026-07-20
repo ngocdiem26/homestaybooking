@@ -1,4 +1,4 @@
-import { apiRequest } from '../api/axiosClient';
+﻿import { apiRequest } from '../api/axiosClient';
 import { PUBLIC_HOMESTAY_ENDPOINTS } from '../api/endpoints';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
@@ -51,6 +51,8 @@ export function mapPublicHomestay(apiHomestay = {}) {
   const img = normalizeBackendUrl(apiHomestay.img || images[0]?.url);
   const amenities = apiHomestay.amenities || [];
   const services = apiHomestay.services || (apiHomestay.serviceItems || []).map((service) => service.serviceName || service.name).filter(Boolean);
+  const unavailable = Boolean(apiHomestay.unavailable || apiHomestay.dateRangeBooked);
+  const availabilityMessage = apiHomestay.availabilityMessage || apiHomestay.message || (unavailable ? 'Khoảng thời gian này đã có người đặt' : '');
 
   return {
     ...apiHomestay,
@@ -58,9 +60,9 @@ export function mapPublicHomestay(apiHomestay = {}) {
     homeId: apiHomestay.homeId || apiHomestay.id,
     name: apiHomestay.name || apiHomestay.homeName || '',
     address: apiHomestay.address || apiHomestay.homeAddress || '',
-    city: apiHomestay.city || apiHomestay.province || apiHomestay.location || '',
-    province: apiHomestay.province || apiHomestay.city || '',
-    location: apiHomestay.location || apiHomestay.province || apiHomestay.city || '',
+    city: apiHomestay.city || apiHomestay.location || apiHomestay.province || '',
+    province: apiHomestay.province || '',
+    location: apiHomestay.location || apiHomestay.city || apiHomestay.province || '',
     description: apiHomestay.description || apiHomestay.homeDescription || '',
     pricePerNight,
     price: apiHomestay.price || toCurrencyText(pricePerNight),
@@ -79,8 +81,11 @@ export function mapPublicHomestay(apiHomestay = {}) {
     roomType: apiHomestay.roomType || 'Homestay riêng tư',
     details: apiHomestay.details || '',
     beds: apiHomestay.beds || '',
-    distance: apiHomestay.distance || apiHomestay.province || '',
-    alert: apiHomestay.alert || 'Có thể đặt cho chuyến đi sắp tới',
+    distance: apiHomestay.distance || [apiHomestay.city, apiHomestay.province].filter(Boolean).join(', ') || '',
+    unavailable,
+    dateRangeBooked: unavailable,
+    availabilityMessage,
+    alert: unavailable ? 'Khoảng thời gian này đã có người đặt' : (apiHomestay.alert || 'Có thể đặt cho chuyến đi sắp tới'),
     tax: apiHomestay.tax || 'Đã bao gồm thuế và phí dịch vụ cơ bản',
   };
 }
@@ -89,7 +94,8 @@ export function mapPublicDestination(apiDestination = {}) {
   return {
     destinationId: apiDestination.destinationId,
     provinceName: apiDestination.provinceName || '',
-    displayName: apiDestination.displayName || apiDestination.provinceName || '',
+    city: apiDestination.city || apiDestination.provinceName || '',
+    displayName: apiDestination.displayName || apiDestination.city || apiDestination.provinceName || '',
     slug: apiDestination.slug || '',
     description: apiDestination.description || '',
     thumbnailUrl: normalizeBackendUrl(apiDestination.thumbnailUrl),
@@ -107,6 +113,13 @@ export async function getPublicHomestays(filters = {}) {
 export async function getPublicHomestay(homeId) {
   const data = await apiRequest(PUBLIC_HOMESTAY_ENDPOINTS.HOMESTAY_DETAIL(homeId));
   return mapPublicHomestay(data);
+}
+
+export async function checkPublicHomestayAvailability(homeId, checkIn, checkOut) {
+  if (!homeId || !checkIn || !checkOut) {
+    return { available: true, unavailable: false, message: '' };
+  }
+  return apiRequest(PUBLIC_HOMESTAY_ENDPOINTS.HOMESTAY_AVAILABILITY(homeId) + buildQuery({ checkIn, checkOut }));
 }
 
 export async function getPublicDestinations() {

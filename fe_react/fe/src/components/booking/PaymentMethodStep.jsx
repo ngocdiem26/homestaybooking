@@ -1,13 +1,7 @@
-import { HiBanknotes, HiCalendarDays, HiCheckCircle, HiClock, HiQrCode, HiUserGroup } from 'react-icons/hi2';
+import { HiBanknotes, HiCalendarDays, HiCheckCircle, HiCreditCard, HiUserGroup } from 'react-icons/hi2';
 
 function money(value) {
   return Number(value || 0).toLocaleString('vi-VN') + 'đ';
-}
-
-function formatSeconds(seconds) {
-  const min = Math.floor(Math.max(0, seconds) / 60);
-  const sec = Math.max(0, seconds) % 60;
-  return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
 function dateText(value) {
@@ -37,35 +31,10 @@ function QuoteSummary({ quote }) {
   );
 }
 
-export default function PaymentMethodStep({ quote, paymentMethod, pendingPayment, remainingSeconds, onSelectPaymentMethod, onCreateBooking, isSubmitting }) {
-  if (pendingPayment) {
-    return (
-      <div className="space-y-5">
-        <QuoteSummary quote={quote} />
-        <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
-          <section className="rounded-2xl border border-gray-100 bg-white p-5 text-center shadow-sm">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#2C3E2B] text-white"><HiQrCode className="h-7 w-7" /></div>
-            <h3 className="mt-3 text-xl font-black text-[#2C1E15]">Quét QR SePay</h3>
-            <img src={pendingPayment.qrCodeUrl} alt="QR thanh toán SePay" className="mx-auto mt-4 h-60 w-60 rounded-2xl border border-gray-100 bg-white p-3 shadow" />
-          </section>
-          <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#B6784F]">Chờ thanh toán</p>
-            <h3 className="mt-1 text-3xl font-black text-[#6E473B]">{money(pendingPayment.amount)}</h3>
-            <div className="mt-5 grid gap-3 text-sm font-semibold text-gray-500 md:grid-cols-2">
-              <div className="rounded-2xl bg-[#F4F1EA] p-4"><span>Mã booking</span><b className="mt-1 block text-[#2C1E15]">{pendingPayment.bookingCode}</b></div>
-              <div className="rounded-2xl bg-[#F4F1EA] p-4"><span>Nội dung chuyển khoản</span><b className="mt-1 block text-[#2C1E15]">{pendingPayment.transactionCode}</b></div>
-              <div className="rounded-2xl bg-[#F4F1EA] p-4"><span>Ngân hàng</span><b className="mt-1 block text-[#2C1E15]">SePay / tài khoản cấu hình</b></div>
-              <div className="rounded-2xl bg-amber-50 p-4 text-amber-700"><span className="flex items-center gap-2"><HiClock /> Còn lại</span><b className="mt-1 block text-xl">{formatSeconds(remainingSeconds)}</b></div>
-            </div>
-          </section>
-        </div>
-      </div>
-    );
-  }
-
+export default function PaymentMethodStep({ quote, paymentMethod, onSelectPaymentMethod, onCreateBooking, isSubmitting }) {
   const methods = [
-    { key: 'PAY_AT_PROPERTY', title: 'Thanh toán tại chỗ', desc: 'Đặt phòng trước và thanh toán khi nhận phòng tại homestay.' },
-    { key: 'SEPAY', title: 'Thanh toán SePay', desc: 'Quét QR chuyển khoản, hệ thống tự kiểm tra trạng thái thanh toán.' },
+    { key: 'PAY_AT_PROPERTY', title: 'Thanh toán tại chỗ', desc: 'Đặt phòng trước và thanh toán khi nhận phòng tại homestay.', icon: HiBanknotes },
+    { key: 'VNPAY', title: 'Thanh toán qua VNPAY', desc: 'Chuyển sang cổng VNPAY Sandbox để chọn ngân hàng, thẻ hoặc QR theo giao diện VNPAY.', icon: HiCreditCard },
   ];
 
   return (
@@ -77,7 +46,7 @@ export default function PaymentMethodStep({ quote, paymentMethod, pendingPayment
         <div className="space-y-3">
           {methods.map((method) => {
             const selected = paymentMethod === method.key;
-            const Icon = method.key === 'SEPAY' ? HiQrCode : HiBanknotes;
+            const Icon = method.icon;
             return (
               <button
                 key={method.key}

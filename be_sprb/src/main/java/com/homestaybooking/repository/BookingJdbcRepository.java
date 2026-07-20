@@ -54,7 +54,7 @@ public class BookingJdbcRepository {
                     homeId
             );
         } catch (EmptyResultDataAccessException exception) {
-            throw new AppException("Không tìm thấy homestay");
+            throw new AppException("KhĂ´ng tĂ¬m tháº¥y homestay");
         }
     }
 
@@ -120,10 +120,55 @@ public class BookingJdbcRepository {
         }
     }
 
-    public List<BookingPromotionResponse> findAvailablePromotions(BigDecimal orderAmount) {
+    public List<BookingPromotionResponse> findAvailablePromotions(BigDecimal orderAmount, Integer userId, Integer homeId) {
+        BigDecimal safeOrderAmount = orderAmount == null ? BigDecimal.ZERO : orderAmount;
+        String sql = """
+                select p.*,
+                       case
+                           when upper(coalesce(p.discount_type, '')) = 'PERCENT'
+                               then least(? * coalesce(p.discount_value, 0) / 100, coalesce(nullif(p.max_discount, 0), ?))
+                           else least(coalesce(p.discount_value, 0), ?)
+                       end as estimated_discount
+                from promotions p
+                where upper(coalesce(p.status, '')) = 'ACTIVE'
+                  and current_date between p.start_date and p.end_date
+                  and (
+                        upper(coalesce(p.promotion_scope, 'GLOBAL')) in ('GLOBAL', 'TIER')
+                        or (
+                            upper(coalesce(p.promotion_scope, 'GLOBAL')) in ('HOMESTAY', 'HOMESTAY_TIER')
+                            and exists (
+                                select 1
+                                from promotion_homestays ph
+                                where ph.promotion_id = p.promotion_id and ph.home_id = ?
+                            )
+                        )
+                  )
+                  and (p.min_order_amount is null or p.min_order_amount <= ?)
+                  and (p.usage_limit_total is null or (
+                        select count(*) from promotion_usages pu where pu.promotion_id = p.promotion_id
+                  ) < p.usage_limit_total)
+                  and (p.usage_limit_per_user is null or (
+                        select count(*) from promotion_usages pu
+                        where pu.promotion_id = p.promotion_id and pu.user_id = ?
+                  ) < p.usage_limit_per_user)
+                  and (
+                        (
+                            upper(coalesce(p.promotion_scope, 'GLOBAL')) not in ('TIER', 'HOMESTAY_TIER')
+                            and not exists (select 1 from promotion_tiers pt where pt.promotion_id = p.promotion_id)
+                        )
+                        or exists (
+                            select 1
+                            from promotion_tiers pt
+                            join customer_tier_accounts cta on cta.current_tier_id = pt.tier_id
+                            where pt.promotion_id = p.promotion_id and cta.user_id = ?
+                        )
+                  )
+                order by estimated_discount desc, coalesce(p.discount_value, 0) desc, p.end_date asc
+                limit 8
+                """;
+
         return jdbcTemplate.query(
-                "select * from promotions where status = 'ACTIVE' and current_date between start_date and end_date "
-                        + "and (min_order_amount is null or min_order_amount <= ?) order by discount_value desc, end_date asc limit 8",
+                sql,
                 (rs, rowNum) -> BookingPromotionResponse.builder()
                         .promotionId(rs.getInt("promotion_id"))
                         .promotionName(rs.getString("promotion_name"))
@@ -132,13 +177,56 @@ public class BookingJdbcRepository {
                         .discountValue(rs.getBigDecimal("discount_value"))
                         .maxDiscount(rs.getBigDecimal("max_discount"))
                         .minOrderAmount(rs.getBigDecimal("min_order_amount"))
+                        .estimatedDiscount(rs.getBigDecimal("estimated_discount"))
                         .endDate(rs.getDate("end_date").toLocalDate())
                         .build(),
-                orderAmount
+                safeOrderAmount,
+                safeOrderAmount,
+                safeOrderAmount,
+                homeId,
+                safeOrderAmount,
+                userId,
+                userId
         );
     }
 
-    public int countPromotionUsage(Integer promotionId, Integer userId) {
+    public boolean promotionAllowedForBooking(Integer promotionId, Integer userId, Integer homeId) {
+        Integer allowed = jdbcTemplate.queryForObject(
+                """
+                select case
+                    when upper(coalesce(p.promotion_scope, 'GLOBAL')) in ('USER', 'HOMESTAY_USER')
+                         and not exists (
+                            select 1
+                            from promotion_users pu
+                            where pu.promotion_id = p.promotion_id and pu.user_id = ?
+                         ) then 0
+                    when upper(coalesce(p.promotion_scope, 'GLOBAL')) in ('HOMESTAY', 'HOMESTAY_USER', 'HOMESTAY_TIER')
+                         and not exists (
+                            select 1
+                            from promotion_homestays ph
+                            where ph.promotion_id = p.promotion_id and ph.home_id = ?
+                         ) then 0
+                    when exists (
+                        select 1
+                        from promotion_tiers pt
+                        join customer_tier_accounts cta on cta.current_tier_id = pt.tier_id
+                        where pt.promotion_id = p.promotion_id and cta.user_id = ?
+                    ) then 1
+                    when upper(coalesce(p.promotion_scope, 'GLOBAL')) not in ('TIER', 'HOMESTAY_TIER')
+                         and not exists (select 1 from promotion_tiers pt where pt.promotion_id = p.promotion_id) then 1
+                    else 0
+                end
+                from promotions p
+                where p.promotion_id = ?
+                """,
+                Integer.class,
+                userId,
+                homeId,
+                userId,
+                promotionId
+        );
+        return allowed != null && allowed == 1;
+    }    public int countPromotionUsage(Integer promotionId, Integer userId) {
         Integer count = jdbcTemplate.queryForObject(
                 "select count(*) from promotion_usages where promotion_id = ? and user_id = ?",
                 Integer.class,
@@ -210,17 +298,26 @@ public class BookingJdbcRepository {
         );
     }
 
-    public void insertPayment(Integer bookingId, BigDecimal amount, String method, String status, String gateway, String transactionCode, LocalDateTime expiresAt) {
-        jdbcTemplate.update(
-                "insert into payments (booking_id, amount, payment_method, payment_status, gateway, transaction_code, expires_at) values (?, ?, ?, ?, ?, ?, ?)",
-                bookingId,
-                amount,
-                method,
-                status,
-                gateway,
-                transactionCode,
-                expiresAt == null ? null : Timestamp.valueOf(expiresAt)
-        );
+    public Integer insertPayment(Integer bookingId, BigDecimal amount, String method, String status, String gateway, String transactionCode, LocalDateTime expiresAt) {
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(
+                    "insert into payments (booking_id, amount, payment_method, payment_status, gateway, transaction_code, expires_at) values (?, ?, ?, ?, ?, ?, ?)",
+                    Statement.RETURN_GENERATED_KEYS
+            );
+            ps.setInt(1, bookingId);
+            ps.setBigDecimal(2, amount);
+            ps.setString(3, method);
+            ps.setString(4, status);
+            ps.setString(5, gateway);
+            ps.setString(6, transactionCode);
+            ps.setTimestamp(7, expiresAt == null ? null : Timestamp.valueOf(expiresAt));
+            return ps;
+        }, keyHolder);
+        return Objects.requireNonNull(keyHolder.getKey()).intValue();
+    }
+    public void updatePaymentTransactionCode(Integer paymentId, String transactionCode) {
+        jdbcTemplate.update("update payments set transaction_code = ? where payment_id = ?", transactionCode, paymentId);
     }
 
     public void insertPromotionUsage(Integer userId, Integer bookingId, Integer promotionId, BigDecimal discountAmount) {
@@ -249,7 +346,7 @@ public class BookingJdbcRepository {
                     bookingId
             );
         } catch (EmptyResultDataAccessException exception) {
-            throw new AppException("Không tìm thấy booking");
+            throw new AppException("KhĂ´ng tĂ¬m tháº¥y booking");
         }
     }
 
@@ -270,13 +367,18 @@ public class BookingJdbcRepository {
                     transactionCode
             );
         } catch (EmptyResultDataAccessException exception) {
-            throw new AppException("Không tìm thấy giao dịch SePay");
+            throw new AppException("KhĂ´ng tĂ¬m tháº¥y giao dá»‹ch thanh toĂ¡n");
         }
     }
 
     public void markPaymentPaid(Integer bookingId, Integer paymentId, LocalDateTime paidAt) {
         jdbcTemplate.update("update payments set payment_status = 'PAID', paid_at = ? where payment_id = ?", Timestamp.valueOf(paidAt), paymentId);
         jdbcTemplate.update("update bookings set booking_status = 'CONFIRMED', payment_status = 'PAID', updated_at = now() where booking_id = ?", bookingId);
+    }
+
+    public void markPaymentFailed(Integer bookingId, Integer paymentId) {
+        jdbcTemplate.update("update payments set payment_status = 'FAILED' where payment_id = ?", paymentId);
+        jdbcTemplate.update("update bookings set payment_status = 'FAILED', updated_at = now() where booking_id = ? and booking_status = 'PAYMENT_PENDING'", bookingId);
     }
 
     public void expirePaymentBooking(Integer bookingId) {
@@ -419,7 +521,7 @@ public class BookingJdbcRepository {
         try {
             return jdbcTemplate.queryForObject("select booking_status from bookings where booking_id = ?", String.class, bookingId);
         } catch (EmptyResultDataAccessException exception) {
-            throw new AppException("Không tìm thấy booking");
+            throw new AppException("KhĂ´ng tĂ¬m tháº¥y booking");
         }
     }
 
@@ -505,3 +607,4 @@ public class BookingJdbcRepository {
         private String paymentStatus;
     }
 }
+

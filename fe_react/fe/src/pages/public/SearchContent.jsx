@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   HiAdjustmentsHorizontal,
@@ -48,6 +48,8 @@ export default function SearchContent({ favorites = [], toggleFavorite = () => {
   const [errorMessage, setErrorMessage] = useState('');
 
   const destination = searchParams.get('destination') || searchParams.get('province') || 'Tất cả địa điểm';
+  const checkIn = searchParams.get('checkIn') || '';
+  const checkOut = searchParams.get('checkOut') || '';
 
   useEffect(() => {
     let isMounted = true;
@@ -79,6 +81,8 @@ export default function SearchContent({ favorites = [], toggleFavorite = () => {
           maxPrice,
           amenities: selectedAmenities,
           services: selectedServices,
+          checkIn,
+          checkOut,
           sort: sortBy,
         });
         if (!isMounted) return;
@@ -97,7 +101,7 @@ export default function SearchContent({ favorites = [], toggleFavorite = () => {
     return () => {
       isMounted = false;
     };
-  }, [destination, maxPrice, selectedAmenities, selectedServices, sortBy]);
+  }, [destination, checkIn, checkOut, maxPrice, selectedAmenities, selectedServices, sortBy]);
 
   const availableAmenities = useMemo(() => {
     const values = uniqueValues(catalogHomestays.flatMap((item) => item.amenities || []));

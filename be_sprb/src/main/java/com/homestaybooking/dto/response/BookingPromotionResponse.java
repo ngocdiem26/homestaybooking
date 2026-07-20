@@ -16,5 +16,6 @@ public class BookingPromotionResponse {
     private BigDecimal discountValue;
     private BigDecimal maxDiscount;
     private BigDecimal minOrderAmount;
+    private BigDecimal estimatedDiscount;
     private LocalDate endDate;
 }

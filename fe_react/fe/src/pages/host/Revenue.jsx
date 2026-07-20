@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   HiOutlineArrowLeft,
@@ -75,7 +75,7 @@ function firstDayOfYearIso() {
 
 function mapPaymentMethod(method) {
   const normalized = String(method || '').toUpperCase();
-  if (normalized === 'SEPAY') return 'SePay';
+  if (normalized === 'VNPAY') return 'VNPay';
   if (normalized === 'PAY_AT_PROPERTY') return 'Thanh toán tại chỗ';
   return method || '-';
 }

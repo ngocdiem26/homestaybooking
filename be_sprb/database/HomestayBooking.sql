@@ -9,30 +9,7 @@ USE lvtn;
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
-DROP TABLE IF EXISTS review_replies;
-DROP TABLE IF EXISTS reviews;
-DROP TABLE IF EXISTS complaints;
-DROP TABLE IF EXISTS promotion_usages;
-DROP TABLE IF EXISTS booking_services;
-DROP TABLE IF EXISTS booking_details;
-DROP TABLE IF EXISTS payments;
-DROP TABLE IF EXISTS bookings;
-DROP TABLE IF EXISTS favorites;
-DROP TABLE IF EXISTS search_histories;
-DROP TABLE IF EXISTS chat_recommendations;
-DROP TABLE IF EXISTS chat_messages;
-DROP TABLE IF EXISTS chat_sessions;
-DROP TABLE IF EXISTS homestay_images;
-DROP TABLE IF EXISTS homestay_amenities;
-DROP TABLE IF EXISTS homestay_availabilities;
-DROP TABLE IF EXISTS homestay_services;
-DROP TABLE IF EXISTS rules;
-DROP TABLE IF EXISTS homestays;
-DROP TABLE IF EXISTS amenities;
-DROP TABLE IF EXISTS services;
-DROP TABLE IF EXISTS users;
-DROP TABLE IF EXISTS roles;
-DROP TABLE IF EXISTS promotions;
+
 
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -55,7 +32,7 @@ CREATE TABLE users (
     birthday DATE,
     gender VARCHAR(10),
     user_status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-    avatar VARCHAR(255),
+    avatar LONGTEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP NULL DEFAULT NULL,
@@ -626,7 +603,6 @@ VALUES
 (5, 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e', TRUE, 1),
 (5, 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750', FALSE, 2);
 
-
 ALTER TABLE homestays
 ADD COLUMN latitude DECIMAL(10,7) NULL AFTER province,
 ADD COLUMN longitude DECIMAL(10,7) NULL AFTER latitude;
@@ -741,7 +717,6 @@ ADD COLUMN payment_expires_at DATETIME;
 ALTER TABLE payments
 ADD COLUMN expires_at DATETIME;
 
-
 -- 1. Bổ sung 2 cột còn thiếu vào bảng reviews
 ALTER TABLE reviews 
 ADD COLUMN review_status VARCHAR(20) NOT NULL DEFAULT 'VISIBLE',
@@ -759,7 +734,6 @@ CREATE INDEX idx_reviews_home_status ON reviews(home_id, review_status);
 -- Lưu ý: Cột user_id trong bảng cũ của bạn đã có một index tên là `idx_reviews_user_id`.
 -- Để đồng bộ hẳn với tên index `idx_reviews_user` trong code Java, ta đổi tên nó:
 ALTER TABLE reviews RENAME INDEX idx_reviews_user_id TO idx_reviews_user;
-
 
 USE lvtn;
 
@@ -793,12 +767,12 @@ INSERT INTO chatbot_documents (title, content, document_type)
 VALUES
 (
     'Hướng dẫn đặt phòng',
-    'Để đặt homestay, khách chọn homestay, chọn ngày nhận phòng, ngày trả phòng, số khách, sau đó bấm Đặt phòng một bảng yêu cầu nhập thông tin đặt phòng sẽ xuất hiện, bạn chỉ cần điền thông tin theo yêu cầu và hoàn thành đầy đủ các bước.  Nếu chưa đăng nhập, hệ thống yêu cầu đăng nhập trước. Sau khi xác nhận thông tin, khách chọn thanh toán online qua SePay hoặc thanh toán tại chỗ.',
+    'Để đặt homestay, khách chọn homestay, chọn ngày nhận phòng, ngày trả phòng, số khách, sau đó bấm Đặt phòng một bảng yêu cầu nhập thông tin đặt phòng sẽ xuất hiện, bạn chỉ cần điền thông tin theo yêu cầu và hoàn thành đầy đủ các bước.  Nếu chưa đăng nhập, hệ thống yêu cầu đăng nhập trước. Sau khi xác nhận thông tin, khách chọn thanh toán online qua VNPAY hoặc thanh toán tại chỗ.',
     'BOOKING_GUIDE'
 ),
 (
-    'Thanh toán SePay',
-    'Thanh toán SePay là hình thức thanh toán online bằng chuyển khoản ngân hàng hoặc quét mã QR. Sau khi khách chuyển khoản đúng số tiền và đúng nội dung, hệ thống nhận webhook từ SePay và cập nhật booking thành đã xác nhận.',
+    'Thanh toán VNPAY',
+    'Thanh toán VNPAY là hình thức thanh toán online bằng cổng thanh toán VNPAY Sandbox. Sau khi khách thanh toán test thành công trên cổng VNPAY, hệ thống nhận webhook từ VNPAY và cập nhật booking thành đã xác nhận.',
     'PAYMENT_GUIDE'
 ),
 (
@@ -932,148 +906,754 @@ CREATE TABLE IF NOT EXISTS activity_images (
         ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+ALTER TABLE destinations
+ADD COLUMN city VARCHAR(100) NULL AFTER province_name;
+ALTER TABLE homestays
+ADD COLUMN city VARCHAR(100) NULL AFTER province;
+ALTER TABLE homestays
+ADD INDEX idx_homestays_province (province);
+ALTER TABLE homestays
+ADD INDEX idx_homestays_city (city);
+UPDATE homestays
+SET city = 'Đà Lạt',
+    province = 'Lâm Đồng'
+WHERE province = 'Đà Lạt';
 
-INSERT INTO activities (
-    activity_name,
-    province,
-    activity_address,
-    short_description,
-    description,
-    hotline,
-    thumbnail_url,
-    badge_text,
-    badge_type,
-    is_featured,
-    display_order
+
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/batca/cover.jpg', TRUE, 1
+FROM activities WHERE activity_name = 'Bắt cá ruộng miền Tây';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/batca/img1.jpg', FALSE, 2
+FROM activities WHERE activity_name = 'Bắt cá ruộng miền Tây';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/batca/img2.jpg', FALSE, 3
+FROM activities WHERE activity_name = 'Bắt cá ruộng miền Tây';
+
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/gatlua/cover.jpg', TRUE, 1
+FROM activities WHERE activity_name = 'Gặt lúa cùng nông dân';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/gatlua/img1.jpg', FALSE, 2
+FROM activities WHERE activity_name = 'Gặt lúa cùng nông dân';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/gatlua/img2.jpg', FALSE, 3
+FROM activities WHERE activity_name = 'Gặt lúa cùng nông dân';
+
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/cheoxuong/cover.jpg', TRUE, 1
+FROM activities WHERE activity_name = 'Chèo xuồng ba lá trên rạch dừa nước';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/cheoxuong/img1.jpg', FALSE, 2
+FROM activities WHERE activity_name = 'Chèo xuồng ba lá trên rạch dừa nước';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/cheoxuong/img2.jpg', FALSE, 3
+FROM activities WHERE activity_name = 'Chèo xuồng ba lá trên rạch dừa nước';
+
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/cheothuyenthung/cover.jpg', TRUE, 1
+FROM activities WHERE activity_name = 'Chèo thuyền thúng ở Đà Nẵng';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/cheothuyenthung/img1.jpg', FALSE, 2
+FROM activities WHERE activity_name = 'Chèo thuyền thúng ở Đà Nẵng';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/cheothuyenthung/img2.jpg', FALSE, 3
+FROM activities WHERE activity_name = 'Chèo thuyền thúng ở Đà Nẵng';
+
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/danlatthucong/cover.jpg', TRUE, 1
+FROM activities WHERE activity_name = 'Đan lát thủ công cùng nghệ nhân';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/danlatthucong/img1.jpg', FALSE, 2
+FROM activities WHERE activity_name = 'Đan lát thủ công cùng nghệ nhân';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/danlatthucong/img2.jpg', FALSE, 3
+FROM activities WHERE activity_name = 'Đan lát thủ công cùng nghệ nhân';
+
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/thuhoachrau/cover.jpg', TRUE, 1
+FROM activities WHERE activity_name = 'Thu hoạch rau tại vườn';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/thuhoachrau/img1.jpg', FALSE, 2
+FROM activities WHERE activity_name = 'Thu hoạch rau tại vườn';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/thuhoachrau/img2.jpg', FALSE, 3
+FROM activities WHERE activity_name = 'Thu hoạch rau tại vườn';
+
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/lamgom/cover.jpg', TRUE, 1
+FROM activities WHERE activity_name = 'Trải nghiệm làm gốm';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/lamgom/img1.jpg', FALSE, 2
+FROM activities WHERE activity_name = 'Trải nghiệm làm gốm';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/lamgom/img2.jpg', FALSE, 3
+FROM activities WHERE activity_name = 'Trải nghiệm làm gốm';
+
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/keoluoi/cover.jpg', TRUE, 1
+FROM activities WHERE activity_name = 'Kéo lưới cùng ngư dân';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/keoluoi/img1.jpg', FALSE, 2
+FROM activities WHERE activity_name = 'Kéo lưới cùng ngư dân';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/keoluoi/img2.jpg', FALSE, 3
+FROM activities WHERE activity_name = 'Kéo lưới cùng ngư dân';
+
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/lambanh/cover.jpg', TRUE, 1
+FROM activities WHERE activity_name = 'Làm bánh dân gian Nam Bộ';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/lambanh/img1.jpg', FALSE, 2
+FROM activities WHERE activity_name = 'Làm bánh dân gian Nam Bộ';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/lambanh/img2.jpg', FALSE, 3
+FROM activities WHERE activity_name = 'Làm bánh dân gian Nam Bộ';
+
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/naucomlam/cover.jpg', TRUE, 1
+FROM activities WHERE activity_name = 'Nấu cơm lam và giao lưu bản địa';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/naucomlam/img1.jpg', FALSE, 2
+FROM activities WHERE activity_name = 'Nấu cơm lam và giao lưu bản địa';
+
+INSERT INTO activity_images (activity_id, image_url, is_thumbnail, display_order)
+SELECT activity_id, '/images/activities/naucomlam/img2.jpg', FALSE, 3
+FROM activities WHERE activity_name = 'Nấu cơm lam và giao lưu bản địa';
+
+ALTER TABLE activities
+ADD COLUMN latitude DECIMAL(10,7) NULL AFTER activity_address,
+ADD COLUMN longitude DECIMAL(10,7) NULL AFTER latitude;
+
+UPDATE activities
+SET latitude = 10.0015000,
+    longitude = 105.6688000
+WHERE activity_id = 1;
+-- Bắt cá ruộng miền Tây - Phong Điền, Cần Thơ
+
+
+UPDATE activities
+SET latitude = 10.3067000,
+    longitude = 105.7689000
+WHERE activity_id = 2;
+-- Gặt lúa cùng nông dân - Tân Khánh Đông, Sa Đéc, Đồng Tháp
+
+
+UPDATE activities
+SET latitude = 10.2363000,
+    longitude = 106.3744000
+WHERE activity_id = 3;
+-- Chèo xuồng ba lá trên rạch dừa nước - Cồn Phụng, Bến Tre
+
+
+UPDATE activities
+SET latitude = 15.8801000,
+    longitude = 108.3632000
+WHERE activity_id = 4;
+-- Chèo thuyền thúng ở Đà Nẵng - Rừng dừa Bảy Mẫu, Hội An Đông
+
+
+UPDATE activities
+SET latitude = 15.8810000,
+    longitude = 108.3606000
+WHERE activity_id = 5;
+-- Đan lát thủ công cùng nghệ nhân - Cẩm Thanh, Hội An
+
+
+UPDATE activities
+SET latitude = 11.9469000,
+    longitude = 108.4984000
+WHERE activity_id = 6;
+-- Thu hoạch rau tại vườn - Làng rau Trại Mát, Đà Lạt
+
+
+UPDATE activities
+SET latitude = 20.1549000,
+    longitude = 106.0073000
+WHERE activity_id = 7;
+-- Trải nghiệm làm gốm - Làng gốm Bồ Bát, Yên Mô, Ninh Bình
+
+
+UPDATE activities
+SET latitude = 20.8843000,
+    longitude = 107.0965000
+WHERE activity_id = 8;
+-- Kéo lưới cùng ngư dân - Làng chài Cửa Vạn, vịnh Hạ Long
+
+
+UPDATE activities
+SET latitude = 9.9578000,
+    longitude = 105.9586000
+WHERE activity_id = 9;
+-- Làm bánh dân gian Nam Bộ - Cồn Mỹ Phước, Kế Sách, Sóc Trăng
+
+
+UPDATE activities
+SET latitude = 22.3068000,
+    longitude = 103.8893000
+WHERE activity_id = 10;
+-- Nấu cơm lam và giao lưu bản địa - Bản Tả Van, Sa Pa
+
+UPDATE homestays
+SET latitude = 11.9398000,
+    longitude = 108.4339000
+WHERE home_id = 6;
+-- Bungalow Rừng Thông - Phường 3, Đà Lạt
+
+
+UPDATE homestays
+SET latitude = 11.9047000,
+    longitude = 108.4334000
+WHERE home_id = 7;
+-- Nhà Gỗ Ven Hồ Tuyền Lâm - Hồ Tuyền Lâm, Đà Lạt
+
+
+UPDATE homestays
+SET latitude = 10.0312000,
+    longitude = 105.7852000
+WHERE home_id = 8;
+-- Mekong Garden Homestay - ven sông, Ninh Kiều, Cần Thơ
+
+
+UPDATE homestays
+SET latitude = 10.0341000,
+    longitude = 105.7867000
+WHERE home_id = 9;
+-- Cozy River House - Bến Ninh Kiều, Cần Thơ
+
+
+UPDATE homestays
+SET latitude = 16.0692000,
+    longitude = 108.2467000
+WHERE home_id = 10;
+-- Sea Breeze Homestay Đà Nẵng - Võ Nguyên Giáp, Sơn Trà
+
+
+UPDATE homestays
+SET latitude = 10.0265000,
+    longitude = 105.7732000
+WHERE home_id = 11;
+-- An Nhiên Homestay - Võ Thị Sáu, Xuân Khánh, Ninh Kiều
+
+
+UPDATE homestays
+SET latitude = 10.0269000,
+    longitude = 105.7736000
+WHERE home_id = 12;
+-- An Nhiên Homestay - Võ Thị Sáu, Xuân Khánh, Ninh Kiều
+
+
+ALTER TABLE promotions
+ADD COLUMN promotion_scope VARCHAR(30) NOT NULL DEFAULT 'GLOBAL'
+AFTER promotion_code;
+ALTER TABLE promotions
+ADD CONSTRAINT ck_promotions_scope
+CHECK (promotion_scope IN ('GLOBAL', 'HOMESTAY', 'USER', 'HOMESTAY_USER'));
+
+CREATE TABLE IF NOT EXISTS promotion_homestays (
+    promotion_id INT NOT NULL,
+    home_id INT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (promotion_id, home_id),
+
+    CONSTRAINT fk_promotion_homestays_promotion
+        FOREIGN KEY (promotion_id) REFERENCES promotions(promotion_id)
+        ON DELETE CASCADE
+        ON UPDATE RESTRICT,
+
+    CONSTRAINT fk_promotion_homestays_homestay
+        FOREIGN KEY (home_id) REFERENCES homestays(home_id)
+        ON DELETE CASCADE
+        ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS promotion_users (
+    promotion_id INT NOT NULL,
+    user_id INT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (promotion_id, user_id),
+
+    CONSTRAINT fk_promotion_users_promotion
+        FOREIGN KEY (promotion_id) REFERENCES promotions(promotion_id)
+        ON DELETE CASCADE
+        ON UPDATE RESTRICT,
+
+    CONSTRAINT fk_promotion_users_user
+        FOREIGN KEY (user_id) REFERENCES users(user_id)
+        ON DELETE CASCADE
+        ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE promotion_usages
+ADD UNIQUE KEY uk_promotion_usages_promotion_booking (promotion_id, booking_id);
+
+CREATE TABLE IF NOT EXISTS loyalty_tiers (
+    tier_id INT NOT NULL AUTO_INCREMENT,
+    tier_code VARCHAR(30) NOT NULL,
+    tier_name VARCHAR(50) NOT NULL,
+
+    min_completed_bookings_24m INT NOT NULL DEFAULT 0,
+
+    display_order INT NOT NULL DEFAULT 0,
+    tier_status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (tier_id),
+    UNIQUE KEY uk_loyalty_tiers_code (tier_code),
+
+    CONSTRAINT ck_loyalty_tiers_status
+        CHECK (tier_status IN ('ACTIVE', 'INACTIVE'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO loyalty_tiers (
+    tier_code,
+    tier_name,
+    min_completed_bookings_24m,
+    display_order,
+    tier_status
 )
 VALUES
-(
-    'Bắt cá ruộng miền Tây',
-    'Cần Thơ',
-    'Phong Điền, Cần Thơ',
-    'Trải nghiệm lội ruộng, tát mương và bắt cá cùng người dân địa phương.',
-    'Hoạt động bắt cá ruộng miền Tây mang đến cho du khách cảm giác dân dã và gần gũi với đời sống sông nước. Du khách sẽ được mặc áo bà ba, lội ruộng, tát mương, bắt cá bằng tay hoặc bằng nơm, sau đó có thể thưởng thức các món ăn đồng quê được chế biến từ cá vừa bắt được.',
-    '0909123456',
-    '/images/activities/batca/cover.jpg',
-    'Dân dã',
-    'LOCAL',
-    TRUE,
-    1
-),
-(
-    'Gặt lúa cùng nông dân',
-    'Đồng Tháp',
-    'Làng quê Sa Đéc, Đồng Tháp',
-    'Cùng người dân ra đồng gặt lúa, bó lúa và tìm hiểu mùa vụ miền Tây.',
-    'Du khách được tham gia vào một ngày làm nông thực thụ với các công việc như cắt lúa, bó lúa, gánh lúa và nghe người dân chia sẻ về quy trình trồng lúa nước. Hoạt động phù hợp cho khách muốn tìm hiểu văn hóa nông nghiệp truyền thống.',
-    '0918123456',
-    '/images/activities/gatlua/cover.jpg',
-    'Mùa vụ',
-    'FARM',
-    TRUE,
-    2
-),
-(
-    'Chèo xuồng ba lá trên rạch dừa nước',
-    'Bến Tre',
-    'Rạch dừa nước, Bến Tre',
-    'Ngồi xuồng ba lá len lỏi qua những con rạch xanh mát đặc trưng miền Tây.',
-    'Trải nghiệm chèo thuyền trên rạch dừa nước giúp du khách cảm nhận nhịp sống yên bình của vùng sông nước. Du khách có thể tự tay chèo xuồng hoặc ngồi cùng người lái địa phương, đi qua những hàng dừa nước, vườn cây và nghe kể chuyện đời sống miền quê.',
-    '0922123456',
-    '/images/activities/cheoxuong/cover.jpg',
-    'Sông nước',
-    'WATER',
-    TRUE,
-    3
-),
-(
-    'Chèo thuyền thúng ở Đà Nẵng',
-    'Đà Nẵng',
-    'Khu vực sông nước ven biển Đà Nẵng',
-    'Trải nghiệm chèo thuyền thúng, khám phá đời sống ngư dân và không gian sông nước địa phương.',
-    'Du khách được hướng dẫn cách giữ thăng bằng và chèo thuyền thúng trên mặt nước, tìm hiểu đời sống ngư dân ven biển và tham gia các hoạt động giao lưu dân dã. Đây là trải nghiệm phù hợp cho nhóm bạn, gia đình và du khách muốn khám phá nét văn hóa miền biển Đà Nẵng.',
-    '0933123456',
-    '/images/activities/cheothuyenthung/cover.jpg',
-    'Sông nước',
-    'WATER',
-    TRUE,
-    4
-),
-(
-    'Đan lát thủ công cùng nghệ nhân',
-    'Quảng Nam',
-    'Làng nghề truyền thống Hội An, Quảng Nam',
-    'Tìm hiểu nghề đan lát truyền thống và tự tay làm sản phẩm thủ công.',
-    'Hoạt động đan lát thủ công đưa du khách đến gần hơn với nghề truyền thống địa phương. Dưới sự hướng dẫn của nghệ nhân, du khách có thể học cách chọn nguyên liệu, đan giỏ nhỏ, mẹt hoặc vật trang trí đơn giản để mang về làm kỷ niệm.',
-    '0944123456',
-    '/images/activities/danlatthucong/cover.jpg',
-    'Làng nghề',
-    'CRAFT',
-    FALSE,
-    5
-),
-(
-    'Thu hoạch rau tại vườn',
-    'Lâm Đồng',
-    'Vườn rau ngoại ô Đà Lạt, Lâm Đồng',
-    'Tham quan nông trại, hái rau sạch và tìm hiểu cách canh tác vùng cao.',
-    'Du khách được tham quan vườn rau, nghe giới thiệu về quy trình trồng rau sạch, tự tay thu hoạch rau củ theo mùa và chụp ảnh trong không gian nông trại xanh mát. Hoạt động phù hợp cho khách yêu thiên nhiên và gia đình có trẻ nhỏ.',
-    '0955123456',
-    '/images/activities/thuhoachrau/cover.jpg',
-    'Nông trại',
-    'FARM',
-    TRUE,
-    6
-),
-(
-    'Trải nghiệm làm gốm',
-    'Ninh Bình',
-    'Làng nghề gốm truyền thống, Ninh Bình',
-    'Tự tay nặn gốm, tạo hình và trang trí sản phẩm dưới sự hướng dẫn của thợ gốm.',
-    'Du khách sẽ được tìm hiểu quy trình làm gốm thủ công, từ nhào đất, tạo hình trên bàn xoay đến trang trí sản phẩm. Đây là hoạt động phù hợp với khách thích sáng tạo và muốn tìm hiểu nghề thủ công truyền thống.',
-    '0966123456',
-    '/images/activities/lamgom/cover.jpg',
-    'Thủ công',
-    'CRAFT',
-    FALSE,
-    7
-),
-(
-    'Kéo lưới cùng ngư dân',
-    'Quảng Ninh',
-    'Làng chài ven biển Hạ Long, Quảng Ninh',
-    'Cùng ngư dân ra bãi biển kéo lưới và tìm hiểu đời sống làng chài.',
-    'Hoạt động kéo lưới cùng ngư dân giúp du khách cảm nhận công việc mưu sinh ven biển. Du khách sẽ được hướng dẫn cách kéo lưới, phân loại hải sản và nghe chia sẻ về văn hóa làng chài địa phương.',
-    '0977123456',
-    '/images/activities/keoluoi/cover.jpg',
-    'Làng chài',
-    'SEA',
-    TRUE,
-    8
-),
-(
-    'Làm bánh dân gian Nam Bộ',
-    'Sóc Trăng',
-    'Khu trải nghiệm ẩm thực dân gian, Sóc Trăng',
-    'Tự tay làm các loại bánh dân gian như bánh ít, bánh lá, bánh bò.',
-    'Du khách được hướng dẫn chuẩn bị nguyên liệu, gói bánh và hấp bánh theo cách truyền thống. Hoạt động mang tính trải nghiệm văn hóa ẩm thực, phù hợp cho khách muốn tìm hiểu món ăn địa phương và đời sống cộng đồng.',
-    '0988123456',
-    '/images/activities/lambanh/cover.jpg',
-    'Ẩm thực',
-    'FOOD',
-    FALSE,
-    9
-),
-(
-    'Nấu cơm lam và giao lưu bản địa',
-    'Lào Cai',
-    'Bản làng vùng cao Sa Pa, Lào Cai',
-    'Trải nghiệm nấu cơm lam, thưởng thức món bản địa và giao lưu với người dân.',
-    'Du khách được hướng dẫn chuẩn bị ống tre, vo gạo, nướng cơm lam trên than hồng và dùng bữa cùng người dân bản địa. Hoạt động giúp du khách hiểu hơn về văn hóa ẩm thực vùng cao và nhịp sống cộng đồng bản làng.',
-    '0999123456',
-    '/images/activities/naucomlam/cover.jpg',
-    'Vùng cao',
-    'CULTURE',
-    TRUE,
-    10
+('BRONZE', 'Đồng', 0, 1, 'ACTIVE'),
+('SILVER', 'Bạc', 5, 2, 'ACTIVE'),
+('GOLD', 'Vàng', 15, 3, 'ACTIVE'),
+('DIAMOND', 'Kim cương', 30, 4, 'ACTIVE');
+
+UPDATE loyalty_tiers
+SET tier_name = 'Đồng',
+    min_completed_bookings_24m = 0,
+    display_order = 1,
+    tier_status = 'ACTIVE'
+WHERE tier_code = 'BRONZE';
+
+UPDATE loyalty_tiers
+SET tier_name = 'Bạc',
+    min_completed_bookings_24m = 5,
+    display_order = 2,
+    tier_status = 'ACTIVE'
+WHERE tier_code = 'SILVER';
+
+UPDATE loyalty_tiers
+SET tier_name = 'Vàng',
+    min_completed_bookings_24m = 15,
+    display_order = 3,
+    tier_status = 'ACTIVE'
+WHERE tier_code = 'GOLD';
+
+UPDATE loyalty_tiers
+SET tier_name = 'Kim cương',
+    min_completed_bookings_24m = 30,
+    display_order = 4,
+    tier_status = 'ACTIVE'
+WHERE tier_code = 'DIAMOND';
+
+CREATE TABLE IF NOT EXISTS customer_tier_accounts (
+    user_id INT NOT NULL,
+
+    current_tier_id INT NOT NULL,
+    completed_bookings_24m INT NOT NULL DEFAULT 0,
+
+    tier_started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_calculated_at TIMESTAMP NULL DEFAULT NULL,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (user_id),
+
+    CONSTRAINT fk_customer_tier_user
+        FOREIGN KEY (user_id) REFERENCES users(user_id)
+        ON DELETE RESTRICT
+        ON UPDATE RESTRICT,
+
+    CONSTRAINT fk_customer_tier_tier
+        FOREIGN KEY (current_tier_id) REFERENCES loyalty_tiers(tier_id)
+        ON DELETE RESTRICT
+        ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+INSERT IGNORE INTO customer_tier_accounts (
+    user_id,
+    current_tier_id,
+    completed_bookings_24m
+)
+SELECT 
+    u.user_id,
+    lt.tier_id,
+    0
+FROM users u
+JOIN roles r ON r.role_id = u.role_id
+JOIN loyalty_tiers lt ON lt.tier_code = 'BRONZE'
+WHERE UPPER(r.role_name) = 'CUSTOMER'
+  AND u.deleted_at IS NULL;
+ 
+CREATE TABLE IF NOT EXISTS promotion_tiers (
+    promotion_id INT NOT NULL,
+    tier_id INT NOT NULL,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (promotion_id, tier_id),
+
+    CONSTRAINT fk_promotion_tiers_promotion
+        FOREIGN KEY (promotion_id) REFERENCES promotions(promotion_id)
+        ON DELETE CASCADE
+        ON UPDATE RESTRICT,
+
+    CONSTRAINT fk_promotion_tiers_tier
+        FOREIGN KEY (tier_id) REFERENCES loyalty_tiers(tier_id)
+        ON DELETE CASCADE
+        ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+   
+ALTER TABLE promotions
+DROP CHECK ck_promotions_scope;
+
+ALTER TABLE promotions
+ADD CONSTRAINT ck_promotions_scope
+CHECK (
+    promotion_scope IN (
+        'GLOBAL',
+        'HOMESTAY',
+        'USER',
+        'TIER',
+        'HOMESTAY_USER',
+        'HOMESTAY_TIER'
+    )
 );
+
+INSERT INTO promotions (
+    promotion_name,
+    promotion_code,
+    promotion_scope,
+    discount_type,
+    discount_value,
+    start_date,
+    end_date,
+    max_discount,
+    min_order_amount,
+    usage_limit_total,
+    usage_limit_per_user,
+    status
+)
+SELECT
+    'Ưu đãi khách hạng Bạc',
+    'SILVER2026',
+    'TIER',
+    'PERCENT',
+    5.00,
+    '2026-01-01',
+    '2026-12-31',
+    100000.00,
+    500000.00,
+    NULL,
+    2,
+    'ACTIVE'
+WHERE NOT EXISTS (
+    SELECT 1 FROM promotions WHERE promotion_code = 'SILVER2026'
+);
+
+INSERT IGNORE INTO promotion_tiers (promotion_id, tier_id)
+SELECT p.promotion_id, lt.tier_id
+FROM promotions p
+JOIN loyalty_tiers lt ON lt.tier_code = 'SILVER'
+WHERE p.promotion_code = 'SILVER2026';
+
+INSERT INTO promotions (
+    promotion_name,
+    promotion_code,
+    promotion_scope,
+    discount_type,
+    discount_value,
+    start_date,
+    end_date,
+    max_discount,
+    min_order_amount,
+    usage_limit_total,
+    usage_limit_per_user,
+    status
+)
+SELECT
+    'Ưu đãi khách hạng Vàng',
+    'GOLD2026',
+    'TIER',
+    'PERCENT',
+    10.00,
+    '2026-01-01',
+    '2026-12-31',
+    200000.00,
+    500000.00,
+    NULL,
+    2,
+    'ACTIVE'
+WHERE NOT EXISTS (
+    SELECT 1 FROM promotions WHERE promotion_code = 'GOLD2026'
+);
+
+INSERT IGNORE INTO promotion_tiers (promotion_id, tier_id)
+SELECT p.promotion_id, lt.tier_id
+FROM promotions p
+JOIN loyalty_tiers lt ON lt.tier_code = 'GOLD'
+WHERE p.promotion_code = 'GOLD2026';
+
+INSERT INTO promotions (
+    promotion_name,
+    promotion_code,
+    promotion_scope,
+    discount_type,
+    discount_value,
+    start_date,
+    end_date,
+    max_discount,
+    min_order_amount,
+    usage_limit_total,
+    usage_limit_per_user,
+    status
+)
+SELECT
+    'Ưu đãi khách Kim cương',
+    'DIAMOND2026',
+    'TIER',
+    'PERCENT',
+    15.00,
+    '2026-01-01',
+    '2026-12-31',
+    300000.00,
+    500000.00,
+    NULL,
+    2,
+    'ACTIVE'
+WHERE NOT EXISTS (
+    SELECT 1 FROM promotions WHERE promotion_code = 'DIAMOND2026'
+);
+
+INSERT IGNORE INTO promotion_tiers (promotion_id, tier_id)
+SELECT p.promotion_id, lt.tier_id
+FROM promotions p
+JOIN loyalty_tiers lt ON lt.tier_code = 'DIAMOND'
+WHERE p.promotion_code = 'DIAMOND2026';
+
+UPDATE customer_tier_accounts cta
+LEFT JOIN (
+    SELECT 
+        b.user_id,
+        COUNT(DISTINCT b.booking_id) AS completed_count
+    FROM bookings b
+    JOIN booking_details bd ON bd.booking_id = b.booking_id
+    WHERE UPPER(b.booking_status) = 'COMPLETED'
+      AND bd.checkout_date >= DATE_SUB(CURRENT_DATE, INTERVAL 2 YEAR)
+    GROUP BY b.user_id
+) completed ON completed.user_id = cta.user_id
+SET 
+    cta.completed_bookings_24m = COALESCE(completed.completed_count, 0),
+
+    cta.tier_started_at = IF(
+        cta.current_tier_id <> (
+            SELECT lt.tier_id
+            FROM loyalty_tiers lt
+            WHERE lt.tier_status = 'ACTIVE'
+              AND lt.min_completed_bookings_24m <= COALESCE(completed.completed_count, 0)
+            ORDER BY lt.min_completed_bookings_24m DESC
+            LIMIT 1
+        ),
+        CURRENT_TIMESTAMP,
+        cta.tier_started_at
+    ),
+
+    cta.current_tier_id = (
+        SELECT lt.tier_id
+        FROM loyalty_tiers lt
+        WHERE lt.tier_status = 'ACTIVE'
+          AND lt.min_completed_bookings_24m <= COALESCE(completed.completed_count, 0)
+        ORDER BY lt.min_completed_bookings_24m DESC
+        LIMIT 1
+    ),
+
+    cta.last_calculated_at = CURRENT_TIMESTAMP,
+    cta.updated_at = CURRENT_TIMESTAMP;
+
+SET SQL_SAFE_UPDATES = 0;
+
+UPDATE customer_tier_accounts cta
+LEFT JOIN (
+    SELECT 
+        b.user_id,
+        COUNT(DISTINCT b.booking_id) AS completed_count
+    FROM bookings b
+    JOIN booking_details bd ON bd.booking_id = b.booking_id
+    WHERE UPPER(b.booking_status) = 'COMPLETED'
+      AND bd.checkout_date >= DATE_SUB(CURRENT_DATE, INTERVAL 2 YEAR)
+    GROUP BY b.user_id
+) completed ON completed.user_id = cta.user_id
+SET 
+    cta.completed_bookings_24m = COALESCE(completed.completed_count, 0),
+
+    cta.current_tier_id = (
+        SELECT lt.tier_id
+        FROM loyalty_tiers lt
+        WHERE lt.tier_status = 'ACTIVE'
+          AND lt.min_completed_bookings_24m <= COALESCE(completed.completed_count, 0)
+        ORDER BY lt.min_completed_bookings_24m DESC
+        LIMIT 1
+    ),
+
+    cta.last_calculated_at = CURRENT_TIMESTAMP,
+    cta.updated_at = CURRENT_TIMESTAMP;
+
+SET SQL_SAFE_UPDATES = 1;
+
+INSERT INTO promotions (
+    promotion_name,
+    promotion_code,
+    promotion_scope,
+    discount_type,
+    discount_value,
+    start_date,
+    end_date,
+    max_discount,
+    min_order_amount,
+    usage_limit_total,
+    usage_limit_per_user,
+    status
+)
+SELECT
+    'Ưu đãi khách hạng Đồng',
+    'BRONZE2026',
+    'TIER',
+    'PERCENT',
+    10.00,
+    '2026-01-01',
+    '2026-12-31',
+    100000.00,
+    300000.00,
+    NULL,
+    2,
+    'ACTIVE'
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM promotions
+    WHERE promotion_code = 'BRONZE2026'
+);
+INSERT IGNORE INTO promotion_tiers (promotion_id, tier_id)
+SELECT p.promotion_id, lt.tier_id
+FROM promotions p
+JOIN loyalty_tiers lt ON lt.tier_code = 'BRONZE'
+WHERE p.promotion_code = 'BRONZE2026';
+
+UPDATE `lvtn`.`promotions` SET `discount_value` = '20.00' WHERE (`promotion_id` = '4');
+UPDATE `lvtn`.`promotions` SET `discount_value` = '30.00' WHERE (`promotion_id` = '5');
+UPDATE `lvtn`.`promotions` SET `discount_value` = '40.00' WHERE (`promotion_id` = '6');
+
+ALTER TABLE users MODIFY avatar LONGTEXT;
+
+ALTER TABLE reviews
+ADD COLUMN moderation_status VARCHAR(30) NULL,
+ADD COLUMN moderation_action VARCHAR(30) NULL,
+ADD COLUMN moderation_reason TEXT NULL,
+
+ADD COLUMN toxicity_score DECIMAL(5,4) NULL,
+ADD COLUMN profanity_score DECIMAL(5,4) NULL,
+ADD COLUMN insult_score DECIMAL(5,4) NULL,
+ADD COLUMN threat_score DECIMAL(5,4) NULL,
+ADD COLUMN hate_score DECIMAL(5,4) NULL,
+ADD COLUMN death_related_score DECIMAL(5,4) NULL,
+ADD COLUMN spam_score DECIMAL(5,4) NULL,
+ADD COLUMN privacy_score DECIMAL(5,4) NULL,
+
+ADD COLUMN sentiment VARCHAR(30) NULL,
+ADD COLUMN rating_comment_mismatch BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN moderation_categories JSON NULL,
+ADD COLUMN moderated_at TIMESTAMP NULL;
+
+ALTER TABLE reviews
+ADD COLUMN admin_review_status VARCHAR(30) NOT NULL DEFAULT 'NONE'
+AFTER review_status,
+ADD COLUMN moderated_by INT NULL AFTER moderated_at,
+ADD COLUMN hidden_reason TEXT NULL AFTER moderated_by;
+
+CREATE TABLE IF NOT EXISTS review_moderation_logs (
+    log_id BIGINT NOT NULL AUTO_INCREMENT,
+    review_id INT NOT NULL,
+
+    provider VARCHAR(50) NOT NULL,
+    model_name VARCHAR(100) NULL,
+
+    moderation_action VARCHAR(30) NOT NULL,
+    admin_review_status VARCHAR(30) NULL,
+    moderation_reason TEXT NULL,
+
+    toxicity_score DECIMAL(5,4) NULL,
+    profanity_score DECIMAL(5,4) NULL,
+    insult_score DECIMAL(5,4) NULL,
+    threat_score DECIMAL(5,4) NULL,
+    hate_score DECIMAL(5,4) NULL,
+    death_related_score DECIMAL(5,4) NULL,
+    spam_score DECIMAL(5,4) NULL,
+    privacy_score DECIMAL(5,4) NULL,
+    final_score DECIMAL(5,4) NULL,
+
+    sentiment VARCHAR(30) NULL,
+    rating_comment_mismatch BOOLEAN NOT NULL DEFAULT FALSE,
+    raw_response LONGTEXT NULL,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (log_id),
+
+    KEY idx_review_moderation_logs_review_id (review_id),
+
+    CONSTRAINT fk_review_moderation_logs_review
+        FOREIGN KEY (review_id) REFERENCES reviews(review_id)
+        ON DELETE CASCADE
+);
+
+ALTER TABLE reviews
+  MODIFY moderation_reason TEXT NULL,
+  MODIFY hidden_reason TEXT NULL;
+
+ALTER TABLE review_moderation_logs
+  MODIFY moderation_reason TEXT NULL,
+  MODIFY raw_response LONGTEXT NULL;
+
+ALTER TABLE review_moderation_logs
+  MODIFY moderation_reason TEXT NULL,
+  MODIFY raw_response LONGTEXT NULL;
+  
+ALTER TABLE review_moderation_logs
+
+CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+ALTER TABLE reviews
+
+CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

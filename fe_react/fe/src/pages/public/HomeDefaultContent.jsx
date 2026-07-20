@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getPublicActivities } from '../../services/activityService';
 import { getPublicDestinations, getPublicHomestays } from '../../services/homestayService';
@@ -11,7 +11,7 @@ const ACTIVITY_PAGE_SIZE = 3;
 function normalizeText(value) {
   return String(value || '')
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .trim();
 }
@@ -128,7 +128,12 @@ export default function HomeDefaultContent({ setHasSearched, favorites, toggleFa
 
   const searchActivityHomestays = (event, activity) => {
     event.stopPropagation();
-    goToSearch(activity?.province || '');
+    navigate('/activities', {
+      state: {
+        activityId: activity?.id,
+        scrollToNearby: true,
+      },
+    });
   };
 
   return (

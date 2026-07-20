@@ -186,11 +186,11 @@ export default function Favorites({ favorites = [], toggleFavorite }) {
             </div>
           )}
 
-          {/* {!isLoggedIn && favorites.length > 0 && (
+          {!isLoggedIn && favorites.length > 0 && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold text-amber-800">
               Danh sách này đang được lưu tạm thời trên trình duyệt. Đăng nhập để lưu vào tài khoản của bạn.
             </div>
-          )} */}
+          )}
 
           {isLoading ? (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">

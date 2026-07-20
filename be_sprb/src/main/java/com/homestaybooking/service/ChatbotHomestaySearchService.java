@@ -1,37 +1,30 @@
 package com.homestaybooking.service;
 
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
-import jakarta.persistence.Query;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
+import java.text.Normalizer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
+
 public class ChatbotHomestaySearchService {
-
-    @PersistenceContext
-    private EntityManager entityManager;
-
-   
 
     private String extractProvince(String message) {
         String text = normalize(message);
 
-        if (text.contains("da lat") || text.contains("lam dong")) return "Lâm Đồng";
-        if (text.contains("can tho")) return "Cần Thơ";
-        if (text.contains("da nang")) return "Đà Nẵng";
-        if (text.contains("hoi an") || text.contains("quang nam")) return "Quảng Nam";
-        if (text.contains("ha noi")) return "Hà Nội";
-        if (text.contains("nha trang") || text.contains("khanh hoa")) return "Khánh Hòa";
-        if (text.contains("phu quoc") || text.contains("kien giang")) return "Kiên Giang";
-        if (text.contains("hue") || text.contains("thua thien hue")) return "Thừa Thiên Huế";
-        if (text.contains("ha giang")) return "Hà Giang";
-        if (text.contains("ha long") || text.contains("quang ninh")) return "Quảng Ninh";
+        if (text.contains("da lat") || text.contains("lam dong")) return "\u0110\u00e0 L\u1ea1t";
+        if (text.contains("can tho")) return "C\u1ea7n Th\u01a1";
+        if (text.contains("da nang")) return "\u0110\u00e0 N\u1eb5ng";
+        if (text.contains("hoi an") || text.contains("quang nam")) return "Qu\u1ea3ng Nam";
+        if (text.contains("ha noi")) return "H\u00e0 N\u1ed9i";
+        if (text.contains("nha trang") || text.contains("khanh hoa")) return "Kh\u00e1nh H\u00f2a";
+        if (text.contains("phu quoc") || text.contains("kien giang")) return "Ki\u00ean Giang";
+        if (text.contains("hue") || text.contains("thua thien hue")) return "Th\u1eeba Thi\u00ean Hu\u1ebf";
+        if (text.contains("ha giang")) return "H\u00e0 Giang";
+        if (text.contains("ha long") || text.contains("quang ninh")) return "Qu\u1ea3ng Ninh";
+        if (text.contains("vung tau")) return "B\u00e0 R\u1ecba - V\u0169ng T\u00e0u";
 
         return null;
     }
@@ -72,16 +65,9 @@ public class ChatbotHomestaySearchService {
 
     private String normalize(String input) {
         if (input == null) return "";
-        String text = input.toLowerCase();
-        text = text.replace("đ", "d");
-
-        text = text.replaceAll("[áàảãạăắằẳẵặâấầẩẫậ]", "a");
-        text = text.replaceAll("[éèẻẽẹêếềểễệ]", "e");
-        text = text.replaceAll("[íìỉĩị]", "i");
-        text = text.replaceAll("[óòỏõọôốồổỗộơớờởỡợ]", "o");
-        text = text.replaceAll("[úùủũụưứừửữự]", "u");
-        text = text.replaceAll("[ýỳỷỹỵ]", "y");
-
-        return text;
+        return Normalizer.normalize(input.toLowerCase(), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .replace((char) 273, 'd');
     }
+
 }

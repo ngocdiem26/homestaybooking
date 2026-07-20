@@ -17,5 +17,7 @@ public class AuthResponse {
 
     private String roleName;
 
+    private String avatar;
+
     private String token;
 }

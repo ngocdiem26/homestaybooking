@@ -1,49 +1,92 @@
-export default function ProfileDashboard({ userInfo, fileInputRef, handleAvatarChange, setCurrentView, setIsEditing, mySchedulesCount }) {
+﻿import CustomerTierOverview, { CustomerTierSummary, useCustomerTierData } from './CustomerTierOverview';
+
+function MenuCard({ title, items }) {
   return (
-    <div className="space-y-10 animate-fade-in text-left">
-      {/* Banner chào đón phong cách Booking */}
-      <section className="bg-[#202c3c] text-white pt-14 pb-20 px-6 md:px-12 relative overflow-hidden rounded-b-[32px]">
-        <div className="max-w-6xl mx-auto flex items-center space-x-6 relative z-10">
-          <div className="relative w-20 h-20 md:w-24 md:h-24 shrink-0">
-            <div className="w-full h-full bg-[#2C3E2B] rounded-full flex items-center justify-center text-3xl font-bold border-4 border-white/20 overflow-hidden shadow-xl">
-              {userInfo.avatar ? <img src={userInfo.avatar} alt="Avatar" className="w-full h-full object-cover" /> : userInfo.name.charAt(0)}
+    <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+      <h3 className="border-b border-gray-100 pb-3 text-base font-black text-[#2C1E15]">{title}</h3>
+      <div className="mt-3 space-y-1 text-sm font-bold">
+        {items.map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            onClick={item.onClick}
+            className="group flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-gray-700 transition hover:bg-[#F4F1EA] hover:text-[#2C3E2B]"
+          >
+            <span>{item.label}</span>
+            <span className="text-gray-400 transition group-hover:translate-x-1 group-hover:text-[#6E473B]">›</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function ProfileDashboard({ userInfo, fileInputRef, handleAvatarChange, setCurrentView, setIsEditing, mySchedulesCount }) {
+  const { tier, tiers, isLoading, errorMessage } = useCustomerTierData();
+
+  const menuGroups = [
+    {
+      title: 'Quản lý tài khoản',
+      items: [
+        { label: 'Thông tin cá nhân', onClick: () => { setCurrentView('info'); setIsEditing(false); } },
+        { label: 'Đơn đặt phòng của bạn', onClick: () => setCurrentView('bookings') },
+      ],
+    },
+    {
+      title: 'Thông tin thanh toán',
+      items: [
+        { label: 'Phương thức thanh toán', onClick: () => setCurrentView('payment') },
+        { label: 'Giao dịch của bạn', onClick: () => setCurrentView('transactions') },
+      ],
+    },
+    {
+      title: 'Hoạt động du lịch',
+      items: [
+        { label: 'Tự tạo lịch trình riêng (' + mySchedulesCount + ')', onClick: () => setCurrentView('schedule') },
+        { label: 'Đánh giá của tôi', onClick: () => setCurrentView('reviews') },
+      ],
+    },
+  ];
+
+  return (
+    <div className="space-y-10 text-left animate-fade-in">
+      <section className="relative overflow-hidden rounded-b-[32px] bg-[#202c3c] px-6 pb-10 pt-10 text-white shadow-lg md:px-12 md:pb-12">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(240,183,122,0.18),transparent_28%),radial-gradient(circle_at_80%_10%,rgba(255,255,255,0.12),transparent_30%)]" />
+        <div className="relative z-10 mx-auto max-w-6xl">
+          <div className="flex items-center gap-4">
+            <div className="relative h-14 w-14 shrink-0 md:h-16 md:w-16">
+              <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full border-4 border-white/20 bg-[#2C3E2B] text-xl font-black shadow-xl">
+                {userInfo.avatar ? <img src={userInfo.avatar} alt="Avatar" className="h-full w-full object-cover" /> : userInfo.name.charAt(0)}
+              </div>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current.click()}
+                className="absolute -bottom-1 -right-1 rounded-full border-2 border-[#202c3c] bg-[#6E473B] px-2 py-1 text-[10px] font-black text-white shadow-md transition hover:scale-105"
+              >
+                Ảnh
+              </button>
+              <input type="file" ref={fileInputRef} onChange={handleAvatarChange} accept="image/*" className="hidden" />
             </div>
-            <button onClick={() => fileInputRef.current.click()} className="absolute bottom-0 right-0 bg-[#6E473B] text-white p-2 rounded-full border-2 border-[#202c3c] text-xs shadow-md hover:scale-105 transition cursor-pointer">📸</button>
-            <input type="file" ref={fileInputRef} onChange={handleAvatarChange} accept="image/*" className="hidden" />
+            <div>
+              <p className="text-xs font-black uppercase text-[#F0B77A]">Tài khoản Cozygo</p>
+              <h1 className="mt-1 font-serif text-2xl font-black md:text-3xl">Chào, {userInfo.name}</h1>
+              <p className="mt-1 max-w-2xl text-xs font-semibold leading-5 text-gray-300 md:text-sm">
+                Quản lý hồ sơ, hành trình lưu trú và quyền lợi thành viên của bạn tại Cozygo.
+              </p>
+            </div>
           </div>
-          <div className="space-y-1">
-            <h1 className="font-classic text-2xl md:text-3xl font-bold font-serif">Chào, {userInfo.name}</h1>
-            <p className="text-xs md:text-sm text-gray-300 font-medium">Cài đặt tài khoản và quản lý hành trình du lịch Mộc Lâm Cozygo của bạn</p>
+
+          <div className="mt-7">
+            <CustomerTierSummary tier={tier} userInfo={userInfo} isLoading={isLoading} errorMessage={errorMessage} />
           </div>
         </div>
       </section>
 
-      {/* Grid Menu lưới điều khiển */}
-      <section className="max-w-6xl mx-auto px-4 md:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-sm space-y-2">
-            <h3 className="text-base font-bold text-[#2C1E15] border-b border-gray-100 pb-2">Quản lý tài khoản</h3>
-            <div className="space-y-1 text-sm font-semibold">
-              <button onClick={() => { setCurrentView('info'); setIsEditing(false); }} className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-[#F4F1EA]/50 text-gray-700 transition group"><span>👤 Thông tin cá nhân</span><span className="text-gray-400 group-hover:text-[#6E473B]">❯</span></button>
-              <button onClick={() => setCurrentView('bookings')} className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-[#F4F1EA]/50 text-gray-700 transition group"><span>🧳 Đơn đặt phòng của bạn</span><span className="text-gray-400 group-hover:text-[#6E473B]">❯</span></button>
-            </div>
-          </div>
+      <CustomerTierOverview tiers={tiers} isLoading={isLoading} errorMessage={errorMessage} />
 
-          <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-sm space-y-2">
-            <h3 className="text-base font-bold text-[#2C1E15] border-b border-gray-100 pb-2">Thông tin thanh toán</h3>
-            <div className="space-y-1 text-sm font-semibold">
-              <button onClick={() => setCurrentView('payment')} className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-[#F4F1EA]/50 text-gray-700 transition group"><span>💳 Phương thức thanh toán</span><span className="text-gray-400 group-hover:text-[#6E473B]">❯</span></button>
-              <button onClick={() => setCurrentView('transactions')} className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-[#F4F1EA]/50 text-gray-700 transition group"><span>📊 Giao dịch của bạn</span><span className="text-gray-400 group-hover:text-[#6E473B]">❯</span></button>
-            </div>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-sm space-y-2">
-            <h3 className="text-base font-bold text-[#2C1E15] border-b border-gray-100 pb-2">Hoạt động du lịch</h3>
-            <div className="space-y-1 text-sm font-semibold">
-              <button onClick={() => setCurrentView('schedule')} className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-[#F4F1EA]/50 text-gray-700 transition group"><span>🗺️ Tự tạo lịch trình riêng ({mySchedulesCount})</span><span className="text-gray-400 group-hover:text-[#6E473B]">❯</span></button>
-              <button onClick={() => setCurrentView('reviews')} className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-[#F4F1EA]/50 text-gray-700 transition group"><span>💬 Đánh giá của tôi</span><span className="text-gray-400 group-hover:text-[#6E473B]">❯</span></button>
-            </div>
-          </div>
+      <section className="mx-auto max-w-6xl px-4 md:px-8">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          {menuGroups.map((group) => <MenuCard key={group.title} title={group.title} items={group.items} />)}
         </div>
       </section>
     </div>

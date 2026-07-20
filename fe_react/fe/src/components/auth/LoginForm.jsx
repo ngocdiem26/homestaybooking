@@ -162,9 +162,7 @@ export default function LoginForm({
               />
               Ghi nhớ tôi
             </label>
-            <a href="#" className="text-[#6E473B] hover:text-[#23150d] hover:underline font-semibold">
-              Quên mật khẩu?
-            </a>
+           
           </div>
 
           <button

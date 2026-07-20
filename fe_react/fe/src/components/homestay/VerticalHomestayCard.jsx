@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+﻿import { useNavigate } from 'react-router-dom';
 import { HiStar, HiMapPin } from 'react-icons/hi2';
 import { calculateNights, getStoredSearchState } from '../../services/searchState';
 
@@ -31,6 +31,7 @@ export default function VerticalHomestayCard({ item, isFav, onFavToggle }) {
   const score = item.rating || item.score || '0.0';
   const reviewCount = Number(item.reviewCount ?? item.reviewsCount ?? 0);
   const { nights, totalPrice, oldTotalPrice } = getPriceSummary(item);
+  const availabilityAlert = item.unavailable || item.dateRangeBooked ? (item.availabilityMessage || 'Khoảng thời gian này đã có người đặt') : '';
 
   return (
     <div onClick={openDetail} className="bg-white p-3.5 cursor-pointer rounded-2xl border border-[#6E473B]/5 shadow-sm hover:shadow-2xl hover:-translate-y-0.5 group relative overflow-hidden text-left transition-all duration-300 flex flex-col h-full font-sans">
@@ -65,6 +66,12 @@ export default function VerticalHomestayCard({ item, isFav, onFavToggle }) {
           
         </div>
         </div>
+
+        {availabilityAlert && (
+          <p className="mt-3 w-fit rounded-lg border border-red-100 bg-red-50 px-2 py-1 text-[10px] font-black text-red-700">
+            ⚠ {availabilityAlert}
+          </p>
+        )}
 
         <div className="mt-4 pt-2.5 border-t border-gray-100 flex items-center justify-between gap-3">
           <div className="flex flex-col text-left">

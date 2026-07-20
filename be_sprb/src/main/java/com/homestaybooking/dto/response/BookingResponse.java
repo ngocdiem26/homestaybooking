@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 @Builder
 public class BookingResponse {
     private Integer bookingId;
+    private Integer paymentId;
     private String bookingCode;
     private String bookingStatus;
     private String paymentMethod;
@@ -17,6 +18,7 @@ public class BookingResponse {
     private BigDecimal amount;
     private String transactionCode;
     private String qrCodeUrl;
+    private String paymentUrl;
     private LocalDateTime expiresAt;
     private BookingPriceQuoteResponse quote;
 }

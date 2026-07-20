@@ -62,6 +62,7 @@ export default function HorizontalHomestayCard({ item, isFav, onFavToggle }) {
   const facilitySummary = getFacilitySummary(item);
   const guestSummary = getGuestSummary(item);
   const discountAlert = getDiscountAlert(item);
+  const availabilityAlert = item.unavailable || item.dateRangeBooked ? (item.availabilityMessage || 'Khoảng thời gian này đã có người đặt') : '';
 
   return (
     <div
@@ -99,10 +100,13 @@ export default function HorizontalHomestayCard({ item, isFav, onFavToggle }) {
             <p className="font-semibold text-gray-500 leading-5">{guestSummary}</p>
           </div>
         </div>
-
-        {discountAlert && (
+        {availabilityAlert ? (
+          <p className="text-[10px] text-red-700 font-black bg-red-50 border border-red-100 inline-block px-2 py-1 rounded mt-2 w-fit">
+            ⚠ {availabilityAlert}
+          </p>
+        ) : discountAlert && (
           <p className="text-[10px] text-red-600 font-bold bg-red-50 inline-block px-2 py-0.5 rounded mt-2 w-fit">
-            ⚠️ {discountAlert}
+            ⚠ {discountAlert}
           </p>
         )}
       </div>

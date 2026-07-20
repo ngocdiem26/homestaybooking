@@ -20,7 +20,7 @@ const quickSuggestions = [
   "Gợi ý địa điểm du lịch đẹp",
   "Có hoạt động trải nghiệm nào ở Đà Lạt không?",
   "Hướng dẫn đặt phòng",
-  "Thanh toán SePay là gì?",
+  "Thanh toán VNPay là gì?",
   "Tôi muốn khiếu nại booking",
 ];
 
@@ -69,7 +69,7 @@ function normalizeText(value) {
   return String(value || "")
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .replace(/đ/g, "d");
 }
 
@@ -81,14 +81,14 @@ function buildLocalFallbackResponse(messageText) {
       answer: "Hiện tôi chưa kết nối được backend để lấy danh sách mã mới nhất. Khi backend chạy, tôi sẽ hiển thị mã đang hoạt động từ database. Bạn có thể nhập mã ở bước xác nhận đặt phòng; nếu mã không đủ điều kiện, hệ thống sẽ báo ngay.",
       intent: "PROMOTION_LOOKUP",
       dataType: "TEXT",
-      suggestions: ["Hướng dẫn đặt phòng", "Tìm homestay ở Đà Lạt", "Thanh toán SePay là gì?"],
+      suggestions: ["Hướng dẫn đặt phòng", "Tìm homestay ở Đà Lạt", "Thanh toán VNPay là gì?"],
     };
   }
 
-  if (text.includes("sepay") || text.includes("thanh toan") || text.includes("qr") || text.includes("chuyen khoan")) {
+  if (text.includes("vnpay") || text.includes("thanh toan") || text.includes("qr") || text.includes("chuyen khoan")) {
     return {
-      answer: "SePay là hình thức thanh toán chuyển khoản/QR. Khi đặt phòng, bạn chọn phương thức SePay, hệ thống tạo đơn và thông tin thanh toán. Sau khi thanh toán được ghi nhận, đơn sẽ chờ chủ homestay xác nhận.",
-      intent: "SEPAY_GUIDE",
+      answer: "VNPay là hình thức thanh toán VNPay. Khi đặt phòng, bạn chọn phương thức VNPay, hệ thống tạo đơn và thông tin thanh toán. Sau khi thanh toán được ghi nhận, đơn sẽ chờ chủ homestay xác nhận.",
+      intent: "VNPAY_GUIDE",
       dataType: "TEXT",
       suggestions: ["Thanh toán tại chỗ là gì?", "Hướng dẫn đặt phòng", "Tôi muốn khiếu nại booking"],
     };
@@ -108,7 +108,7 @@ function buildLocalFallbackResponse(messageText) {
       answer: "Quy trình đặt phòng gồm: chọn homestay, chọn ngày nhận/trả phòng và số khách, kiểm tra giá, chọn dịch vụ thêm/mã khuyến mãi, chọn phương thức thanh toán, rồi gửi yêu cầu đặt phòng. Chủ homestay sẽ xác nhận đơn.",
       intent: "BOOKING_GUIDE",
       dataType: "TEXT",
-      suggestions: ["Tìm homestay ở Đà Lạt", "Có mã giảm giá nào không?", "Thanh toán SePay là gì?"],
+      suggestions: ["Tìm homestay ở Đà Lạt", "Có mã giảm giá nào không?", "Thanh toán VNPay là gì?"],
     };
   }
 
@@ -122,7 +122,7 @@ function buildLocalFallbackResponse(messageText) {
   }
 
   return {
-    answer: "Hiện chatbot chưa kết nối được backend. Tôi vẫn có thể hướng dẫn nhanh về đặt phòng, thanh toán SePay, mã khuyến mãi và khiếu nại. Nếu muốn xem dữ liệu thật từ database, hãy chạy backend port 8080.",
+    answer: "Hiện chatbot chưa kết nối được backend. Tôi vẫn có thể hướng dẫn nhanh về đặt phòng, thanh toán VNPay, mã khuyến mãi và khiếu nại. Nếu muốn xem dữ liệu thật từ database, hãy chạy backend port 8080.",
     intent: "LOCAL_FALLBACK",
     dataType: "TEXT",
     suggestions: ["Hướng dẫn đặt phòng", "Có mã giảm giá nào không?", "Tôi muốn khiếu nại booking"],

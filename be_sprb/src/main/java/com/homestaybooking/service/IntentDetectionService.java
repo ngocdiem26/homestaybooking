@@ -2,6 +2,8 @@ package com.homestaybooking.service;
 
 import org.springframework.stereotype.Service;
 
+import java.text.Normalizer;
+
 @Service
 public class IntentDetectionService {
 
@@ -30,8 +32,8 @@ public class IntentDetectionService {
             return "BOOKING_STATUS";
         }
 
-        if (containsAny(text, "sepay", "thanh toan online", "chuyen khoan", "qr")) {
-            return "SEPAY_GUIDE";
+        if (containsAny(text, "vnpay", "thanh toan online", "chuyen khoan", "qr")) {
+            return "VNPAY_GUIDE";
         }
 
         if (containsAny(text, "thanh toan tai cho", "tra tien tai cho", "tra tai homestay")) {
@@ -42,8 +44,24 @@ public class IntentDetectionService {
             return "BOOKING_GUIDE";
         }
 
-        if (containsAny(text, "khieu nai", "bao cao", "tranh chap", "lua dao", "chu homestay")) {
+        if (containsAny(text, "khieu nai", "bao cao", "tranh chap", "lua dao", "phan anh", "chu homestay")) {
             return "COMPLAINT_GUIDE";
+        }
+
+        if (containsAny(text, "huy don", "huy booking", "huy dat phong", "hoan tien", "chinh sach huy")) {
+            return "CANCELLATION_GUIDE";
+        }
+
+        if (containsAny(text, "danh gia", "review", "nhan xet", "viet danh gia", "sao")) {
+            return "REVIEW_GUIDE";
+        }
+
+        if (containsAny(text, "lam chu homestay", "dang ky host", "chu nha", "hop tac", "dang homestay")) {
+            return "HOST_REGISTER_GUIDE";
+        }
+
+        if (containsAny(text, "lien he", "ho tro", "tong dai", "email", "admin")) {
+            return "CONTACT_GUIDE";
         }
 
         return "RAG_GENERAL";
@@ -51,15 +69,9 @@ public class IntentDetectionService {
 
     public String normalize(String input) {
         if (input == null) return "";
-        String text = input.toLowerCase();
-        text = text.replace("đ", "d");
-        text = text.replaceAll("[áàảãạăắằẳẵặâấầẩẫậ]", "a");
-        text = text.replaceAll("[éèẻẽẹêếềểễệ]", "e");
-        text = text.replaceAll("[íìỉĩị]", "i");
-        text = text.replaceAll("[óòỏõọôốồổỗộơớờởỡợ]", "o");
-        text = text.replaceAll("[úùủũụưứừửữự]", "u");
-        text = text.replaceAll("[ýỳỷỹỵ]", "y");
-        return text;
+        return Normalizer.normalize(input.toLowerCase(), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .replace((char) 273, 'd');
     }
 
     private boolean containsAny(String text, String... keywords) {

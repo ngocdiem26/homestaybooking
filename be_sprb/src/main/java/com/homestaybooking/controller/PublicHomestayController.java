@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/public")
@@ -32,16 +33,37 @@ public class PublicHomestayController {
         return publicHomestayService.getActivities();
     }
 
+    @GetMapping("/activities/{activityId}/nearby-homestays")
+    public List<PublicHomestayResponse> getNearbyHomestaysByActivity(
+            @PathVariable Integer activityId,
+            @RequestParam(required = false, defaultValue = "8") Integer limit,
+            @RequestParam(required = false) BigDecimal radiusKm
+    ) {
+        return publicHomestayService.getNearbyHomestaysByActivity(activityId, limit, radiusKm);
+    }
+
     @GetMapping("/homestays/{homeId}")
     public PublicHomestayResponse getHomestayDetail(@PathVariable Integer homeId) {
         return publicHomestayService.getHomestayDetail(homeId);
     }
+
+    @GetMapping("/homestays/{homeId}/availability")
+    public Map<String, Object> checkHomestayAvailability(
+            @PathVariable Integer homeId,
+            @RequestParam String checkIn,
+            @RequestParam String checkOut
+    ) {
+        return publicHomestayService.checkAvailability(homeId, checkIn, checkOut);
+    }
+
     @GetMapping("/homestays")
     public List<PublicHomestayResponse> getHomestays(
             @RequestParam(required = false) String destination,
             @RequestParam(required = false) BigDecimal maxPrice,
             @RequestParam(required = false) String amenities,
             @RequestParam(required = false) String services,
+            @RequestParam(required = false) String checkIn,
+            @RequestParam(required = false) String checkOut,
             @RequestParam(required = false, defaultValue = "recommended") String sort
     ) {
         return publicHomestayService.getHomestays(
@@ -49,6 +71,8 @@ public class PublicHomestayController {
                 maxPrice,
                 splitValues(amenities),
                 splitValues(services),
+                checkIn,
+                checkOut,
                 sort
         );
     }

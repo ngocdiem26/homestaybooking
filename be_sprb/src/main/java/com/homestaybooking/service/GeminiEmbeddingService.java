@@ -15,7 +15,7 @@ import java.nio.charset.StandardCharsets;
 @Service
 public class GeminiEmbeddingService {
 
-    @Value("${gemini.api.key:}")
+    @Value("${gemini.embedding.api.key:}")
     private String apiKey;
 
     @Value("${gemini.embedding.model:gemini-embedding-001}")

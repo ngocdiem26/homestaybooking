@@ -1,4 +1,5 @@
 ﻿import { apiRequest } from '../api/axiosClient';
+import { mapPublicHomestay } from './homestayService';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
@@ -38,4 +39,18 @@ export function mapPublicActivity(activity = {}) {
 export async function getPublicActivities() {
   const data = await apiRequest('/api/public/activities');
   return data.map(mapPublicActivity);
+}
+
+
+export async function getNearbyHomestaysByActivity(activityId, options = {}) {
+  if (!activityId) return [];
+  const normalizedOptions = typeof options === 'number' ? { limit: options } : options;
+  const query = new URLSearchParams({
+    limit: String(normalizedOptions.limit || 8),
+  });
+  if (normalizedOptions.radiusKm) {
+    query.set('radiusKm', String(normalizedOptions.radiusKm));
+  }
+  const data = await apiRequest(`/api/public/activities/${activityId}/nearby-homestays?${query.toString()}`);
+  return data.map(mapPublicHomestay);
 }
