@@ -15,6 +15,7 @@ public class PublicDestinationResponse {
 
     private Integer destinationId;
     private String provinceName;
+    private String city;
     private String displayName;
     private String slug;
     private String description;

@@ -1,12 +1,90 @@
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import Logo from '../common/Logo';
 import AuthToast from './AuthToast';
 
+const SHOW_GOOGLE_LOGIN = false;
+
+function GoogleSignInButton({ clientId, disabled, onCredential }) {
+  const buttonRef = useRef(null);
+
+  useEffect(() => {
+    if (!clientId || !buttonRef.current || !onCredential) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const renderButton = () => {
+      if (cancelled || !buttonRef.current || !window.google?.accounts?.id) {
+        return;
+      }
+
+      buttonRef.current.innerHTML = '';
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: (response) => onCredential(response?.credential),
+        ux_mode: 'popup',
+      });
+      window.google.accounts.id.renderButton(buttonRef.current, {
+        theme: 'outline',
+        size: 'large',
+        shape: 'pill',
+        text: 'signin_with',
+        width: buttonRef.current.offsetWidth || 320,
+      });
+    };
+
+    if (window.google?.accounts?.id) {
+      renderButton();
+    } else {
+      const existingScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+
+      if (existingScript) {
+        existingScript.addEventListener('load', renderButton, { once: true });
+      } else {
+        const script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        script.onload = renderButton;
+        document.body.appendChild(script);
+      }
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId, onCredential]);
+
+  if (!clientId) {
+    return (
+      <button
+        type="button"
+        disabled
+        className="w-full rounded-xl border border-gray-200 bg-gray-100 px-4 py-3 text-xs font-bold text-gray-400"
+      >
+        Chưa cấu hình Google Client ID
+      </button>
+    );
+  }
+
+  return (
+    <div
+      ref={buttonRef}
+      className={disabled ? 'pointer-events-none opacity-60' : ''}
+      aria-disabled={disabled}
+    />
+  );
+}
+
 export default function LoginForm({
   form,
+  googleClientId,
   isSubmitting,
   showPassword,
   toast,
+  onGoogleCredential,
   onSubmit,
   onTogglePassword,
   onUpdateField,
@@ -94,9 +172,24 @@ export default function LoginForm({
             disabled={isSubmitting}
             className="w-full bg-[#2C3E2B] hover:bg-[#1a291b] disabled:bg-gray-400 disabled:cursor-not-allowed text-[#F4F1EA] font-semibold py-3 rounded-xl shadow-md hover:shadow-lg transform active:scale-[0.98] transition-all duration-200 text-xs mt-2 flex items-center justify-center space-x-2"
           >
-            <span>{isSubmitting ? 'Đang đăng nhập...' : 'Trở Về Nhà Thôi'}</span>
-            <i className="fa-solid fa-chevron-right text-[10px]"></i>
+            <span>{isSubmitting ? 'ĐANG ĐĂNG NHẬP...' : 'ĐĂNG NHẬP'}</span>
           </button>
+
+          {SHOW_GOOGLE_LOGIN && (
+            <>
+              <div className="flex items-center gap-3 py-1">
+                <span className="h-px flex-1 bg-gray-200"></span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">hoặc</span>
+                <span className="h-px flex-1 bg-gray-200"></span>
+              </div>
+
+              <GoogleSignInButton
+                clientId={googleClientId}
+                disabled={isSubmitting}
+                onCredential={onGoogleCredential}
+              />
+            </>
+          )}
         </form>
 
         <p className="text-center text-[11px] text-gray-400 mt-5">

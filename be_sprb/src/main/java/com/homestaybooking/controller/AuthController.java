@@ -1,6 +1,7 @@
 package com.homestaybooking.controller;
 
 import com.homestaybooking.dto.request.LoginRequest;
+import com.homestaybooking.dto.request.GoogleLoginRequest;
 import com.homestaybooking.dto.request.RegisterRequest;
 import com.homestaybooking.dto.response.AuthResponse;
 import com.homestaybooking.service.AuthService;
@@ -29,5 +30,10 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    @PostMapping("/google")
+    public ResponseEntity<AuthResponse> loginWithGoogle(@RequestBody GoogleLoginRequest request) {
+        return ResponseEntity.ok(authService.loginWithGoogle(request));
     }
 }

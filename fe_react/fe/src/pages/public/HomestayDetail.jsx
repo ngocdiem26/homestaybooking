@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   HiArrowLeft,
   HiCalendarDays,
+  HiChatBubbleLeftRight,
   HiCheckCircle,
   HiHomeModern,
   HiChevronLeft,
@@ -12,11 +13,17 @@ import {
   HiShieldCheck,
   HiXMark,
   HiStar,
+  HiHeart,
   HiUsers,
 } from 'react-icons/hi2';
 import UserLayout from '../../layouts/UserLayout';
+import ModalPortal from '../../components/common/ModalPortal';
+import BookingCheckoutModal from '../../components/booking/BookingCheckoutModal';
+import { useAuth } from '../../hooks/useAuth';
 import HomestaySearchForm from '../../components/homestay/HomestaySearchForm';
 import { getPublicHomestay } from '../../services/homestayService';
+import { getHomestayReviews } from '../../services/reviewService';
+import { buildSearchParams, calculateNights, getStoredSearchState, saveSearchState, SEARCH_STATE_EVENT } from '../../services/searchState';
 
 const fallbackImage = 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?q=80&w=1400&auto=format&fit=crop';
 
@@ -27,14 +34,6 @@ function formatCurrency(value) {
 function formatTime(value, fallback) {
   if (!value) return fallback;
   return String(value).slice(0, 5);
-}
-
-function buildSearchParams(search = {}) {
-  const params = new URLSearchParams();
-  Object.entries(search).forEach(([key, value]) => {
-    if (value) params.set(key, value);
-  });
-  return params;
 }
 
 function DetailStat({ icon: Icon, label, value }) {
@@ -96,11 +95,30 @@ function GalleryModal({ images, homestayName, onClose, onOpenLightbox }) {
   );
 }
 
+function LoginRequiredModal({ onClose, onLogin, onRegister }) {
+  return (
+    <ModalPortal>
+      <div className="w-full max-w-md rounded-[28px] bg-white p-6 text-center shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#F4F1EA] text-2xl font-black text-[#6E473B]">C</div>
+        <h3 className="mt-4 font-classic text-3xl font-black text-[#2C1E15]">Đăng nhập để đặt phòng</h3>
+        <p className="mt-2 text-sm font-semibold text-gray-500">Bạn cần đăng nhập để Cozygo lưu booking và gửi thông tin xác nhận đúng tài khoản.</p>
+        <div className="mt-6 flex gap-3">
+          <button type="button" onClick={onClose} className="h-11 flex-1 rounded-2xl bg-[#F4F1EA] text-sm font-black text-[#2C1E15]">Để sau</button>
+          <button type="button" onClick={onLogin} className="h-11 flex-1 rounded-2xl bg-[#2C3E2B] text-sm font-black text-white shadow">Đăng nhập</button>
+        </div>
+        <button type="button" onClick={onRegister} className="mt-3 text-sm font-black text-[#6E473B] hover:underline">Chưa có tài khoản? Đăng ký</button>
+      </div>
+    </ModalPortal>
+  );
+}
+
 function LightboxModal({ images, currentIndex, setCurrentIndex, homestayName, onClose }) {
   const image = images[currentIndex] || images[0] || fallbackImage;
   const goTo = (direction) => {
     setCurrentIndex((current) => (current + direction + images.length) % images.length);
   };
+
+  
 
   return (
     <div className="fixed inset-0 z-[10000] bg-black/95 text-white">
@@ -161,18 +179,373 @@ function LightboxModal({ images, currentIndex, setCurrentIndex, homestayName, on
   );
 }
 
-export default function HomestayDetail() {
+function ReviewReplyCollapse({ review }) {
+  const [open, setOpen] = useState(false);
+  if (!review.replyContent) return null;
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="inline-flex items-center gap-1.5 rounded-full bg-[#2C3E2B]/10 px-3 py-1.5 text-[11px] font-black text-[#2C3E2B] transition hover:bg-[#2C3E2B] hover:text-white"
+      >
+        <HiChatBubbleLeftRight className="h-3.5 w-3.5" />
+        1 phản hồi {open ? '▲' : '▼'}
+      </button>
+      {open && (
+        <div className="mt-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs font-semibold leading-6 text-gray-600">
+          <p className="font-black text-[#2C3E2B]">Phản hồi của chủ homestay</p>
+          <p className="mt-1 whitespace-pre-line">{review.replyContent}</p>
+          <p className="mt-2 text-[10px] font-bold text-gray-400">{formatDateTime(review.replyUpdatedAt || review.replyCreatedAt)}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReviewPanel({ reviews, ratingAverage, ratingCount }) {
+  const [selectedRating, setSelectedRating] = useState('all');
+  const [visibleCount, setVisibleCount] = useState(3);
+  const [ratingDropdownOpen, setRatingDropdownOpen] = useState(false);
+  const ratingDropdownRef = useRef(null);
+
+  const text = {
+    title: 'Đánh giá từ khách đã lưu trú',
+    count: 'đánh giá',
+    empty: 'Homestay này chưa có đánh giá hiển thị.',
+    emptyFilter: 'Chưa có đánh giá phù hợp với số sao đã chọn.',
+    guest: 'Khách Cozygo',
+  };
+
+  const visibleReviews = reviews.filter((review) => review.status !== 'HIDDEN');
+
+  const computedAverage = visibleReviews.length
+    ? visibleReviews.reduce((total, review) => total + Number(review.rating || 0), 0) / visibleReviews.length
+    : 0;
+
+  const average = Number(ratingAverage || computedAverage || 0).toFixed(1);
+  const totalCount = Number(ratingCount || visibleReviews.length || 0);
+
+  const ratingCounts = [5, 4, 3, 2, 1].reduce((result, star) => {
+    result[star] = visibleReviews.filter(
+      (review) => Math.round(Number(review.rating || 0)) === star
+    ).length;
+    return result;
+  }, {});
+
+  const ratingOptions = [
+    {
+      value: 'all',
+      label: 'Tất cả đánh giá',
+      count: visibleReviews.length,
+      star: null,
+    },
+    ...[5, 4, 3, 2, 1].map((star) => ({
+      value: String(star),
+      label: `${star} sao`,
+      count: ratingCounts[star] || 0,
+      star,
+    })),
+  ];
+
+  const selectedRatingOption =
+    ratingOptions.find((option) => String(option.value) === String(selectedRating)) ||
+    ratingOptions[0];
+
+  const filteredReviews =
+    selectedRating === 'all'
+      ? visibleReviews
+      : visibleReviews.filter(
+          (review) => Math.round(Number(review.rating || 0)) === Number(selectedRating)
+        );
+
+  const displayedReviews = filteredReviews.slice(0, visibleCount);
+  const hasMoreReviews = filteredReviews.length > displayedReviews.length;
+
+  const handleSelectRating = (value) => {
+    setSelectedRating(value);
+    setVisibleCount(3);
+    setRatingDropdownOpen(false);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        ratingDropdownRef.current &&
+        !ratingDropdownRef.current.contains(event.target)
+      ) {
+        setRatingDropdownOpen(false);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setRatingDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
+
+  return (
+    <section className="rounded-[28px] border border-[#6E473B]/10 bg-white p-6 shadow-sm md:p-8">
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+        <div>
+          <h3 className="font-classic text-2xl font-black">{text.title}</h3>
+          <p className="mt-1 text-sm font-semibold text-gray-500">
+            Lọc theo số sao để xem nhanh trải nghiệm của khách hàng.
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-amber-50 px-5 py-3 text-center text-amber-700 ring-1 ring-amber-100">
+          <div className="flex items-center justify-center gap-1 text-lg font-black">
+            <HiStar className="h-5 w-5" /> {average}/5
+          </div>
+          <p className="text-[11px] font-black uppercase tracking-wide">
+            {totalCount} {text.count}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-[28px] border border-[#6E473B]/10 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F8F1EA] text-lg text-[#A64D23] shadow-inner">
+              ★
+            </div>
+
+            <div>
+              <p className="text-sm font-black text-[#2C1E15]">
+                Bộ lọc đánh giá
+              </p>
+            </div>
+          </div>
+
+          <div ref={ratingDropdownRef} className="relative w-full sm:w-80">
+            <button
+              type="button"
+              onClick={() => setRatingDropdownOpen((current) => !current)}
+              className="flex h-12 w-full items-center justify-between rounded-[22px] border border-[#E7DDD4] bg-white px-4 text-left text-sm font-black text-[#2C3E2B] shadow-[0_8px_24px_rgba(44,30,21,0.06)] outline-none transition-all duration-200 hover:border-[#A64D23]/40 focus:border-[#A64D23] focus:ring-4 focus:ring-[#A64D23]/10"
+            >
+              <span className="flex min-w-0 items-center gap-2 truncate">
+                {selectedRatingOption.star ? (
+                  <>
+                    <span className="shrink-0 text-amber-400">
+                      {'★'.repeat(selectedRatingOption.star)}
+                    </span>
+                    <span className="truncate">
+                      {selectedRatingOption.star} sao ({selectedRatingOption.count})
+                    </span>
+                  </>
+                ) : (
+                  <span className="truncate">
+                    Tất cả đánh giá ({selectedRatingOption.count})
+                  </span>
+                )}
+              </span>
+
+              <span
+                className={`ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F8F1EA] text-[10px] font-black text-[#A64D23] transition-transform duration-200 ${
+                  ratingDropdownOpen ? 'rotate-180' : ''
+                }`}
+              >
+                ▼
+              </span>
+            </button>
+
+            {ratingDropdownOpen && (
+              <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-full overflow-hidden rounded-[24px] border border-[#E7DDD4] bg-white p-2 shadow-[0_18px_45px_rgba(44,30,21,0.16)]">
+                {ratingOptions.map((option) => {
+                  const isActive = String(selectedRating) === String(option.value);
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => handleSelectRating(option.value)}
+                      className={`flex w-full items-center justify-between rounded-2xl px-3.5 py-3 text-left text-sm font-bold transition-all ${
+                        isActive
+                          ? 'bg-[#2C3E2B] text-white shadow-sm'
+                          : 'bg-white text-[#2C1E15] hover:bg-[#F8F1EA] hover:text-[#A64D23]'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        {option.star ? (
+                          <>
+                            <span className="min-w-[76px] text-amber-400">
+                              {'★'.repeat(option.star)}
+                            </span>
+                            <span>{option.star} sao</span>
+                          </>
+                        ) : (
+                          <span>Tất cả đánh giá</span>
+                        )}
+                      </span>
+
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-black ${
+                          isActive
+                            ? 'bg-white/15 text-white'
+                            : 'bg-[#F8F6F0] text-gray-500'
+                        }`}
+                      >
+                        {option.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 space-y-4">
+        {displayedReviews.length ? (
+          displayedReviews.map((review) => (
+            <article
+              key={review.reviewId}
+              className="rounded-2xl border border-gray-200/80 bg-white p-5 shadow-sm"
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#2C3E2B] text-sm font-black text-white">
+                  {review.customerAvatar ? (
+                    <img
+                      src={review.customerAvatar}
+                      alt={review.customerName || text.guest}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    (review.customerName || 'K').charAt(0).toUpperCase()
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h4 className="font-black text-[#2C1E15]">
+                        {review.customerName || text.guest}
+                      </h4>
+                      <p className="text-[11px] font-semibold text-gray-400">
+                        {formatDateTime(review.createdAt)}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-0.5 text-amber-400">
+                      {Array.from({ length: 5 }).map((_, index) => (
+                        <HiStar
+                          key={index}
+                          className={
+                            'h-4 w-4 ' +
+                            (index < Number(review.rating || 0)
+                              ? 'text-amber-400'
+                              : 'text-gray-200')
+                          }
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <p className="mt-3 whitespace-pre-line rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm font-semibold leading-6 text-gray-600">
+                    {review.comment}
+                  </p>
+
+                  <ReviewReplyCollapse review={review} />
+                </div>
+              </div>
+            </article>
+          ))
+        ) : (
+          <div className="rounded-2xl border border-dashed border-gray-200 bg-[#F8F6F0] p-6 text-center text-sm font-bold text-gray-400">
+            {visibleReviews.length ? text.emptyFilter : text.empty}
+          </div>
+        )}
+      </div>
+
+      {hasMoreReviews ? (
+          <div className="mt-6 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setVisibleCount((current) => current + 3)}
+              className="inline-flex h-11 items-center justify-center rounded-full bg-[#2C3E2B] px-6 text-sm font-black text-white shadow-md transition hover:bg-[#223322]"
+            >
+              Xem thêm đánh giá
+            </button>
+          </div>
+        ) : (
+          displayedReviews.length > 0 && (
+            <div className="mt-6 flex justify-center">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#6E473B]/10 bg-[#F8F6F0] px-5 py-2.5 text-xs font-black text-gray-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-gray-300"></span>
+                Không còn đánh giá để hiển thị
+              </div>
+            </div>
+          )
+        )}
+    </section>
+  );
+}
+
+function formatDateTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function formatDisplayDate(value) {
+  if (!value) return 'Đang cập nhật';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function getInitial(name) {
+  return String(name || 'C').trim().charAt(0).toUpperCase() || 'C';
+}
+
+export default function HomestayDetail({ favorites = [], toggleFavorite = () => {} }) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { isAuthenticated, user } = useAuth();
+  const initialSearch = getStoredSearchState();
   const [homestay, setHomestay] = useState(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(null);
-  const [checkIn, setCheckIn] = useState('');
-  const [checkOut, setCheckOut] = useState('');
-  const [guests, setGuests] = useState(2);
+  const [checkIn, setCheckIn] = useState(initialSearch.checkIn || '');
+  const [checkOut, setCheckOut] = useState(initialSearch.checkOut || '');
+  const [guests, setGuests] = useState(initialSearch.guests || '1');
   const [isLoading, setIsLoading] = useState(true);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [reviews, setReviews] = useState([]);
+
+  useEffect(() => {
+    const handleSearchStateChange = (event) => {
+      const nextSearch = event.detail || getStoredSearchState();
+      setCheckIn(nextSearch.checkIn || '');
+      setCheckOut(nextSearch.checkOut || '');
+      setGuests(nextSearch.guests || '1');
+    };
+
+    window.addEventListener(SEARCH_STATE_EVENT, handleSearchStateChange);
+    window.addEventListener('storage', handleSearchStateChange);
+
+    return () => {
+      window.removeEventListener(SEARCH_STATE_EVENT, handleSearchStateChange);
+      window.removeEventListener('storage', handleSearchStateChange);
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -203,6 +576,25 @@ export default function HomestayDetail() {
     };
   }, [id]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadReviews() {
+      try {
+        const data = await getHomestayReviews(id);
+        if (isMounted) setReviews(Array.isArray(data) ? data : []);
+      } catch {
+        if (isMounted) setReviews([]);
+      }
+    }
+
+    if (id) loadReviews();
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
+
   const images = useMemo(() => {
     const sourceImages = homestay?.images?.length
       ? homestay.images.map((image) => image.url || image.imageUrl).filter(Boolean)
@@ -214,13 +606,57 @@ export default function HomestayDetail() {
   const galleryPreviewImages = images.slice(1, 5);
   const remainingImageCount = Math.max(0, images.length - 5);
   const maxGuests = Math.max(1, Number(homestay?.maxGuest || 1));
+  const bookingGuests = Math.min(maxGuests, Math.max(1, Number(guests) || 1));
   const serviceItems = homestay?.serviceItems?.length
     ? homestay.serviceItems
     : (homestay?.services || []).map((name) => ({ name, serviceName: name }));
+  const nights = calculateNights(checkIn, checkOut);
+  const roomTotal = Number(homestay?.pricePerNight || 0) * nights;
+  const currentHomestayId = Number(homestay?.id || homestay?.homeId || id);
+  const isFavorite = favorites.map(Number).includes(currentHomestayId);
+  const hostName = homestay?.ownerName || 'Cozygo Host';
 
   const handleSearch = (search = {}) => {
-    const params = buildSearchParams(search);
+    const savedSearch = saveSearchState(search);
+    const params = buildSearchParams(savedSearch);
     navigate('/search' + (params.toString() ? '?' + params.toString() : ''));
+  };
+
+  const updateBookingSearch = (field, value) => {
+    const nextSearch = saveSearchState({ [field]: value });
+    setCheckIn(nextSearch.checkIn || '');
+    setCheckOut(nextSearch.checkOut || '');
+    setGuests(nextSearch.guests || '1');
+  };
+
+  const updateGuestCount = (value) => {
+    const nextGuests = Math.min(maxGuests, Math.max(1, Number(value) || 1));
+    updateBookingSearch('guests', String(nextGuests));
+  };
+
+  const handleGuestInput = (value) => {
+    const onlyDigits = value.replace(/\D/g, '');
+    if (!onlyDigits) {
+      setGuests('');
+      saveSearchState({ guests: '' });
+      return;
+    }
+
+    updateGuestCount(onlyDigits);
+  };
+
+  const handleBookNow = () => {
+    if (!isAuthenticated) {
+      setShowLoginPrompt(true);
+      return;
+    }
+
+    setIsCheckoutOpen(true);
+  };
+
+  const goToAuth = (path) => {
+    const redirect = encodeURIComponent(location.pathname + location.search);
+    navigate(path + '?redirect=' + redirect);
   };
 
   const openGallery = (index = 0) => {
@@ -237,8 +673,7 @@ export default function HomestayDetail() {
       <div className="min-h-screen bg-[#F4F1EA] pb-16 text-[#2C1E15]">
         <section className="relative bg-[#202c3c] px-4 pb-10 pt-7 shadow-lg">
           <div className="mx-auto max-w-5xl text-center">
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-[#E3B17A]">Cozygo Homestay</p>
-            <h1 className="mt-2 font-classic text-2xl font-black text-white md:text-4xl">Chi tiết chỗ nghỉ</h1>
+            <h1 className="mt-2 font-classic text-2xl font-black text-[#fedcb7] md:text-4xl">Chi tiết homestay</h1>
             <p className="mt-2 text-sm font-medium text-white/60">Xem thông tin, hình ảnh, tiện nghi và chọn ngày lưu trú phù hợp.</p>
           </div>
           <div className="absolute inset-x-4 bottom-0 z-20 mx-auto max-w-5xl translate-y-1/2">
@@ -274,62 +709,72 @@ export default function HomestayDetail() {
 
           {!isLoading && homestay && (
             <div className="space-y-8">
-              <header className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-[#B6784F]">{homestay.code || 'HMS-' + homestay.id}</p>
-                  <h2 className="mt-2 font-classic text-3xl font-black leading-tight text-[#2C1E15] md:text-5xl">{homestay.name}</h2>
-                  <div className="mt-3 flex flex-wrap items-center gap-3 text-sm font-bold text-gray-500">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-amber-700 ring-1 ring-amber-100">
-                      <HiStar className="h-4 w-4" />
-                      {homestay.score || homestay.rating || '0.0'} ({homestay.reviewCount || 0} đánh giá)
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                      <HiMapPin className="h-4 w-4 text-[#6E473B]" />
-                      {homestay.address || homestay.location}
-                    </span>
+              <section className="rounded-[32px] border border-[#6E473B]/10 bg-white p-4 shadow-sm md:p-6">
+                <header className="mb-5 flex flex-col justify-between gap-4 md:flex-row md:items-start">
+                  <div className="min-w-0">
+                    <h2 className="font-classic text-3xl font-black leading-tight text-[#2C1E15] md:text-4xl">{homestay.name}</h2>
+                    <div className="mt-3 flex flex-wrap items-center gap-3 text-sm font-bold text-gray-600">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-amber-700 ring-1 ring-amber-100">
+                        <HiStar className="h-4 w-4" />
+                        {homestay.score || homestay.rating || '0.0'} ({homestay.reviewCount || 0} đánh giá)
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <HiMapPin className="h-4 w-4 text-[#6E473B]" />
+                        {homestay.address || homestay.location}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div className="rounded-2xl border border-[#6E473B]/10 bg-white px-5 py-4 text-right shadow-sm">
-                  <p className="text-xs font-bold uppercase tracking-wide text-gray-400">Giá mỗi đêm</p>
-                  <p className="mt-1 text-2xl font-black text-[#6E473B]">{formatCurrency(homestay.pricePerNight)}</p>
-                </div>
-              </header>
+                  <button
+                    type="button"
+                    onClick={() => toggleFavorite(currentHomestayId)}
+                    className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-black shadow-sm transition ${
+                      isFavorite
+                        ? 'border-rose-100 bg-rose-50 text-rose-600 hover:bg-rose-100'
+                        : 'border-[#6E473B]/10 bg-[#F8F6F0] text-[#6E473B] hover:bg-[#2C3E2B] hover:text-white'
+                    }`}
+                    aria-label={isFavorite ? 'Bỏ yêu thích' : 'Thêm vào yêu thích'}
+                  >
+                    <HiHeart className="h-5 w-5" />
+                    {isFavorite ? 'Đã yêu thích' : 'Yêu thích'}
+                  </button>
+                </header>
 
-              <section className="grid gap-2 overflow-hidden rounded-[30px] bg-white p-2 shadow-sm md:grid-cols-[1.08fr_1fr]">
-                <button
-                  type="button"
-                  onClick={() => openGallery(0)}
-                  className="group relative h-[320px] overflow-hidden rounded-[24px] bg-gray-100 p-0 text-left md:h-[500px]"
-                >
-                  <img src={activeImage} alt={homestay.name} className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
-                  <div className="absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
-                  <div className="absolute bottom-4 left-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-[#0B4DBC] shadow-lg">
-                    <HiPhoto className="h-5 w-5" />
-                    Xem tất cả ảnh
+                <div className="grid gap-2 overflow-hidden rounded-[26px] bg-[#F8F6F0] p-2 md:grid-cols-[1.08fr_1fr]">
+                  <button
+                    type="button"
+                    onClick={() => openGallery(0)}
+                    className="group relative h-[320px] overflow-hidden rounded-[22px] bg-gray-100 p-0 text-left md:h-[500px]"
+                  >
+                    <img src={activeImage} alt={homestay.name} className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
+                    <div className="absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
+                    <div className="absolute bottom-4 left-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-[#0B4DBC] shadow-lg">
+                      <HiPhoto className="h-5 w-5" />
+                      Xem tất cả ảnh
+                    </div>
+                  </button>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {galleryPreviewImages.map((image, previewIndex) => {
+                      const actualIndex = previewIndex + 1;
+                      const isLastPreview = previewIndex === galleryPreviewImages.length - 1;
+                      return (
+                        <button
+                          key={image + actualIndex}
+                          type="button"
+                          onClick={() => openGallery(actualIndex)}
+                          className="group relative h-[154px] overflow-hidden rounded-2xl bg-gray-100 p-0 md:h-[246px]"
+                        >
+                          <img src={image} alt={homestay.name + ' ảnh ' + (actualIndex + 1)} className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
+                          <div className="absolute inset-0 bg-black/0 transition group-hover:bg-black/15" />
+                          {isLastPreview && remainingImageCount > 0 && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-center text-white backdrop-blur-[1px]">
+                              <span className="rounded-full bg-black/45 px-5 py-2 text-lg font-black shadow-lg">+{remainingImageCount} ảnh</span>
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
-                </button>
-
-                <div className="grid grid-cols-2 gap-2">
-                  {galleryPreviewImages.map((image, previewIndex) => {
-                    const actualIndex = previewIndex + 1;
-                    const isLastPreview = previewIndex === galleryPreviewImages.length - 1;
-                    return (
-                      <button
-                        key={image + actualIndex}
-                        type="button"
-                        onClick={() => openGallery(actualIndex)}
-                        className="group relative h-[154px] overflow-hidden rounded-2xl bg-gray-100 p-0 md:h-[246px]"
-                      >
-                        <img src={image} alt={homestay.name + ' ảnh ' + (actualIndex + 1)} className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
-                        <div className="absolute inset-0 bg-black/0 transition group-hover:bg-black/15" />
-                        {isLastPreview && remainingImageCount > 0 && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-center text-white backdrop-blur-[1px]">
-                            <span className="rounded-full bg-black/45 px-5 py-2 text-lg font-black shadow-lg">+{remainingImageCount} ảnh</span>
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
                 </div>
               </section>
 
@@ -343,15 +788,32 @@ export default function HomestayDetail() {
                     <DetailStat icon={HiHomeModern} label="Bếp" value={(homestay.kitchenCount || 0) + ' bếp'} />
                   </div>
 
-                  <article className="rounded-[28px] border border-[#6E473B]/10 bg-white p-6 shadow-sm md:p-8">
-                    <h3 className="font-classic text-2xl font-black">Về homestay này</h3>
-                    <p className="mt-4 whitespace-pre-line text-sm font-medium leading-7 text-gray-600">
-                      {homestay.description || 'Chưa có mô tả chi tiết cho homestay này.'}
-                    </p>
-                    <div className="mt-6 flex flex-wrap gap-3 text-xs font-black text-[#2C3E2B]">
-                      <span className="rounded-full bg-[#2C3E2B]/10 px-3 py-1.5">Check-in {formatTime(homestay.checkinTime, '14:00')}</span>
-                      <span className="rounded-full bg-[#2C3E2B]/10 px-3 py-1.5">Check-out {formatTime(homestay.checkoutTime, '12:00')}</span>
-                      <span className="rounded-full bg-[#2C3E2B]/10 px-3 py-1.5">Chủ nhà: {homestay.ownerName || 'Cozygo Host'}</span>
+                  <article className="overflow-hidden rounded-[28px] border border-[#6E473B]/10 bg-white shadow-sm">
+                    <div className="flex flex-col gap-4 border-b border-gray-100 p-6 md:flex-row md:items-center md:justify-between md:p-8">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#7B4D3B] text-2xl font-black text-white shadow-sm">
+                          {getInitial(hostName)}
+                        </div>
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#B6784F]">Chủ homestay</p>
+                          <h3 className="mt-1 text-xl font-black text-[#2C1E15]">{hostName}</h3>
+                        </div>
+                      </div>
+                     <div className="flex flex-col gap-1">
+                          <p className="mt-1 text-sm font-bold text-gray-500">Bắt đầu hoạt động: {formatDisplayDate(homestay.createdAt)}</p>
+                          <div className="flex flex-wrap gap-3 text-xs font-black text-[#2C3E2B]">
+                        <span className="rounded-full bg-[#2C3E2B]/10 px-3 py-1.5">Check-in {formatTime(homestay.checkinTime, '14:00')}</span>
+                        <span className="rounded-full bg-[#2C3E2B]/10 px-3 py-1.5">Check-out {formatTime(homestay.checkoutTime, '12:00')}</span>
+                      </div>
+                     </div>
+                      
+                    </div>
+                    
+                    <div className="p-6 md:p-8">
+                      <h3 className="font-classic text-2xl font-black">Về homestay này</h3>
+                      <p className="mt-4 whitespace-pre-line text-base font-medium leading-8 text-gray-700">
+                        {homestay.description || 'Chưa có mô tả chi tiết cho homestay này.'}
+                      </p>
                     </div>
                   </article>
 
@@ -405,6 +867,11 @@ export default function HomestayDetail() {
                       <p className="mt-4 text-sm font-semibold text-gray-400">Chưa có nội quy riêng.</p>
                     )}
                   </section>
+                  <ReviewPanel
+                    reviews={reviews}
+                    ratingAverage={homestay.ratingAvg || homestay.rating}
+                    ratingCount={homestay.reviewCount || homestay.reviewsCount}
+                  />
                 </div>
 
                 <aside className="lg:sticky lg:top-24 lg:self-start">
@@ -423,32 +890,60 @@ export default function HomestayDetail() {
                       <div className="grid grid-cols-2 divide-x divide-gray-200 border-b border-gray-200">
                         <label className="p-3">
                           <span className="text-[10px] font-black uppercase text-gray-500">Nhận phòng</span>
-                          <input type="date" value={checkIn} onChange={(event) => setCheckIn(event.target.value)} className="mt-1 w-full bg-transparent text-xs font-bold outline-none" />
+                          <input type="date" value={checkIn} onChange={(event) => updateBookingSearch('checkIn', event.target.value)} className="mt-1 w-full bg-transparent text-xs font-bold outline-none" />
                         </label>
                         <label className="p-3">
                           <span className="text-[10px] font-black uppercase text-gray-500">Trả phòng</span>
-                          <input type="date" value={checkOut} onChange={(event) => setCheckOut(event.target.value)} className="mt-1 w-full bg-transparent text-xs font-bold outline-none" />
+                          <input type="date" value={checkOut} onChange={(event) => updateBookingSearch('checkOut', event.target.value)} className="mt-1 w-full bg-transparent text-xs font-bold outline-none" />
                         </label>
                       </div>
-                      <label className="block p-3">
+                      <div className="p-3">
                         <span className="text-[10px] font-black uppercase text-gray-500">Số khách</span>
-                        <select value={guests} onChange={(event) => setGuests(Number(event.target.value))} className="mt-1 w-full bg-transparent text-sm font-bold outline-none">
-                          {Array.from({ length: maxGuests }).map((_, index) => (
-                            <option key={index + 1} value={index + 1}>{index + 1} khách</option>
-                          ))}
-                        </select>
-                      </label>
+                        <div className="mt-2 flex items-center justify-between rounded-2xl bg-[#F4F1EA] p-1.5">
+                          <button
+                            type="button"
+                            onClick={() => updateGuestCount(bookingGuests - 1)}
+                            disabled={bookingGuests <= 1}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white text-lg font-black text-[#2C3E2B] shadow-sm transition hover:bg-[#2C3E2B] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-[#2C3E2B]"
+                            aria-label="Giảm số khách"
+                          >
+                            -
+                          </button>
+                          <div className="flex min-w-0 flex-1 items-center justify-center gap-1 px-3">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={guests}
+                              onChange={(event) => handleGuestInput(event.target.value)}
+                              onBlur={() => updateGuestCount(guests)}
+                              className="w-12 bg-transparent text-center text-base font-black text-[#2C1E15] outline-none"
+                              aria-label="Số khách"
+                            />
+                            <span className="text-sm font-bold text-gray-500">khách</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => updateGuestCount(bookingGuests + 1)}
+                            disabled={bookingGuests >= maxGuests}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white text-lg font-black text-[#2C3E2B] shadow-sm transition hover:bg-[#2C3E2B] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-[#2C3E2B]"
+                            aria-label="Tăng số khách"
+                          >
+                            +
+                          </button>
+                        </div>
+                        <p className="mt-1.5 text-[11px] font-semibold text-gray-400">Tối đa {maxGuests} khách</p>
+                      </div>
                     </div>
 
-                    <button type="button" className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#2C3E2B] text-sm font-black text-white shadow-lg transition hover:bg-[#223322]">
+                    <button type="button" onClick={handleBookNow} className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#2C3E2B] text-sm font-black text-white shadow-lg transition hover:bg-[#223322]">
                       <HiCalendarDays className="h-5 w-5" />
                       Đặt phòng ngay
                     </button>
 
                     <div className="mt-5 space-y-3 border-t border-gray-100 pt-5 text-sm font-semibold text-gray-500">
                       <div className="flex justify-between">
-                        <span>{formatCurrency(homestay.pricePerNight)} x 1 đêm</span>
-                        <span className="font-black text-[#2C1E15]">{formatCurrency(homestay.pricePerNight)}</span>
+                        <span>{formatCurrency(homestay.pricePerNight)} x {nights} đêm</span>
+                        <span className="font-black text-[#2C1E15]">{formatCurrency(roomTotal)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Phí dịch vụ cơ bản</span>
@@ -456,7 +951,7 @@ export default function HomestayDetail() {
                       </div>
                       <div className="flex justify-between border-t border-gray-100 pt-3 text-base font-black text-[#2C1E15]">
                         <span>Tổng tạm tính</span>
-                        <span>{formatCurrency(homestay.pricePerNight)}</span>
+                        <span>{formatCurrency(roomTotal)}</span>
                       </div>
                     </div>
                   </div>
@@ -475,6 +970,23 @@ export default function HomestayDetail() {
           />
         )}
 
+        {showLoginPrompt && (
+          <LoginRequiredModal
+            onClose={() => setShowLoginPrompt(false)}
+            onLogin={() => goToAuth('/login')}
+            onRegister={() => goToAuth('/register')}
+          />
+        )}
+
+        {isCheckoutOpen && (
+          <BookingCheckoutModal
+            homestay={homestay}
+            user={user}
+            bookingDefaults={{ checkIn, checkOut, guests: bookingGuests }}
+            onClose={() => setIsCheckoutOpen(false)}
+          />
+        )}
+
         {lightboxIndex !== null && (
           <LightboxModal
             images={images}
@@ -488,3 +1000,13 @@ export default function HomestayDetail() {
     </UserLayout>
   );
 }
+
+
+
+
+
+
+
+
+
+

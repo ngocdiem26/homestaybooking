@@ -8,6 +8,7 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalTime;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,6 +28,8 @@ public class PublicHomestayResponse {
     private String homeAddress;
     private String city;
     private String province;
+    private BigDecimal latitude;
+    private BigDecimal longitude;
     private String location;
     private String description;
     private String homeDescription;
@@ -58,6 +61,7 @@ public class PublicHomestayResponse {
     private String tax;
     private String img;
     private String ownerName;
+    private LocalDateTime createdAt;
     @Builder.Default
     private List<PublicHomestayImageResponse> images = new ArrayList<>();
     @Builder.Default

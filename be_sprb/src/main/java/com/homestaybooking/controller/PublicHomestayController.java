@@ -1,5 +1,6 @@
 package com.homestaybooking.controller;
 
+import com.homestaybooking.dto.response.PublicActivityResponse;
 import com.homestaybooking.dto.response.PublicDestinationResponse;
 import com.homestaybooking.dto.response.PublicHomestayResponse;
 import com.homestaybooking.service.PublicHomestayService;
@@ -24,6 +25,11 @@ public class PublicHomestayController {
     @GetMapping("/destinations")
     public List<PublicDestinationResponse> getDestinations() {
         return publicHomestayService.getDestinations();
+    }
+
+    @GetMapping("/activities")
+    public List<PublicActivityResponse> getActivities() {
+        return publicHomestayService.getActivities();
     }
 
     @GetMapping("/homestays/{homeId}")

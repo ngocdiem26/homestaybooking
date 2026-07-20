@@ -25,6 +25,9 @@ public class HostHomestayResponse {
     private String homeName;
     private String homeAddress;
     private String province;
+    private String city;
+    private BigDecimal latitude;
+    private BigDecimal longitude;
     private String homeDescription;
     private BigDecimal pricePerNight;
     private String status;

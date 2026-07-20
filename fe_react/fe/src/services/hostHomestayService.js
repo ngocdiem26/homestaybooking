@@ -1,6 +1,7 @@
 import { apiRequest } from '../api/axiosClient';
 import { HOST_HOMESTAY_ENDPOINTS } from '../api/endpoints';
 import { getAuthSession, getAuthToken } from './authStorage';
+import { getProvinceByCity } from '../data/vietnamCities';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
@@ -48,7 +49,8 @@ export function mapApiHomestay(apiHomestay) {
     homeId: apiHomestay.homeId,
     id: formatHomestayId(apiHomestay.homeId),
     name: apiHomestay.homeName || '',
-    city: apiHomestay.province || '',
+    city: apiHomestay.city || apiHomestay.province || '',
+    province: apiHomestay.province || '',
     address: apiHomestay.homeAddress || '',
     description: apiHomestay.homeDescription || '',
     price: Number(apiHomestay.pricePerNight || 0),
@@ -61,6 +63,8 @@ export function mapApiHomestay(apiHomestay) {
     beds: Number(apiHomestay.bedCount || 1),
     checkinTime: normalizeTime(apiHomestay.checkinTime, '14:00'),
     checkoutTime: normalizeTime(apiHomestay.checkoutTime, '12:00'),
+    latitude: apiHomestay.latitude ?? '',
+    longitude: apiHomestay.longitude ?? '',
     ratingAvg: Number(apiHomestay.ratingAvg || 0),
     ratingCount: Number(apiHomestay.ratingCount || 0),
     status: toUiStatus(apiHomestay.status),
@@ -97,7 +101,8 @@ export function mapUiHomestayToRequest(homestay, extraConfig = {}) {
     ownerId,
     homeName: homestay.name,
     homeAddress: homestay.address,
-    province: homestay.city,
+    province: homestay.province || getProvinceByCity(homestay.city),
+    city: homestay.city,
     homeDescription: homestay.description || '',
     pricePerNight: Number(homestay.price || 0),
     discountPercent: Number(homestay.discount || 0),
@@ -109,6 +114,8 @@ export function mapUiHomestayToRequest(homestay, extraConfig = {}) {
     bedCount: Number(homestay.beds || 1),
     checkinTime: homestay.checkinTime || '14:00',
     checkoutTime: homestay.checkoutTime || '12:00',
+    latitude: homestay.latitude === '' ? null : homestay.latitude,
+    longitude: homestay.longitude === '' ? null : homestay.longitude,
     images: images
       .filter((image) => image?.url && !String(image.url).startsWith('blob:'))
       .map((image, index) => ({

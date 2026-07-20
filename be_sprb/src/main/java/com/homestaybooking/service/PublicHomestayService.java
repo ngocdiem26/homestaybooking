@@ -1,5 +1,7 @@
 package com.homestaybooking.service;
 
+import com.homestaybooking.dto.response.PublicActivityImageResponse;
+import com.homestaybooking.dto.response.PublicActivityResponse;
 import com.homestaybooking.dto.response.PublicDestinationResponse;
 import com.homestaybooking.dto.response.PublicHomestayImageResponse;
 import com.homestaybooking.dto.response.PublicHomestayResponse;
@@ -17,6 +19,8 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -42,8 +46,98 @@ public class PublicHomestayService {
     public PublicHomestayResponse getHomestayDetail(Integer homeId) {
         Homestay homestay = homestayRepository.findByHomeIdAndDeletedAtIsNull(homeId)
                 .filter(this::isVisiblePublicly)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy homestay"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "KhĂ´ng tĂ¬m tháº¥y homestay"));
         return toResponse(homestay);
+    }
+
+    public List<PublicActivityResponse> getActivities() {
+        try {
+            return queryActivities("activity_images");
+        } catch (DataAccessException firstException) {
+            try {
+                return queryActivities("activities_img");
+            } catch (DataAccessException secondException) {
+                return List.of();
+            }
+        }
+    }
+
+    private List<PublicActivityResponse> queryActivities(String imageTable) {
+        String sql = """
+                select
+                    a.activity_id,
+                    a.activity_name,
+                    a.province,
+                    a.activity_address,
+                    a.short_description,
+                    a.description,
+                    a.hotline,
+                    a.thumbnail_url,
+                    a.badge_text,
+                    a.badge_type,
+                    a.is_featured,
+                    a.display_order,
+                    ai.image_id,
+                    ai.image_url,
+                    ai.is_thumbnail,
+                    ai.display_order as image_display_order
+                from activities a
+                left join %s ai on ai.activity_id = a.activity_id
+                where a.deleted_at is null
+                  and upper(coalesce(a.activity_status, 'ACTIVE')) = 'ACTIVE'
+                order by a.is_featured desc,
+                         a.display_order asc,
+                         a.activity_id asc,
+                         ai.is_thumbnail desc,
+                         ai.display_order asc,
+                         ai.image_id asc
+                """.formatted(imageTable);
+
+        Map<Integer, PublicActivityResponse> activities = new LinkedHashMap<>();
+        jdbcTemplate.query(sql, rs -> {
+            Integer activityId = rs.getInt("activity_id");
+            PublicActivityResponse activity = activities.get(activityId);
+            if (activity == null) {
+                activity = PublicActivityResponse.builder()
+                        .activityId(activityId)
+                        .activityName(rs.getString("activity_name"))
+                        .province(rs.getString("province"))
+                        .activityAddress(rs.getString("activity_address"))
+
+
+                        .shortDescription(rs.getString("short_description"))
+                        .description(rs.getString("description"))
+                        .hotline(rs.getString("hotline"))
+                        .thumbnailUrl(rs.getString("thumbnail_url"))
+                        .badgeText(rs.getString("badge_text"))
+                        .badgeType(rs.getString("badge_type"))
+                        .featured(rs.getBoolean("is_featured"))
+                        .displayOrder(rs.getInt("display_order"))
+                        .images(new ArrayList<>())
+                        .build();
+                activities.put(activityId, activity);
+            }
+
+            Long imageId = rs.getObject("image_id", Long.class);
+            if (imageId != null) {
+                activity.getImages().add(PublicActivityImageResponse.builder()
+                        .imageId(imageId)
+                        .imageUrl(rs.getString("image_url"))
+                        .isThumbnail(rs.getBoolean("is_thumbnail"))
+                        .displayOrder(rs.getInt("image_display_order"))
+                        .build());
+            }
+        });
+
+        return activities.values().stream()
+                .peek(activity -> {
+                    if ((activity.getThumbnailUrl() == null || activity.getThumbnailUrl().isBlank())
+                            && activity.getImages() != null
+                            && !activity.getImages().isEmpty()) {
+                        activity.setThumbnailUrl(activity.getImages().get(0).getImageUrl());
+                    }
+                })
+                .toList();
     }
     public List<PublicHomestayResponse> getHomestays(
             String destination,
@@ -69,21 +163,30 @@ public class PublicHomestayService {
         return responses;
     }
 
+    private String readString(java.sql.ResultSet rs, String column) {
+        try {
+            return rs.getString(column);
+        } catch (java.sql.SQLException exception) {
+            return null;
+        }
+    }
+
     private List<PublicDestinationResponse> getConfiguredDestinations() {
         try {
             return jdbcTemplate.query(
-                    "select d.destination_id, d.province_name, d.display_name, d.slug, d.description, d.thumbnail_url, "
+                    "select d.destination_id, d.province_name, d.city, d.display_name, d.slug, d.description, d.thumbnail_url, "
                             + "d.display_order, count(h.home_id) as homestay_count "
                             + "from destinations d "
                             + "left join homestays h on h.deleted_at is null "
                             + "and upper(coalesce(h.status, '')) not in ('REJECTED','BLOCKED','DELETED') "
-                            + "and h.province = d.province_name "
+                            + "and (h.city = d.city or (coalesce(h.city, '') = '' and h.province = d.province_name) or h.province = d.city) "
                             + "where d.deleted_at is null and d.destination_status = 'ACTIVE' "
-                            + "group by d.destination_id, d.province_name, d.display_name, d.slug, d.description, d.thumbnail_url, d.display_order "
+                            + "group by d.destination_id, d.province_name, d.city, d.display_name, d.slug, d.description, d.thumbnail_url, d.display_order "
                             + "order by d.display_order asc, d.destination_id asc",
                     (rs, rowNum) -> PublicDestinationResponse.builder()
                             .destinationId(rs.getInt("destination_id"))
                             .provinceName(rs.getString("province_name"))
+                            .city(rs.getString("city"))
                             .displayName(rs.getString("display_name"))
                             .slug(rs.getString("slug"))
                             .description(rs.getString("description"))
@@ -96,32 +199,32 @@ public class PublicHomestayService {
             return List.of();
         }
     }
-
     private List<PublicDestinationResponse> getDestinationsFromHomestays() {
         return jdbcTemplate.query(
-                "select h.province, count(distinct h.home_id) as homestay_count, "
+                "select h.province, coalesce(nullif(h.city, ''), h.province) as city, count(distinct h.home_id) as homestay_count, "
                         + "coalesce(min(case when hi.is_main = true then hi.image_url end), min(hi.image_url)) as thumbnail_url "
                         + "from homestays h "
                         + "left join homestay_images hi on hi.home_id = h.home_id "
                         + "where h.deleted_at is null and upper(coalesce(h.status, '')) not in ('REJECTED','BLOCKED','DELETED') "
-                        + "group by h.province order by homestay_count desc, h.province asc",
+                        + "group by h.province, coalesce(nullif(h.city, ''), h.province) order by homestay_count desc, city asc",
                 (rs, rowNum) -> {
                     String province = rs.getString("province");
+                    String city = rs.getString("city");
                     return PublicDestinationResponse.builder()
                             .destinationId(rowNum + 1)
                             .provinceName(province)
-                            .displayName(toDestinationDisplayName(province))
-                            .slug(toSlug(province))
-                            .description("Khám phá " + province + " cùng các homestay đang có trên Cozygo")
-                            .thumbnailUrl(defaultThumbnail(rs.getString("thumbnail_url"), province))
+                            .city(city)
+                            .displayName(toDestinationDisplayName(city))
+                            .slug(toSlug(city))
+                            .description("KhĂ¡m phĂ¡ " + city + " cĂ¹ng cĂ¡c homestay Ä‘ang cĂ³ trĂªn Cozygo")
+                            .thumbnailUrl(defaultThumbnail(rs.getString("thumbnail_url"), city))
                             .displayOrder(rowNum + 1)
                             .homestayCount(rs.getLong("homestay_count"))
                             .build();
                 }
         );
     }
-
-    private PublicHomestayResponse toResponse(Homestay homestay) {
+    public PublicHomestayResponse toResponse(Homestay homestay) {
         List<PublicHomestayImageResponse> images = toImages(homestay);
         List<String> amenities = getAmenityNames(homestay.getHomeId());
         List<PublicHomestayServiceResponse> serviceItems = getServiceResponses(homestay.getHomeId());
@@ -137,7 +240,9 @@ public class PublicHomestayService {
                 : price.multiply(BigDecimal.valueOf(1.18));
         Integer ratingCount = homestay.getRatingCount() == null ? 0 : homestay.getRatingCount();
         BigDecimal rating = defaultMoney(homestay.getRatingAvg());
-        String mainImage = images.isEmpty() ? defaultThumbnail(null, homestay.getProvince()) : images.get(0).getImageUrl();
+        String city = firstNonBlank(homestay.getCity(), homestay.getProvince());
+        String province = firstNonBlank(homestay.getProvince(), city);
+        String mainImage = images.isEmpty() ? defaultThumbnail(null, city) : images.get(0).getImageUrl();
 
         return PublicHomestayResponse.builder()
                 .id(homestay.getHomeId())
@@ -147,9 +252,11 @@ public class PublicHomestayService {
                 .homeName(homestay.getHomeName())
                 .address(homestay.getHomeAddress())
                 .homeAddress(homestay.getHomeAddress())
-                .city(homestay.getProvince())
-                .province(homestay.getProvince())
-                .location(homestay.getProvince())
+                .city(city)
+                .province(province)
+                .latitude(homestay.getLatitude())
+                .longitude(homestay.getLongitude())
+                .location(homestay.getHomeAddress())
                 .description(homestay.getHomeDescription())
                 .homeDescription(homestay.getHomeDescription())
                 .pricePerNight(price)
@@ -171,18 +278,19 @@ public class PublicHomestayService {
                 .bedCount(defaultInt(homestay.getBedCount()))
                 .checkinTime(homestay.getCheckinTime())
                 .checkoutTime(homestay.getCheckoutTime())
-                .roomType("Homestay riêng tư tại " + homestay.getProvince())
+                .roomType("Homestay riêng tư tại " + city)
                 .details(defaultInt(homestay.getBedroomCount()) + " phòng ngủ • "
                         + defaultInt(homestay.getBathroomCount()) + " phòng tắm • "
                         + defaultInt(homestay.getKitchenCount()) + " bếp • "
                         + defaultInt(homestay.getLivingRoomCount()) + " phòng khách")
                 .beds(defaultInt(homestay.getBedCount()) + " giường • phù hợp " + defaultInt(homestay.getMaxGuest()) + " khách")
-                .distance("Khu vực " + homestay.getProvince())
-                .alert(discount.compareTo(BigDecimal.ZERO) > 0 ? "Đang có ưu đãi " + discount.stripTrailingZeros().toPlainString() + "%" : "Có thể đặt cho chuyến đi sắp tới")
+                .distance(homestay.getHomeAddress())
+                .alert(discount.compareTo(BigDecimal.ZERO) > 0 ? "\u0110ang c\u00f3 \u01b0u \u0111\u00e3i " + discount.stripTrailingZeros().toPlainString() + "%" : "C\u00f3 th\u1ec3 \u0111\u1eb7t cho chuy\u1ebfn \u0111i s\u1eafp t\u1edbi")
                 .orders(Math.max(0, ratingCount * 3 + homestay.getHomeId()))
-                .tax("Đã bao gồm thuế và phí dịch vụ cơ bản")
+                .tax("\u0110\u00e3 bao g\u1ed3m thu\u1ebf v\u00e0 ph\u00ed d\u1ecbch v\u1ee5 c\u01a1 b\u1ea3n")
                 .img(mainImage)
                 .ownerName(homestay.getOwner() == null ? null : homestay.getOwner().getFullName())
+                .createdAt(homestay.getCreatedAt())
                 .images(images)
                 .amenities(amenities)
                 .services(serviceNames)
@@ -259,12 +367,14 @@ public class PublicHomestayService {
     }
 
     private boolean matchesDestination(PublicHomestayResponse item, String keyword) {
-        if (keyword == null || keyword.isBlank() || keyword.equals(normalize("Tất cả địa điểm"))) {
+        if (keyword == null || keyword.isBlank() || keyword.equals(normalize("Táº¥t cáº£ Ä‘á»‹a Ä‘iá»ƒm"))) {
             return true;
         }
         return normalize(item.getName()).contains(keyword)
                 || normalize(item.getProvince()).contains(keyword)
-                || normalize(item.getCity()).contains(keyword);
+                || normalize(item.getCity()).contains(keyword)
+                || normalize(item.getAddress()).contains(keyword)
+                || normalize(item.getLocation()).contains(keyword);
     }
 
     private boolean matchesAll(List<String> source, List<String> selected) {
@@ -308,10 +418,10 @@ public class PublicHomestayService {
 
     private String toDestinationDisplayName(String province) {
         return switch (province) {
-            case "Lâm Đồng" -> "Đà Lạt Mộng Mơ";
-            case "Cần Thơ" -> "Cần Thơ Sông Nước";
-            case "Đà Nẵng" -> "Đà Nẵng Biển Xanh";
-            case "Lào Cai" -> "Sapa Tây Bắc";
+            case "LĂ¢m Äá»“ng" -> "ÄĂ  Láº¡t Má»™ng MÆ¡";
+            case "Cáº§n ThÆ¡" -> "Cáº§n ThÆ¡ SĂ´ng NÆ°á»›c";
+            case "ÄĂ  Náºµng" -> "ÄĂ  Náºµng Biá»ƒn Xanh";
+            case "LĂ o Cai" -> "Sapa TĂ¢y Báº¯c";
             default -> province;
         };
     }
@@ -319,9 +429,9 @@ public class PublicHomestayService {
     private String defaultThumbnail(String thumbnail, String province) {
         if (thumbnail != null && !thumbnail.isBlank()) return thumbnail;
         return switch (province == null ? "" : province) {
-            case "Lâm Đồng" -> "https://images.unsplash.com/photo-1510798831971-661eb04b3739?q=80&w=900&auto=format&fit=crop";
-            case "Cần Thơ" -> "https://images.unsplash.com/photo-1549693578-d683be217e58?q=80&w=900&auto=format&fit=crop";
-            case "Đà Nẵng" -> "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=900&auto=format&fit=crop";
+            case "LĂ¢m Äá»“ng" -> "https://images.unsplash.com/photo-1510798831971-661eb04b3739?q=80&w=900&auto=format&fit=crop";
+            case "Cáº§n ThÆ¡" -> "https://images.unsplash.com/photo-1549693578-d683be217e58?q=80&w=900&auto=format&fit=crop";
+            case "ÄĂ  Náºµng" -> "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=900&auto=format&fit=crop";
             default -> "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?q=80&w=900&auto=format&fit=crop";
         };
     }
@@ -336,6 +446,11 @@ public class PublicHomestayService {
 
     private Integer defaultInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) return first;
+        return second == null ? "" : second;
     }
 
     private String formatNumber(BigDecimal value) {
@@ -354,6 +469,9 @@ public class PublicHomestayService {
         return "Mới trên Cozygo";
     }
 }
+
+
+
 
 
 

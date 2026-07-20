@@ -2,7 +2,8 @@ export const initialHostHomestays = [
   {
     id: 'HMS-001',
     name: 'Bungalow Rừng Thông Đà Lạt',
-    city: 'Lâm Đồng',
+    city: 'Đà Lạt',
+  province: 'Lâm Đồng',
     address: '123 Đường Đồi Thông, Phường 3, Đà Lạt, Lâm Đồng',
     description: 'Không gian nghỉ dưỡng giữa rừng thông, phù hợp gia đình và nhóm bạn.',
     price: 1200000,
@@ -15,6 +16,8 @@ export const initialHostHomestays = [
     beds: 2,
     checkinTime: '14:00',
     checkoutTime: '12:00',
+  latitude: '',
+  longitude: '',
     createdAt: '2025-12-03',
     status: 'Đang hoạt động',
     images: [
@@ -55,7 +58,8 @@ export const initialHostHomestays = [
 
 export const emptyHostHomestayForm = {
   name: '',
-  city: 'Lâm Đồng',
+  city: 'Đà Lạt',
+  province: 'Lâm Đồng',
   address: '',
   description: '',
   price: '',
@@ -68,6 +72,8 @@ export const emptyHostHomestayForm = {
   beds: 1,
   checkinTime: '14:00',
   checkoutTime: '12:00',
+  latitude: '',
+  longitude: '',
 };
 
 export const PRESET_AMENITIES = [

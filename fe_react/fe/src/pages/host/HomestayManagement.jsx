@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   FaBath,
   FaBed,
@@ -33,7 +34,7 @@ import HostLayout from '../../layouts/HostLayout';
 import ModalPortal from '../../components/common/ModalPortal';
 import Pagination from '../../components/common/Pagination';
 import { PRESET_AMENITIES, PRESET_RULES, PRESET_SERVICES } from '../../data/hostHomestayData';
-import { VIETNAM_CITIES } from '../../data/vietnamCities';
+import { VIETNAM_CITIES, getProvinceByCity } from '../../data/vietnamCities';
 import { useHostHomestays } from '../../hooks/useHostHomestays';
 
 const amenityIcons = {
@@ -41,11 +42,11 @@ const amenityIcons = {
   'Chỗ đậu xe': FaCar,
   'Máy giặt': FaSoap,
   'Máy lạnh': FaWind,
-  Bếp: FaFire,
+  'Bếp': FaFire,
   TV: FaTv,
 };
 function formatCurrency(value) {
-  return new Intl.NumberFormat('vi-VN').format(Number(value || 0)) + 'đ';
+  return new Intl.NumberFormat('vi-VN').format(Number(value || 0)) + 'd';
 }
 function normalizeMainImages(images = []) {
   if (images.length === 0) return [];
@@ -60,6 +61,8 @@ function normalizeMainImages(images = []) {
 
 
 export default function HomestayManagement() {
+  const navigate = useNavigate();
+
   const {
     addAmenity,
     addImage,
@@ -118,6 +121,13 @@ export default function HomestayManagement() {
   return (
     <HostLayout>
       <div className="space-y-5 animate-fade-in text-left text-sm -mt-6">
+        <button
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-xs font-black text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-[#2C3E2B]"
+          onClick={() => navigate('/host')}
+          type="button"
+        >
+          &lt; Về bảng điều khiển
+        </button>
         <div className="bg-white p-5 rounded-2xl border border-gray-200/60 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-0.5">
             <p className="text-[11px] font-bold uppercase tracking-widest text-[#6E473B]">Bảng điều khiển</p>
@@ -341,8 +351,8 @@ function NumChip({ icon, value }) {
 }
 
 function SmallIconButton({ children, color, label, onClick, text }) {
-  // Định nghĩa màu sắc theo phong cách ảnh bạn gửi:
-  // Nền nhạt hơn, viền sáng màu, icon đậm màu tương ứng
+  // �ảnh nghia mãu sẽc theo phong cóch ảnh b?n gửi:
+  // N?n nh?t hon, vi?n s�ng mãu, icon d?m mãu tuong ?ng
   const colorClass = {
     blue: 'bg-indigo-50 border-indigo-200 text-indigo-500 hover:bg-indigo-100',
     emerald: 'bg-emerald-50 border-emerald-200 text-emerald-500 hover:bg-emerald-100',
@@ -359,7 +369,7 @@ function SmallIconButton({ children, color, label, onClick, text }) {
       title={label}
       type="button"
     >
-      {/* Tăng kích thước icon lên một chút để nhìn rõ hơn */}
+      {/* Tang kich thuoc icon lon mot chut de nhin ro hon */}
       <span className="text-sm shrink-0">{children}</span>
       {text && <span className="text-[11px] font-black leading-none">{text}</span>}
     </button>
@@ -384,7 +394,7 @@ function FilterSelect({ label, onChange, options, value }) {
         type="button"
       >
         <span className="truncate">{displayValue}</span>
-        <span className={(isOpen ? 'rotate-180 ' : '') + 'text-[10px] transition'}>▾</span>
+        <span className={(isOpen ? 'rotate-180 ' : '') + 'text-[10px] transition'}>?</span>
       </button>
 
       {isOpen && (
@@ -411,7 +421,7 @@ function FilterSelect({ label, onChange, options, value }) {
 }
 
 function HomestayDetailModal({ homestay, onClose }) {
-  const images = homestay.images?.length ? homestay.images : [];
+  const images = homestay.imagesẽ.length ? homestay.images : [];
   const firstMainIndex = Math.max(0, images.findIndex((image) => image.isMain));
   const [activeIndex, setActiveIndex] = useState(firstMainIndex);
   const activeImage = images[activeIndex] || images[0];
@@ -445,7 +455,7 @@ function HomestayDetailModal({ homestay, onClose }) {
                   {hasMultipleImages && (
                     <>
                       <button
-                        aria-label="Ảnh trước"
+                        aria-label="ảnh tru?c"
                         className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/55 hover:bg-black/75 text-white border border-white/20 shadow-lg flex items-center justify-center transition"
                         onClick={() => changeImage(activeIndex - 1)}
                         type="button"
@@ -453,7 +463,7 @@ function HomestayDetailModal({ homestay, onClose }) {
                         <i className="fa-solid fa-chevron-left text-sm"></i>
                       </button>
                       <button
-                        aria-label="Ảnh sau"
+                        aria-label="ảnh sau"
                         className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/55 hover:bg-black/75 text-white border border-white/20 shadow-lg flex items-center justify-center transition"
                         onClick={() => changeImage(activeIndex + 1)}
                         type="button"
@@ -560,7 +570,7 @@ function SummaryBox({ label, value }) {
 //             <div>
 //               <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#d9b18f]">{editingHomestay ? 'Cập nhật lưu trú' : 'Tạo lưu trú mới'}</p>
 //               <h3 className="font-serif text-2xl font-bold mt-1">{editingHomestay ? 'Sửa thông tin homestay' : 'Thêm homestay mới'}</h3>
-//               <p className="text-xs text-gray-300 mt-1">Điền thông tin theo bảng homestays: địa chỉ, giá, sức chứa, cấu trúc phòng và thời gian nhận/trả phòng.</p>
+//               <p className="text-xs text-gray-300 mt-1">�i?n thông tin theo b?ng homestays: d?a chỗ, giá, sẽc chỗa, c?u trõc phòng và th?i gian nh?n/tr? phòng.</p>
 //             </div>
 //             <button className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center shrink-0 transition" onClick={onClose} type="button">
 //               <FaTimes />
@@ -572,8 +582,8 @@ function SummaryBox({ label, value }) {
 //               <SectionHeader title="Thông tin cơ bản" description="Tên, vị trí và mô tả ngắn để khách hiểu nhanh về homestay." />
 //               <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
 //                 <TextField label="Tên homestay" value={fields.name} onChange={(value) => updateField('name', value)} placeholder="VD: Nhà Gỗ Ven Hồ Tuyền Lâm" required />
-//                 <SelectField label="Tỉnh / Thành phố" value={fields.city} onChange={(value) => updateField('city', value)} options={cities} required />
-//                 <TextField className="md:col-span-2" label="Địa chỉ chi tiết" value={fields.address} onChange={(value) => updateField('address', value)} placeholder="Số nhà, đường, phường/xã, quận/huyện..." required />
+//                 <SelectField label="Tảnh / Thành phố" value={fields.city} onChange={(value) => updateField('city', value)} options={cities} required />
+//                 <TextField className="md:col-span-2" label="Địa chỉ chi ti?t" value={fields.address} onChange={(value) => updateField('address', value)} placeholder="Số nhà, đường, phường/xã, quận/huyện, thành phố, tỉnh..." required />
 //                 <TextAreaField className="md:col-span-2" label="Mô tả homestay" value={fields.description} onChange={(value) => updateField('description', value)} placeholder="Không gian, phong cách, điểm nổi bật, phù hợp với nhóm khách nào..." />
 //               </div>
 //             </section>
@@ -581,7 +591,7 @@ function SummaryBox({ label, value }) {
 //             <section className="bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden">
 //               <SectionHeader title="Giá, khuyến mãi và thời gian" description="Các trường tương ứng price_per_night, discount_percent, checkin_time và checkout_time." />
 //               <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-//                 <TextField label="Giá / đêm" type="number" min="0" step="10000" value={fields.price} onChange={(value) => updateField('price', value)} suffix="đ" required />
+//                 <TextField label="Giá / đêm" type="number" min="0" step="10000" value={fields.price} onChange={(value) => updateField('price', value)} suffix="d" required />
 //                 <TextField label="Giảm giá" type="number" min="0" max="100" step="1" value={fields.discount} onChange={(value) => updateField('discount', value)} suffix="%" />
 //                 <TextField label="Check-in" type="time" value={fields.checkinTime} onChange={(value) => updateField('checkinTime', value)} required />
 //                 <TextField label="Check-out" type="time" value={fields.checkoutTime} onChange={(value) => updateField('checkoutTime', value)} required />
@@ -601,12 +611,12 @@ function SummaryBox({ label, value }) {
 //             </section>
 
 //             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-xs font-semibold text-[#7c5a24] leading-relaxed">
-//               Sau khi lưu homestay, bạn dùng các nút ở cột <span className="font-black">Cập nhật Homestay</span> để thêm ảnh, tiện nghi, dịch vụ và nội quy. Các phần đó nằm ở bảng riêng trong cơ sở dữ liệu nên được quản lý tách riêng.
+//               Sau khi lưu homestay, b?n đãng cóc n�t ? c?t <span className="font-black">Cập nhật Homestay</span> d? thêm ảnh, tiện nghi, dịch vụ và nội quy. Các ph?n đã n?m ? b?ng riêng trong cơ sở dữ liệu n�n được qu?n lý t�ch riêng.
 //             </div>
 //           </div>
 
 //           <div className="px-6 py-4 bg-white flex justify-end gap-3 border-t border-gray-200">
-//             <button className="px-5 h-11 rounded-xl bg-white border border-gray-200 text-gray-500 text-xs font-bold shadow-sm hover:bg-gray-50 transition" onClick={onClose} type="button">Hủy</button>
+//             <button className="px-5 h-11 rounded-xl bg-white border border-gray-200 text-gray-500 text-xs font-bold shadow-sm hover:bg-gray-50 transition" onClick={onClose} type="button">H?y</button>
 //             <button className="px-6 h-11 rounded-xl bg-[#2C3E2B] hover:bg-[#223123] text-white text-xs font-bold shadow transition" type="submit">
 //               {editingHomestay ? 'Lưu thay đổi' : 'Tạo homestay'}
 //             </button>
@@ -651,8 +661,15 @@ const steps = isEditing ? editSteps : createSteps;
   });
 }, [stepIndex]);
   const updateField = (field, value) => {
+    if (field === 'city') {
+      onChange({ ...fields, city: value, province: getProvinceByCity(value) });
+      return;
+    }
+
     onChange({ ...fields, [field]: value });
   };
+
+
 
   const isBasicInfoValid = () => {
     return (
@@ -895,7 +912,7 @@ const steps = isEditing ? editSteps : createSteps;
                     />
 
                     <SelectField
-                      label="Tỉnh / Thành phố"
+                      label="Thành phố"
                       value={fields.city}
                       onChange={(value) => updateField('city', value)}
                       options={VIETNAM_CITIES}
@@ -904,11 +921,17 @@ const steps = isEditing ? editSteps : createSteps;
 
                     <TextField
                       className="md:col-span-2"
-                      label="Địa chỉ chi tiết"
+                      label="Địa chỉ chi ti?t"
                       value={fields.address}
                       onChange={(value) => updateField('address', value)}
-                      placeholder="Số nhà, đường, phường/xã, quận/huyện..."
+                      placeholder="Số nhà, đường, phường/xã, quận/huyện, thành phố, tỉnh..."
                       required
+                    />
+
+                    <CoordinateFields
+                      latitude={fields.latitude}
+                      longitude={fields.longitude}
+                      onChange={(coordinates) => onChange({ ...fields, ...coordinates })}
                     />
 
                     <TextAreaField
@@ -935,7 +958,7 @@ const steps = isEditing ? editSteps : createSteps;
                       step="10000"
                       value={fields.price}
                       onChange={(value) => updateField('price', value)}
-                      suffix="đ"
+                      suffix="d"
                       required
                     />
 
@@ -1051,7 +1074,7 @@ const steps = isEditing ? editSteps : createSteps;
               onClick={onClose}
               type="button"
             >
-              Hủy
+              H?y
             </button>
 
             <div className="flex gap-3">
@@ -1098,6 +1121,37 @@ function SectionHeader({ description, title }) {
   );
 }
 
+function CoordinateFields({ latitude, longitude, onChange }) {
+  return (
+    <div className="md:col-span-2 rounded-2xl border border-gray-200 bg-[#F9F8F6] p-4 space-y-3">
+      <div>
+        <p className="text-[11px] font-black uppercase tracking-wide text-gray-500">Tọa độ homestay</p>
+        <p className="mt-1 text-xs font-semibold text-gray-400">
+          Nhập tọa độ để hệ thống có thể hiển thị vị trí homestay trên bản đồ ở các trang cần dùng.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <TextField
+          label="Vi d? (latitude)"
+          type="number"
+          step="0.0000001"
+          value={latitude ?? ''}
+          onChange={(value) => onChange({ latitude: value })}
+          placeholder="10.0452000"
+        />
+        <TextField
+          label="Kinh d? (longitude)"
+          type="number"
+          step="0.0000001"
+          value={longitude ?? ''}
+          onChange={(value) => onChange({ longitude: value })}
+          placeholder="105.7469000"
+        />
+      </div>
+    </div>
+  );
+}
+
 function TextField({ className = '', label, onChange, suffix, type = 'text', value, ...props }) {
   return (
     <label className={`space-y-2 ${className}`}>
@@ -1138,8 +1192,8 @@ function SelectField({ className = '', label, onChange, options, value }) {
         onClick={() => setIsOpen((current) => !current)}
         type="button"
       >
-        <span className="truncate">{value || 'Chọn tỉnh / thành phố'}</span>
-        <span className={(isOpen ? 'rotate-180 ' : '') + 'text-xs text-gray-400 transition'}>▾</span>
+        <span className="truncate">{value || 'Chọn thành phố'}</span>
+        <span className={(isOpen ? 'rotate-180 ' : '') + 'text-xs text-gray-400 transition'}>?</span>
       </button>
 
       {isOpen && (
@@ -1148,7 +1202,7 @@ function SelectField({ className = '', label, onChange, options, value }) {
             autoFocus
             className="mb-2 h-10 w-full rounded-xl border border-gray-200 px-3 text-sm font-semibold outline-none focus:border-[#2C3E2B]"
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Tìm tỉnh / thành phố..."
+            placeholder="Tìm thành phố..."
             type="text"
             value={query}
           />
@@ -1164,7 +1218,7 @@ function SelectField({ className = '', label, onChange, options, value }) {
               </button>
             ))}
             {filteredOptions.length === 0 && (
-              <p className="px-3 py-4 text-center text-xs font-bold text-gray-400">Không tìm thấy tỉnh / thành phố.</p>
+              <p className="px-3 py-4 text-center text-xs font-bold text-gray-400">Không tìm thấy thành phố.</p>
             )}
           </div>
         </div>
@@ -1404,7 +1458,7 @@ function ConfigModal(props) {
 
           <div className="px-6 py-4 bg-white flex justify-end gap-3 border-t border-gray-200 shrink-0">
             <button className="px-5 h-11 rounded-xl bg-white border border-gray-200 text-gray-500 text-xs font-bold shadow-sm hover:bg-gray-50 transition" onClick={props.onClose} type="button">
-              Hủy
+              H?y
             </button>
             <button className="px-6 h-11 rounded-xl bg-[#2C3E2B] hover:bg-[#223123] text-white text-xs font-bold shadow transition" onClick={handleSave} type="button">
               Lưu cập nhật
@@ -1580,7 +1634,7 @@ function ImageWizardStep({ addImage, deleteImage, images, setMainImage }) {
                 key={`${image.url}-${index}`}
               >
                 <img
-                  alt={`Ảnh homestay ${index + 1}`}
+                  alt={`ảnh homestay ${index + 1}`}
                   className="h-40 w-full object-cover"
                   src={image.url}
                 />
@@ -1816,7 +1870,7 @@ function ServiceWizardStep({
             <textarea
               className="w-full min-h-24 rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold outline-none resize-none focus:border-[#2C3E2B] focus:ring-4 focus:ring-[#2C3E2B]/10"
               onChange={(event) => setServiceDescription(event.target.value)}
-              placeholder="Mô tả dịch vụ, điều kiện sử dụng, phạm vi hỗ trợ..."
+              placeholder="Mô tả dịch vụ, di?u ki?n sẽ dụng, ph?m vi h? tr?..."
               value={serviceDescription}
             />
 
@@ -2097,7 +2151,7 @@ function ConfirmWizardStep({
             />
             <div className="px-4 py-3 bg-white">
               <p className="text-xs font-black text-[#2C3E2B]">
-                Ảnh đại diện homestay
+                ảnh d?i di?n homestay
               </p>
               {mainImage.fileName && (
                 <p className="text-[11px] text-gray-400 font-semibold mt-1 truncate">
@@ -2111,7 +2165,9 @@ function ConfirmWizardStep({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <DetailItem label="Tên homestay" value={fields.name || 'Chưa nhập'} />
           <DetailItem label="Thành phố" value={fields.city || 'Chưa nhập'} />
+          <DetailItem label="Tỉnh lưu DB" value={getProvinceByCity(fields.city) || 'Chưa xác định'} />
           <DetailItem label="Địa chỉ" value={fields.address || 'Chưa nhập'} />
+          <DetailItem label="Tọa độ" value={fields.latitude && fields.longitude ? fields.latitude + ', ' + fields.longitude : 'Chưa chọn'} />
           <DetailItem label="Giá mỗi đêm" value={formatCurrency(fields.price)} />
           <DetailItem label="Giảm giá" value={`${fields.discount || 0}%`} />
           <DetailItem label="Sức chứa" value={`${fields.guests} khách`} />

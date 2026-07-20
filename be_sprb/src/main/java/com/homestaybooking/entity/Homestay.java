@@ -36,6 +36,15 @@ public class Homestay {
     @Column(name = "province", nullable = false, length = 100)
     private String province;
 
+    @Column(name = "city", length = 100)
+    private String city;
+
+    @Column(name = "latitude", precision = 10, scale = 7)
+    private BigDecimal latitude;
+
+    @Column(name = "longitude", precision = 10, scale = 7)
+    private BigDecimal longitude;
+
     @Column(name = "home_description")
     private String homeDescription;
 

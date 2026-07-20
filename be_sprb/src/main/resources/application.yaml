@@ -1,3 +1,41 @@
+# spring:
+#   config:
+#     import: optional:file:.env[.properties]
+
+#   application:
+#     name: homestay-booking
+
+#   datasource:
+#     url: ${DB_URL:jdbc:mysql://localhost:3306/lvtn?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh}
+#     username: ${DB_USERNAME:root}
+#     password: ${DB_PASSWORD:}
+#     driver-class-name: com.mysql.cj.jdbc.Driver
+
+#   jpa:
+#     hibernate:
+#       ddl-auto: none
+
+#     show-sql: true
+
+#     properties:
+#       hibernate:
+#         format_sql: true
+#         dialect: org.hibernate.dialect.MySQLDialect
+
+#   # --- THÊM ĐOẠN CẤU HÌNH MAIL DƯỚI ĐÂY ---
+#   mail:
+#     host: smtp.gmail.comz
+#     port: 587
+#     username: ${MAIL_USERNAME:tai_khoan_cua_ban@gmail.com}
+#     password: ${MAIL_PASSWORD:mat_khau_ung_dung_cua_ban}
+#     properties:
+#       mail:
+#         smtp:
+#           auth: true
+#           starttls:
+#             enable: true
+#             required: true
+
 spring:
   config:
     import: optional:file:.env[.properties]
@@ -21,3 +59,27 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.MySQLDialect
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+
+gemini:
+  api:
+    key: ${GEMINI_API_KEY:}
+  model: ${GEMINI_MODEL:gemini-2.5-flash}
+  embedding:
+    model: ${GEMINI_EMBEDDING_MODEL:gemini-embedding-001}
+
+google:
+  oauth:
+    client-id: ${GOOGLE_CLIENT_ID:}

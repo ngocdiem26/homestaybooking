@@ -21,6 +21,8 @@ function normalizeHomestayPayload(formFields) {
     livingRoom: Number(formFields.livingRoom),
     kitchen: Number(formFields.kitchen),
     beds: Number(formFields.beds),
+    latitude: formFields.latitude === '' || formFields.latitude == null ? '' : Number(formFields.latitude),
+    longitude: formFields.longitude === '' || formFields.longitude == null ? '' : Number(formFields.longitude),
   };
 }
 
@@ -152,6 +154,7 @@ export function useHostHomestays() {
     setFormFields({
       name: homestay.name,
       city: homestay.city,
+      province: homestay.province || '',
       address: homestay.address,
       description: homestay.description || '',
       price: homestay.price,
@@ -164,6 +167,8 @@ export function useHostHomestays() {
       beds: homestay.beds ?? 1,
       checkinTime: homestay.checkinTime || '14:00',
       checkoutTime: homestay.checkoutTime || '12:00',
+      latitude: homestay.latitude ?? '',
+      longitude: homestay.longitude ?? '',
     });
     setIsFormOpen(true);
   };

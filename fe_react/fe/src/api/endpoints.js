@@ -1,6 +1,7 @@
 export const AUTH_ENDPOINTS = {
   PING: '/api/auth/ping',
   LOGIN: '/api/auth/login',
+  GOOGLE_LOGIN: '/api/auth/google',
   REGISTER: '/api/auth/register',
 };
 
@@ -35,3 +36,7 @@ export const PUBLIC_HOMESTAY_ENDPOINTS = {
 };
 
 
+export const CHATBOT_ENDPOINTS = {
+  MESSAGE: "/api/public/chatbot/message",
+  REINDEX: "/api/public/chatbot/reindex",
+};

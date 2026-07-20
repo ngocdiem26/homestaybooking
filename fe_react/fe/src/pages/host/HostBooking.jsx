@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   HiOutlineHome,
   HiOutlineFilter,
@@ -22,99 +22,119 @@ import HostLayout from '../../layouts/HostLayout';
 import ModalPortal from '../../components/common/ModalPortal';
 import Pagination from '../../components/common/Pagination';
 import SearchBar from '../../components/common/SearchBar';
+import { confirmHostBookingPayment, getHostBookings, updateHostBookingStatus } from '../../services/bookingService';
 
-// ─── Mock data ─────────────────────────────────────────────────────────────
-const MOCK_BOOKINGS = [
-  {
-    id: '#325', homestay: 'Lofi Homestay', homestayId: 'HMS-001',
-    checkin: '22/12/2025', checkout: '25/12/2025', guests: 2,
-    status: 'Chờ duyệt', paymentMethod: 'Thanh toán tại chỗ', paymentStatus: 'Chờ thanh toán',
-    createdAt: '15/11/2025', note: 'Cần chỗ để xe máy',
-    roomPrice: 1200000, discount: 100000, totalPrice: 3080000,
-    services: [
-      { name: 'Thuê xe máy', unitPrice: 120000, qty: 2, total: 240000 },
-      { name: 'Bữa sáng (BBQ)', unitPrice: 350000, qty: 2, total: 700000 },
-      { name: 'Hướng dẫn viên cá nhân', unitPrice: 450000, qty: 2, total: 900000 },
-    ],
-  },
-  {
-    id: '#324', homestay: 'Lofi Homestay', homestayId: 'HMS-001',
-    checkin: '18/12/2025', checkout: '20/12/2025', guests: 4,
-    status: 'Hoàn thành', paymentMethod: 'VNPay', paymentStatus: 'Đã thanh toán',
-    createdAt: '14/11/2025', note: '',
-    roomPrice: 1200000, discount: 0, totalPrice: 1440000,
-    services: [],
-  },
-  {
-    id: '#323', homestay: 'Lofi Homestay', homestayId: 'HMS-001',
-    checkin: '12/12/2025', checkout: '15/12/2025', guests: 2,
-    status: 'Chờ duyệt', paymentMethod: 'MoMo', paymentStatus: 'Chờ thanh toán',
-    createdAt: '13/11/2025', note: '',
-    roomPrice: 1200000, discount: 0, totalPrice: 2335000,
-    services: [{ name: 'Thuê xe máy', unitPrice: 120000, qty: 1, total: 120000 }],
-  },
-  {
-    id: '#322', homestay: 'Lavie House', homestayId: 'HMS-002',
-    checkin: '10/12/2025', checkout: '12/12/2025', guests: 3,
-    status: 'Chờ duyệt', paymentMethod: 'Tiền mặt', paymentStatus: 'Chờ thanh toán',
-    createdAt: '10/11/2025', note: 'Tới muộn khoảng 22h',
-    roomPrice: 700000, discount: 0, totalPrice: 4000000,
-    services: [{ name: 'Bữa sáng', unitPrice: 250000, qty: 3, total: 750000 }],
-  },
-  {
-    id: '#321', homestay: 'Lavie House', homestayId: 'HMS-002',
-    checkin: '05/12/2025', checkout: '08/12/2025', guests: 2,
-    status: 'Chờ duyệt', paymentMethod: 'VNPay', paymentStatus: 'Chờ thanh toán',
-    createdAt: '08/11/2025', note: '',
-    roomPrice: 700000, discount: 0, totalPrice: 1963000,
-    services: [],
-  },
-  {
-    id: '#320', homestay: 'Lofi Homestay', homestayId: 'HMS-001',
-    checkin: '01/12/2025', checkout: '03/12/2025', guests: 2,
-    status: 'Hoàn thành', paymentMethod: 'MoMo', paymentStatus: 'Đã thanh toán',
-    createdAt: '05/11/2025', note: '',
-    roomPrice: 1200000, discount: 0, totalPrice: 1200000,
-    services: [],
-  },
-  {
-    id: '#319', homestay: 'Lofi Homestay', homestayId: 'HMS-001',
-    checkin: '28/11/2025', checkout: '30/11/2025', guests: 1,
-    status: 'Hoàn thành', paymentMethod: 'VNPay', paymentStatus: 'Đã thanh toán',
-    createdAt: '02/11/2025', note: '',
-    roomPrice: 1200000, discount: 200000, totalPrice: 897000,
-    services: [],
-  },
-  {
-    id: '#318', homestay: 'Lavie House', homestayId: 'HMS-002',
-    checkin: '15/11/2025', checkout: '18/11/2025', guests: 2,
-    status: 'Chờ duyệt', paymentMethod: 'Tiền mặt', paymentStatus: 'Chờ thanh toán',
-    createdAt: '01/11/2025', note: '',
-    roomPrice: 700000, discount: 0, totalPrice: 412000,
-    services: [],
-  },
-];
+const MOCK_BOOKINGS = [];
 
 const STATUS_CONFIG = {
-  'Chờ duyệt':  { bg: '#FEF9EE', text: '#B45309', border: '#FCD34D', icon: HiOutlineClock },
-  'Đã xác nhận':{ bg: '#EFF6FF', text: '#1D4ED8', border: '#93C5FD', icon: HiOutlineCheckCircle },
+  'Chờ duyệt': { bg: '#FEF9EE', text: '#B45309', border: '#FCD34D', icon: HiOutlineClock },
+  'Đã xác nhận': { bg: '#EFF6FF', text: '#1D4ED8', border: '#93C5FD', icon: HiOutlineCheckCircle },
   'Hoàn thành': { bg: '#ECFDF5', text: '#065F46', border: '#6EE7B7', icon: HiOutlineCheckCircle },
-  'Đã hủy':     { bg: '#FEF2F2', text: '#991B1B', border: '#FECACA', icon: HiOutlineXCircle },
-  'Bị chặn':    { bg: '#F3F4F6', text: '#374151', border: '#D1D5DB', icon: HiOutlineBan },
+  'Đã hủy': { bg: '#FEF2F2', text: '#991B1B', border: '#FECACA', icon: HiOutlineXCircle },
+  'Bị chặn': { bg: '#F3F4F6', text: '#374151', border: '#D1D5DB', icon: HiOutlineBan },
 };
 
 const PAYMENT_STATUS_CONFIG = {
-  'Đã thanh toán':   { bg: '#ECFDF5', text: '#065F46', border: '#6EE7B7' },
-  'Chờ thanh toán':  { bg: '#FEF9EE', text: '#B45309', border: '#FCD34D' },
-  'Hoàn tiền':       { bg: '#EFF6FF', text: '#1D4ED8', border: '#93C5FD' },
+  'Đã thanh toán': { bg: '#ECFDF5', text: '#065F46', border: '#6EE7B7' },
+  'Chờ thanh toán': { bg: '#FEF9EE', text: '#B45309', border: '#FCD34D' },
+  'Hoàn tiền': { bg: '#EFF6FF', text: '#1D4ED8', border: '#93C5FD' },
 };
 
 const PAGE_SIZE = 5;
 
-function fmt(n) { return new Intl.NumberFormat('vi-VN').format(n) + ' đ'; }
+function fmt(n) { return new Intl.NumberFormat('vi-VN').format(Number(n || 0)) + ' đ'; }
 
-// ─── Shared UI ─────────────────────────────────────────────────────────────
+function formatDate(value) {
+  if (!value) return '';
+  return new Date(value + 'T00:00:00').toLocaleDateString('vi-VN');
+}
+
+function formatDateTime(value) {
+  if (!value) return '';
+  return new Date(value).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function isPastCheckInDate(value) {
+  if (!value) return false;
+  const checkIn = new Date(value + 'T00:00:00');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return checkIn < today;
+}
+
+function mapHostStatus(status) {
+  const normalized = String(status || '').toUpperCase();
+  if (normalized === 'CONFIRMED') return 'Đã xác nhận';
+  if (normalized === 'COMPLETED') return 'Hoàn thành';
+  if (['CANCELLED', 'EXPIRED', 'NO_SHOW'].includes(normalized)) return 'Đã hủy';
+  return 'Chờ duyệt';
+}
+
+function mapPaymentStatus(status) {
+  const normalized = String(status || '').toUpperCase();
+  if (normalized === 'PAID') return 'Đã thanh toán';
+  if (['REFUNDED', 'FAILED'].includes(normalized)) return 'Hoàn tiền';
+  return 'Chờ thanh toán';
+}
+
+function mapPaymentMethod(method) {
+  const normalized = String(method || '').toUpperCase();
+  if (normalized === 'SEPAY') return 'SePay';
+  if (normalized === 'PAY_AT_PROPERTY') return 'Thanh toán tại chỗ';
+  return method || 'Chưa chọn';
+}
+
+function toBackendStatus(label) {
+  if (label === 'Đã xác nhận') return 'CONFIRMED';
+  if (label === 'Hoàn thành') return 'COMPLETED';
+  if (label === 'Đã hủy') return 'CANCELLED';
+  return 'PAYMENT_PENDING';
+}
+
+function getDisplayHostStatus(apiBooking) {
+  const bookingStatus = String(apiBooking.bookingStatus || '').toUpperCase();
+  if (['CANCELLED', 'EXPIRED', 'NO_SHOW'].includes(bookingStatus)) return 'Đã hủy';
+  if (String(apiBooking.paymentStatus || '').toUpperCase() === 'PAID') {
+    return isPastCheckInDate(apiBooking.checkInDate) ? 'Hoàn thành' : 'Đã xác nhận';
+  }
+  return mapHostStatus(apiBooking.bookingStatus);
+}
+
+function canConfirmPayment(booking) {
+  return booking?.paymentMethod === 'Thanh toán tại chỗ' && booking?.paymentStatus === 'Chờ thanh toán' && ['Đã xác nhận', 'Hoàn thành'].includes(booking?.status);
+}
+
+function mapHostBooking(apiBooking) {
+  const services = (apiBooking.services || []).map((service) => ({
+    name: service.serviceName,
+    unitPrice: Number(service.unitPrice || 0),
+    qty: Number(service.quantity || 1),
+    total: Number(service.totalPrice || 0),
+  }));
+
+  return {
+    id: apiBooking.bookingCode || ('#' + apiBooking.bookingId),
+    bookingId: apiBooking.bookingId,
+    homestay: apiBooking.homestayName || 'Homestay',
+    homestayId: apiBooking.homestayCode || ('HMS-' + apiBooking.homeId),
+    checkin: formatDate(apiBooking.checkInDate),
+    checkout: formatDate(apiBooking.checkOutDate),
+    guests: Number(apiBooking.numberOfGuest || 1),
+    status: getDisplayHostStatus(apiBooking),
+    paymentMethod: mapPaymentMethod(apiBooking.paymentMethod),
+    paymentStatus: mapPaymentStatus(apiBooking.paymentStatus),
+    createdAt: formatDateTime(apiBooking.createdAt),
+    note: apiBooking.note || '',
+    roomPrice: Number(apiBooking.roomTotal || 0),
+    discount: Number(apiBooking.discountAmount || 0),
+    totalPrice: Number(apiBooking.totalPrice || 0),
+    services,
+  };
+}
+
+// ─── Shared UI// ─── Shared UI ─────────────────────────────────────────────────────────────
 const brand = { dark:'#1C2B2B', forest:'#2C3E2B', terra:'#8B4A2F', cream:'#F4F1EA', warm:'#6E473B' };
+const tableColumns = '44px minmax(180px, 1.1fr) 140px minmax(125px, .7fr) 175px 160px minmax(300px, 1fr)';
 
 function StatusBadge({ status, small }) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG['Chờ duyệt'];
@@ -140,6 +160,8 @@ function PaymentBadge({ status }) {
 // ─── Main component ────────────────────────────────────────────────────────
 export default function HostBookings() {
   const [bookings, setBookings] = useState(MOCK_BOOKINGS);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('Tất cả');
   const [filterPayment, setFilterPayment] = useState('Tất cả');
@@ -147,6 +169,28 @@ export default function HostBookings() {
   const [expandedId, setExpandedId] = useState(null);
   const [detailId, setDetailId] = useState(null);
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadBookings() {
+      try {
+        setLoading(true);
+        setLoadError('');
+        const data = await getHostBookings();
+        if (isMounted) setBookings(data.map(mapHostBooking));
+      } catch (error) {
+        if (isMounted) setLoadError(error.message || 'Không tải được danh sách đơn đặt phòng');
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    loadBookings();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const homestayOptions = ['Tất cả', ...Array.from(new Set(bookings.map(b => b.homestay)))];
 
@@ -164,9 +208,31 @@ export default function HostBookings() {
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const detailBooking = bookings.find(b => b.id === detailId) || null;
 
-  const updateStatus = (id, status) => {
-    setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
-    if (detailBooking?.id === id) setDetailId(null);
+  const updateStatus = async (id, status) => {
+    const target = bookings.find((booking) => booking.id === id || booking.bookingId === id);
+    if (!target) return;
+
+    try {
+      const updated = await updateHostBookingStatus(target.bookingId, toBackendStatus(status));
+      setBookings((current) => current.map((booking) => booking.bookingId === updated.bookingId ? mapHostBooking(updated) : booking));
+      if (detailBooking?.id === id) setDetailId(null);
+    } catch (error) {
+      alert(error.message || 'Không cập nhật được trạng thái đơn đặt phòng');
+    }
+  };
+
+  const confirmPayment = async (id) => {
+    const target = bookings.find((booking) => booking.id === id || booking.bookingId === id);
+    if (!target || !canConfirmPayment(target)) return;
+    if (!window.confirm('Xác nhận khách đã thanh toán tại chỗ cho đơn này?')) return;
+
+    try {
+      const updated = await confirmHostBookingPayment(target.bookingId);
+      setBookings((current) => current.map((booking) => booking.bookingId === updated.bookingId ? mapHostBooking(updated) : booking));
+      if (detailBooking?.id === id) setDetailId(null);
+    } catch (error) {
+      alert(error.message || 'Không xác nhận được thanh toán');
+    }
   };
 
   const stats = {
@@ -243,14 +309,17 @@ export default function HostBookings() {
         </div>
 
         {/* ── Main area: table + side panel ── */}
+        {loadError && <div className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold text-red-600">{loadError}</div>}
+        {loading && <div className="mb-4 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-gray-400 border border-gray-200">Đang tải đơn đặt phòng...</div>}
+
         <div className="flex gap-4" style={{ alignItems: 'flex-start' }}>
 
           {/* Table */}
           <div className="flex-1 min-w-0 bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden">
             {/* Table header */}
-            <div className="grid border-b border-gray-100" style={{ gridTemplateColumns:'40px 110px 1fr 130px 120px 180px 1fr', background:'#F9F8F6' }}>
-              {['', 'Mã đơn', 'Trạng thái', 'Tổng tiền', 'Tạo lúc', 'Thanh toán', 'Thao tác'].map((h, i) => (
-                <div key={i} className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">{h}</div>
+            <div className="grid border-b border-gray-100" style={{ gridTemplateColumns: tableColumns, background:'#F9F8F6' }}>
+              {['', 'Mã đơn', 'Trạng thái', 'Tổng tiền', 'Thời gian tạo', 'Thanh toán', 'Thao tác'].map((h, i) => (
+                <div key={i} className="px-3 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">{h}</div>
               ))}
             </div>
 
@@ -267,7 +336,7 @@ export default function HostBookings() {
               return (
                 <div key={b.id} className={`border-b border-gray-100 last:border-b-0 transition-colors ${isDetail ? 'bg-[#F4F1EA]/60' : 'hover:bg-gray-50/50'}`}>
                   {/* Main row */}
-                  <div className="grid items-center" style={{ gridTemplateColumns:'40px 110px 1fr 130px 120px 180px 1fr' }}>
+                  <div className="grid items-center" style={{ gridTemplateColumns: tableColumns }}>
                     {/* Expand toggle */}
                     <div className="px-3 py-3.5 flex items-center justify-center">
                       <button onClick={()=>setExpandedId(expanded ? null : b.id)} className="w-6 h-6 rounded-lg flex items-center justify-center transition hover:bg-gray-100" style={{ color:'#9CA3AF' }}>
@@ -276,9 +345,9 @@ export default function HostBookings() {
                     </div>
 
                     {/* ID */}
-                    <div className="px-2 py-3.5">
-                      <p className="font-black text-sm" style={{ color: brand.terra }}>{b.id}</p>
-                      <p className="text-[10px] text-gray-400 font-mono mt-0.5">{b.homestay}</p>
+                    <div className="px-3 py-3.5 min-w-0">
+                      <p className="font-black text-[13px] leading-snug break-all" style={{ color: brand.terra }}>{b.id}</p>
+                      <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate">{b.homestay}</p>
                     </div>
 
                     {/* Status */}
@@ -293,7 +362,7 @@ export default function HostBookings() {
 
                     {/* Created */}
                     <div className="px-2 py-3.5">
-                      <p className="text-xs text-gray-400 font-mono">{b.createdAt}</p>
+                      <p className="text-[11px] leading-snug text-gray-500 font-mono font-semibold whitespace-normal">{b.createdAt}</p>
                     </div>
 
                     {/* Payment */}
@@ -303,7 +372,7 @@ export default function HostBookings() {
                     </div>
 
                     {/* Actions */}
-                    <div className="px-3 py-3.5 flex items-center gap-1.5 justify-end">
+                    <div className="px-3 py-3.5 flex items-center gap-1.5 justify-end flex-wrap xl:flex-nowrap">
                       <button
                         onClick={()=>setDetailId(b.id)}
                         className="h-8 px-3 rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 transition border"
@@ -314,6 +383,11 @@ export default function HostBookings() {
                       >
                         <HiOutlineClipboardList size={13}/>Chi tiết
                       </button>
+                      {canConfirmPayment(b) && (
+                        <button onClick={()=>confirmPayment(b.id)} className="h-8 px-3 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 border transition" style={{ background:'#F0FDF4', color:'#166534', borderColor:'#86EFAC' }}>
+                          <HiOutlineCash size={13}/> Đã thanh toán
+                        </button>
+                      )}
                       {b.status === 'Chờ duyệt' && (
                         <>
                           <button onClick={()=>updateStatus(b.id,'Đã xác nhận')} className="h-8 px-3 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 border transition" style={{ background:'#ECFDF5', color:'#065F46', borderColor:'#6EE7B7' }}>
@@ -483,6 +557,11 @@ export default function HostBookings() {
 
                 {/* Action buttons */}
                 <div className="space-y-2 pt-1">
+                  {canConfirmPayment(detailBooking) && (
+                    <button onClick={()=>confirmPayment(detailBooking.id)} className="w-full h-10 rounded-xl text-xs font-bold text-white shadow transition hover:opacity-90 active:scale-95 inline-flex items-center justify-center gap-1.5" style={{ background:'#166534' }}>
+                      <HiOutlineCash size={14}/> Đã thanh toán tại chỗ
+                    </button>
+                  )}
                   {detailBooking.status === 'Chờ duyệt' && (
                     <div className="grid grid-cols-2 gap-2">
                       <button onClick={()=>updateStatus(detailBooking.id,'Đã xác nhận')} className="h-10 rounded-xl text-xs font-bold text-white shadow transition hover:opacity-90 active:scale-95 inline-flex items-center justify-center gap-1.5" style={{ background: brand.forest }}>

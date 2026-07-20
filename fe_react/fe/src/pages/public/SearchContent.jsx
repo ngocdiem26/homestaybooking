@@ -16,6 +16,7 @@ import HomestaySearchForm from '../../components/homestay/HomestaySearchForm';
 import HorizontalHomestayCard from '../../components/homestay/HorizontalHomestayCard';
 import VerticalHomestayCard from '../../components/homestay/VerticalHomestayCard';
 import { getPublicHomestays } from '../../services/homestayService';
+import { buildSearchParams as buildStoredSearchParams, saveSearchState } from '../../services/searchState';
 
 const PAGE_SIZE = 20;
 const DEFAULT_MAX_PRICE = 2400000;
@@ -23,13 +24,6 @@ const DEFAULT_AMENITIES = ['Wi-Fi', 'Bếp riêng', 'Hồ bơi', 'Bãi đỗ xe'
 const DEFAULT_SERVICES = ['Đưa đón sân bay', 'Thuê xe máy', 'Bữa sáng', 'Dọn phòng'];
 const RATING_FILTERS = [5, 4, 3];
 
-function buildSearchParams(search = {}) {
-  const params = new URLSearchParams();
-  Object.entries(search).forEach(([key, value]) => {
-    if (value) params.set(key, value);
-  });
-  return params;
-}
 
 function formatCurrency(value) {
   return Number(value || 0).toLocaleString('vi-VN') + ' đ';
@@ -53,7 +47,7 @@ export default function SearchContent({ favorites = [], toggleFavorite = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const destination = searchParams.get('destination') || 'Tất cả địa điểm';
+  const destination = searchParams.get('destination') || searchParams.get('province') || 'Tất cả địa điểm';
 
   useEffect(() => {
     let isMounted = true;
@@ -154,7 +148,8 @@ export default function SearchContent({ favorites = [], toggleFavorite = () => {
   };
 
   const handleSearch = (search) => {
-    setSearchParams(buildSearchParams(search));
+    const savedSearch = saveSearchState(search);
+    setSearchParams(buildStoredSearchParams(savedSearch));
     setVisibleCount(PAGE_SIZE);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -163,13 +158,11 @@ export default function SearchContent({ favorites = [], toggleFavorite = () => {
     <UserLayout>
       <main className="bg-[#F4F1EA] min-h-screen pb-16 text-left">
         <div className="relative bg-[#202c3c] pt-4 pb-6 px-4 sm:px-6 lg:px-8 text-center rounded-b-[50px] border-b-[6px] border-[#dc824f] shadow-lg z-30">
-          <div className="max-w-3xl mx-auto space-y-2 mb-8">
+          <div className="max-w-3xl mx-auto space-y-2 mb-10 mt-5">
             <h2 className="text-white text-xl md:text-2xl font-bold tracking-wide font-serif">
               Tìm kiếm homestay cho chuyến đi của bạn
             </h2>
-            <p className="text-white/60 text-xs font-medium">
-              Dữ liệu homestay được lấy trực tiếp từ database Cozygo
-            </p>
+
           </div>
 
           <div className="absolute left-4 right-4 bottom-0 transform translate-y-1/2 z-30 max-w-5xl mx-auto">
@@ -189,8 +182,9 @@ export default function SearchContent({ favorites = [], toggleFavorite = () => {
                 <HiChevronRight size={14} />
                 <span className="text-[#2C3E2B]">{destination}</span>
               </div>
-              <h1 className="font-serif text-2xl font-bold text-[#2C1E15] mt-1">
-                {filteredHomestays.length} homestay phù hợp {destination !== 'Tất cả địa điểm' ? 'tại ' + destination : 'trên hệ thống'}
+              <h1 className="font-classic text-2xl font-bold text-[#2C1E15] mt-1 leading-tight">
+                <span className="font-sans text-[28px] font-black tracking-normal align-baseline">{filteredHomestays.length}</span>{' '}
+                homestay phù hợp {destination !== 'Tất cả địa điểm' ? 'tại ' + destination : 'trên hệ thống'}
               </h1>
               <p className="text-xs text-gray-400 mt-1">
                 Hiển thị {visibleHomestays.length} / {filteredHomestays.length} kết quả. Mỗi lần tải thêm tối đa {PAGE_SIZE} homestay.
@@ -421,3 +415,4 @@ function CheckList({ items, selected, onToggle }) {
     </div>
   );
 }
+

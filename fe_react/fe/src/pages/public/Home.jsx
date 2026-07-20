@@ -4,6 +4,7 @@ import banner from '../../assets/images/nha5.jpg';
 // Import đúng component card dọc đã được chia tách ra thư mục riêng
 import VerticalHomestayCard from '../../components/homestay/VerticalHomestayCard';
 import HomestaySearchForm from '../../components/homestay/HomestaySearchForm';
+import { buildSearchParams, saveSearchState } from '../../services/searchState';
 
 // Import Layout chung và các vùng nội dung động
 import UserLayout from '../../layouts/UserLayout'; 
@@ -14,10 +15,8 @@ export default function Home({ favorites, toggleFavorite }) {
   const navigate = useNavigate();
 
   const goToSearch = (search = {}) => {
-    const params = new URLSearchParams();
-    Object.entries(search).forEach(([key, value]) => {
-      if (value) params.set(key, value);
-    });
+    const savedSearch = saveSearchState(search);
+    const params = buildSearchParams(savedSearch);
     navigate('/search' + (params.toString() ? '?' + params.toString() : ''));
   };
 
@@ -28,8 +27,8 @@ export default function Home({ favorites, toggleFavorite }) {
       {/* ==========================================
           1. HERO BANNER & THANH SEARCH BOX CỐ ĐỊNH TRÊN ẢNH
          ========================================== */}
-      <section className="relative h-[540px] flex items-center justify-center overflow-visible z-20">
-        <div className="absolute inset-0 z-0 overflow-hidden">
+      <section className="relative h-[540px] flex items-center  justify-center overflow-visible z-20 ">
+        <div className="absolute rounded-b-[50px] inset-0 z-0 overflow-hidden">
           <img src={banner} alt="Cozy Home Banner" className="w-full h-full brightness-[0.8] scale-100 object-cover" />
         </div>
 
@@ -41,7 +40,7 @@ export default function Home({ favorites, toggleFavorite }) {
             onClick={() => { const el = document.getElementById('destination-input'); el && el.focus(); }}
             className="bg-[#6E473B] hover:bg-[#57362c] border border-white/10 text-white font-semibold text-xs uppercase tracking-widest px-6 py-3 rounded-xl shadow-lg transition"
           >
-            Xem chi tiết & đặt phòng
+            Tìm kiếm ngay homestay cho chuyến đi của bạn 
           </button>
         </div>
 

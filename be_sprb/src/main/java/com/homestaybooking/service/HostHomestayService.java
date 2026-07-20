@@ -34,10 +34,12 @@ import java.nio.file.StandardCopyOption;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -152,11 +154,15 @@ public class HostHomestayService {
     private void applyFields(Homestay homestay, HostHomestayRequest request) {
         if (isBlank(request.getHomeName())) throw new AppException("Tên homestay không được để trống");
         if (isBlank(request.getHomeAddress())) throw new AppException("Địa chỉ homestay không được để trống");
-        if (isBlank(request.getProvince())) throw new AppException("Tỉnh/thành phố không được để trống");
+        if (isBlank(request.getCity())) throw new AppException("Thành phố không được để trống");
+        if (isBlank(request.getProvince())) throw new AppException("Không xác định được tỉnh tương ứng với thành phố đã chọn");
 
         homestay.setHomeName(request.getHomeName().trim());
         homestay.setHomeAddress(request.getHomeAddress().trim());
         homestay.setProvince(request.getProvince().trim());
+        homestay.setCity(request.getCity().trim());
+        homestay.setLatitude(request.getLatitude());
+        homestay.setLongitude(request.getLongitude());
         homestay.setHomeDescription(request.getHomeDescription());
         homestay.setPricePerNight(defaultMoney(request.getPricePerNight()));
         homestay.setDiscountPercent(defaultMoney(request.getDiscountPercent()));
@@ -220,21 +226,51 @@ public class HostHomestayService {
     }
 
     private void syncServices(Integer homeId, List<HostHomestayServiceRequest> services) {
-        jdbcTemplate.update("delete from homestay_services where home_id = ?", homeId);
         if (services == null) return;
 
+        List<Integer> keptServiceIds = new ArrayList<>();
         for (HostHomestayServiceRequest service : services) {
             if (service == null || isBlank(service.getServiceName())) continue;
-            Integer serviceId = findOrCreateService(service.getServiceName().trim(), service.getDescription());
-            jdbcTemplate.update(
-                    "insert into homestay_services (service_id, home_id, price, status, created_at) values (?, ?, ?, ?, ?)",
-                    serviceId,
-                    homeId,
-                    defaultMoney(service.getPrice()),
-                    normalizeServiceStatus(service.getStatus()),
-                    Timestamp.valueOf(LocalDateTime.now())
-            );
+
+            Integer serviceId = service.getServiceId() != null
+                    ? service.getServiceId()
+                    : findOrCreateService(service.getServiceName().trim(), service.getDescription());
+            Integer homestayServiceId = resolveHomestayServiceId(homeId, service.getHomestayServiceId(), serviceId);
+
+            if (homestayServiceId != null) {
+                jdbcTemplate.update(
+                        "update homestay_services set service_id = ?, price = ?, status = ? where homestay_service_id = ? and home_id = ?",
+                        serviceId,
+                        defaultMoney(service.getPrice()),
+                        normalizeServiceStatus(service.getStatus()),
+                        homestayServiceId,
+                        homeId
+                );
+                addUnique(keptServiceIds, homestayServiceId);
+                continue;
+            }
+
+            KeyHolder keyHolder = new GeneratedKeyHolder();
+            jdbcTemplate.update(connection -> {
+                PreparedStatement statement = connection.prepareStatement(
+                        "insert into homestay_services (service_id, home_id, price, status, created_at) values (?, ?, ?, ?, ?)",
+                        Statement.RETURN_GENERATED_KEYS
+                );
+                statement.setInt(1, serviceId);
+                statement.setInt(2, homeId);
+                statement.setBigDecimal(3, defaultMoney(service.getPrice()));
+                statement.setString(4, normalizeServiceStatus(service.getStatus()));
+                statement.setTimestamp(5, Timestamp.valueOf(LocalDateTime.now()));
+                return statement;
+            }, keyHolder);
+
+            Number key = keyHolder.getKey();
+            if (key != null) {
+                addUnique(keptServiceIds, key.intValue());
+            }
         }
+
+        archiveRemovedServices(homeId, keptServiceIds);
     }
 
     private void syncRules(Integer homeId, List<String> rules) {
@@ -299,6 +335,72 @@ public class HostHomestayService {
         }
     }
 
+    private Integer resolveHomestayServiceId(Integer homeId, Integer homestayServiceId, Integer serviceId) {
+        if (homestayServiceId != null) {
+            try {
+                return jdbcTemplate.queryForObject(
+                        "select homestay_service_id from homestay_services where home_id = ? and homestay_service_id = ? limit 1",
+                        Integer.class,
+                        homeId,
+                        homestayServiceId
+                );
+            } catch (EmptyResultDataAccessException ignored) {
+                // Continue by matching the catalog service for this homestay.
+            }
+        }
+
+        try {
+            return jdbcTemplate.queryForObject(
+                    "select homestay_service_id from homestay_services where home_id = ? and service_id = ? limit 1",
+                    Integer.class,
+                    homeId,
+                    serviceId
+            );
+        } catch (EmptyResultDataAccessException ignored) {
+            return null;
+        }
+    }
+
+    private void archiveRemovedServices(Integer homeId, List<Integer> keptServiceIds) {
+        String keptClause = "";
+        Object[] keptParams = new Object[]{homeId};
+
+        if (!keptServiceIds.isEmpty()) {
+            String placeholders = keptServiceIds.stream().map(id -> "?").collect(Collectors.joining(", "));
+            keptClause = " and homestay_service_id not in (" + placeholders + ")";
+            List<Object> params = new ArrayList<>();
+            params.add(homeId);
+            params.addAll(keptServiceIds);
+            keptParams = params.toArray();
+        }
+
+        jdbcTemplate.update(
+                "delete from homestay_services "
+                        + "where home_id = ?"
+                        + keptClause
+                        + " and homestay_service_id not in ("
+                        + "select distinct bs.homestay_service_id from booking_services bs where bs.homestay_service_id is not null"
+                        + ")",
+                keptParams
+        );
+
+        jdbcTemplate.update(
+                "update homestay_services set status = 'BLOCKED' "
+                        + "where home_id = ?"
+                        + keptClause
+                        + " and homestay_service_id in ("
+                        + "select distinct bs.homestay_service_id from booking_services bs where bs.homestay_service_id is not null"
+                        + ")",
+                keptParams
+        );
+    }
+
+    private void addUnique(List<Integer> values, Integer value) {
+        if (value != null && !values.contains(value)) {
+            values.add(value);
+        }
+    }
+
     private HostHomestayResponse toResponse(Homestay homestay) {
         return HostHomestayResponse.builder()
                 .homeId(homestay.getHomeId())
@@ -307,6 +409,9 @@ public class HostHomestayService {
                 .homeName(homestay.getHomeName())
                 .homeAddress(homestay.getHomeAddress())
                 .province(homestay.getProvince())
+                .city(homestay.getCity())
+                .latitude(homestay.getLatitude())
+                .longitude(homestay.getLongitude())
                 .homeDescription(homestay.getHomeDescription())
                 .pricePerNight(homestay.getPricePerNight())
                 .status(homestay.getStatus())

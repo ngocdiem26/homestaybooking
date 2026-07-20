@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { login } from '../services/authService';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { login, loginWithGoogle } from '../services/authService';
 import { useAuth } from './useAuth';
 
 const initialForm = {
@@ -9,7 +9,9 @@ const initialForm = {
   rememberMe: false,
 };
 
-function getRedirectPath(roleName) {
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+
+function getRedirectPath(roleName, requestedRedirect) {
   const normalizedRole = roleName?.trim().toUpperCase();
 
   if (normalizedRole === 'ADMIN') {
@@ -20,11 +22,16 @@ function getRedirectPath(roleName) {
     return '/host';
   }
 
+  if (requestedRedirect?.startsWith('/')) {
+    return requestedRedirect;
+  }
+
   return '/';
 }
 
 export function useLoginForm() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login: saveLoginSession } = useAuth();
   const [form, setForm] = useState(initialForm);
   const [showPassword, setShowPassword] = useState(false);
@@ -39,6 +46,15 @@ export function useLoginForm() {
     setToast({ show: true, type, message });
   };
 
+  const completeLogin = (authResponse) => {
+    saveLoginSession(authResponse, form.rememberMe);
+    showToast('success', `Chào mừng ${authResponse.fullName || 'bạn'} quay lại Cozygo.`);
+
+    setTimeout(() => {
+      navigate(getRedirectPath(authResponse.roleName, searchParams.get('redirect')));
+    }, 700);
+  };
+
   const submitLogin = async (event) => {
     event.preventDefault();
     setIsSubmitting(true);
@@ -49,12 +65,7 @@ export function useLoginForm() {
         password: form.password,
       });
 
-      saveLoginSession(authResponse, form.rememberMe);
-      showToast('success', `Chào mừng ${authResponse.fullName || 'bạn'} quay lại Cozygo.`);
-
-      setTimeout(() => {
-        navigate(getRedirectPath(authResponse.roleName));
-      }, 700);
+      completeLogin(authResponse);
     } catch (error) {
       showToast('error', error.message || 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.');
     } finally {
@@ -62,12 +73,32 @@ export function useLoginForm() {
     }
   };
 
+  const submitGoogleLogin = async (credential) => {
+    if (!credential) {
+      showToast('error', 'Không nhận được thông tin đăng nhập từ Google.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const authResponse = await loginWithGoogle({ credential });
+      completeLogin(authResponse);
+    } catch (error) {
+      showToast('error', error.message || 'Đăng nhập Google thất bại. Vui lòng thử lại.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return {
     form,
+    googleClientId,
     isSubmitting,
     showPassword,
     toast,
     setShowPassword,
+    submitGoogleLogin,
     submitLogin,
     updateField,
   };

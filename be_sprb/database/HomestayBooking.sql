@@ -725,3 +725,355 @@ CREATE TABLE destination_itinerary_items (
     CONSTRAINT ck_itinerary_status
         CHECK (item_status IN ('ACTIVE', 'HIDDEN', 'DELETED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ ALTER TABLE bookings
+ADD COLUMN booking_code VARCHAR(50) UNIQUE;
+
+ALTER TABLE bookings
+ADD COLUMN payment_method VARCHAR(50);
+
+ALTER TABLE bookings
+ADD COLUMN payment_status VARCHAR(30) DEFAULT 'UNPAID';
+
+ALTER TABLE bookings
+ADD COLUMN payment_expires_at DATETIME;
+
+ALTER TABLE payments
+ADD COLUMN expires_at DATETIME;
+
+
+-- 1. Bổ sung 2 cột còn thiếu vào bảng reviews
+ALTER TABLE reviews 
+ADD COLUMN review_status VARCHAR(20) NOT NULL DEFAULT 'VISIBLE',
+ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+
+-- 2. Xóa bỏ Unique Key cũ dựa trên duy nhất booking_id (nếu có)
+ALTER TABLE reviews DROP INDEX uk_reviews_booking_id;
+
+-- 3. Thêm Unique Key mới kết hợp (booking_id, user_id) theo đúng logic code Java
+ALTER TABLE reviews ADD CONSTRAINT uk_reviews_booking_user UNIQUE (booking_id, user_id);
+
+-- 4. Tạo các chỉ mục (Indexes) tối ưu tìm kiếm theo mã Java yêu cầu
+CREATE INDEX idx_reviews_home_status ON reviews(home_id, review_status);
+
+-- Lưu ý: Cột user_id trong bảng cũ của bạn đã có một index tên là `idx_reviews_user_id`.
+-- Để đồng bộ hẳn với tên index `idx_reviews_user` trong code Java, ta đổi tên nó:
+ALTER TABLE reviews RENAME INDEX idx_reviews_user_id TO idx_reviews_user;
+
+
+USE lvtn;
+
+ALTER TABLE chat_sessions
+MODIFY COLUMN user_id INT NULL;
+
+ALTER TABLE chat_sessions
+ADD COLUMN session_title VARCHAR(255) NULL AFTER user_id,
+ADD COLUMN session_status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE' AFTER session_title;
+
+ALTER TABLE chat_messages
+ADD COLUMN intent VARCHAR(100) NULL AFTER message_content,
+ADD COLUMN metadata JSON NULL AFTER intent;
+
+CREATE TABLE IF NOT EXISTS chatbot_documents (
+    document_id INT NOT NULL AUTO_INCREMENT,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    document_type VARCHAR(50) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (document_id),
+
+    CONSTRAINT ck_chatbot_documents_status
+        CHECK (status IN ('ACTIVE', 'HIDDEN', 'DELETED'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO chatbot_documents (title, content, document_type)
+VALUES
+(
+    'Hướng dẫn đặt phòng',
+    'Để đặt homestay, khách chọn homestay, chọn ngày nhận phòng, ngày trả phòng, số khách, sau đó bấm Đặt phòng một bảng yêu cầu nhập thông tin đặt phòng sẽ xuất hiện, bạn chỉ cần điền thông tin theo yêu cầu và hoàn thành đầy đủ các bước.  Nếu chưa đăng nhập, hệ thống yêu cầu đăng nhập trước. Sau khi xác nhận thông tin, khách chọn thanh toán online qua SePay hoặc thanh toán tại chỗ.',
+    'BOOKING_GUIDE'
+),
+(
+    'Thanh toán SePay',
+    'Thanh toán SePay là hình thức thanh toán online bằng chuyển khoản ngân hàng hoặc quét mã QR. Sau khi khách chuyển khoản đúng số tiền và đúng nội dung, hệ thống nhận webhook từ SePay và cập nhật booking thành đã xác nhận.',
+    'PAYMENT_GUIDE'
+),
+(
+    'Thanh toán tại chỗ',
+    'Nếu chọn thanh toán tại chỗ, booking được tạo với trạng thái đã xác nhận, còn trạng thái thanh toán là chờ thanh toán. Khách sẽ thanh toán trực tiếp khi nhận phòng tại homestay.',
+    'PAYMENT_GUIDE'
+),
+(
+    'Quy trình khiếu nại',
+    'Khách có thể gửi khiếu nại trong mục Đặt phòng của tôi , chọn vào đơn đặt phòng đã hoàn thành của bạn sẽ xuất hiện nút viết khiếu nại. Vấn đề thanh toán, hệ thống hoặc báo cáo homestay/chủ homestay sẽ do admin xử lý trực tiếp và trao đổi thông qua email',
+    'COMPLAINT_GUIDE'
+);
+
+
+CREATE TABLE IF NOT EXISTS chatbot_document_chunks (
+    chunk_id BIGINT NOT NULL AUTO_INCREMENT,
+    document_id INT NOT NULL,
+
+    chunk_index INT NOT NULL,
+    chunk_content TEXT NOT NULL,
+
+    embedding_json LONGTEXT NULL,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (chunk_id),
+
+    KEY idx_chunks_document_id (document_id),
+
+    CONSTRAINT fk_chunks_document
+        FOREIGN KEY (document_id) REFERENCES chatbot_documents(document_id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO chatbot_documents (title, content, document_type)
+SELECT
+    'Chính sách mã khuyến mãi',
+    'Mã khuyến mãi chỉ được áp dụng nếu còn hiệu lực, chưa hết lượt sử dụng và đơn đặt phòng đạt giá trị tối thiểu. Mỗi booking chỉ nên áp dụng một mã khuyến mãi. Nếu mã giảm theo phần trăm thì số tiền giảm không vượt quá mức giảm tối đa.',
+    'PROMOTION_GUIDE'
+WHERE NOT EXISTS (
+    SELECT 1 FROM chatbot_documents WHERE title = 'Chính sách mã khuyến mãi'
+);
+
+INSERT INTO chatbot_documents (title, content, document_type)
+SELECT
+    'Hướng dẫn tìm homestay',
+    'Khách có thể tìm homestay theo tỉnh thành, địa điểm du lịch, số khách, ngân sách, tiện nghi và ngày lưu trú. Nếu không tìm thấy homestay phù hợp, khách có thể mở rộng khu vực, tăng ngân sách hoặc giảm số tiêu chí lọc.',
+    'SEARCH_GUIDE'
+WHERE NOT EXISTS (
+    SELECT 1 FROM chatbot_documents WHERE title = 'Hướng dẫn tìm homestay'
+);
+
+INSERT INTO chatbot_documents (title, content, document_type)
+SELECT
+    'Hướng dẫn báo cáo homestay',
+    'Nếu khách phát hiện homestay có thông tin sai sự thật, hình ảnh không đúng, chủ homestay thu tiền ngoài hệ thống, có dấu hiệu lừa đảo hoặc vấn đề an toàn, khách nên dùng chức năng báo cáo homestay để admin xử lý trực tiếp.',
+    'REPORT_GUIDE'
+WHERE NOT EXISTS (
+    SELECT 1 FROM chatbot_documents WHERE title = 'Hướng dẫn báo cáo homestay'
+);
+
+INSERT INTO chatbot_documents (title, content, document_type)
+SELECT
+    'Hướng dẫn hủy đặt phòng',
+    'Nếu khách muốn hủy đặt phòng, khách vào mục Đặt phòng của tôi, chọn đơn đặt phòng cần hủy và bấm hủy nếu đơn còn trong trạng thái cho phép hủy. Việc hoàn tiền nếu có sẽ phụ thuộc vào phương thức thanh toán và chính sách của hệ thống.',
+    'CANCEL_GUIDE'
+WHERE NOT EXISTS (
+    SELECT 1 FROM chatbot_documents WHERE title = 'Hướng dẫn hủy đặt phòng'
+);
+
+drop table activities;
+
+CREATE TABLE IF NOT EXISTS activities (
+    activity_id INT NOT NULL AUTO_INCREMENT,
+
+    activity_name VARCHAR(255) NOT NULL,
+    province VARCHAR(100) NOT NULL,
+    activity_address VARCHAR(255) NULL,
+
+    short_description VARCHAR(255) NULL,
+    description TEXT NOT NULL,
+
+    hotline VARCHAR(30) NULL,
+    thumbnail_url VARCHAR(255) NULL,
+
+    badge_text VARCHAR(100) NULL,
+    badge_type VARCHAR(50) NULL,
+
+    activity_status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
+    is_featured BOOLEAN NOT NULL DEFAULT FALSE,
+    display_order INT NOT NULL DEFAULT 0,
+
+    created_by INT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
+
+    PRIMARY KEY (activity_id),
+
+    KEY idx_activities_province (province),
+    KEY idx_activities_status (activity_status),
+    KEY idx_activities_featured (is_featured),
+
+    CONSTRAINT fk_activities_created_by
+        FOREIGN KEY (created_by) REFERENCES users(user_id)
+        ON DELETE SET NULL
+        ON UPDATE RESTRICT,
+
+    CONSTRAINT ck_activities_status
+        CHECK (activity_status IN ('ACTIVE', 'HIDDEN', 'DELETED'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS activity_images (
+    image_id BIGINT NOT NULL AUTO_INCREMENT,
+    activity_id INT NOT NULL,
+
+    image_url VARCHAR(255) NOT NULL,
+
+    is_thumbnail BOOLEAN NOT NULL DEFAULT FALSE,
+    display_order INT NOT NULL DEFAULT 0,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (image_id),
+
+    KEY idx_activity_images_activity_id (activity_id),
+
+    CONSTRAINT fk_activity_images_activity
+        FOREIGN KEY (activity_id) REFERENCES activities(activity_id)
+        ON DELETE CASCADE
+        ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+INSERT INTO activities (
+    activity_name,
+    province,
+    activity_address,
+    short_description,
+    description,
+    hotline,
+    thumbnail_url,
+    badge_text,
+    badge_type,
+    is_featured,
+    display_order
+)
+VALUES
+(
+    'Bắt cá ruộng miền Tây',
+    'Cần Thơ',
+    'Phong Điền, Cần Thơ',
+    'Trải nghiệm lội ruộng, tát mương và bắt cá cùng người dân địa phương.',
+    'Hoạt động bắt cá ruộng miền Tây mang đến cho du khách cảm giác dân dã và gần gũi với đời sống sông nước. Du khách sẽ được mặc áo bà ba, lội ruộng, tát mương, bắt cá bằng tay hoặc bằng nơm, sau đó có thể thưởng thức các món ăn đồng quê được chế biến từ cá vừa bắt được.',
+    '0909123456',
+    '/images/activities/batca/cover.jpg',
+    'Dân dã',
+    'LOCAL',
+    TRUE,
+    1
+),
+(
+    'Gặt lúa cùng nông dân',
+    'Đồng Tháp',
+    'Làng quê Sa Đéc, Đồng Tháp',
+    'Cùng người dân ra đồng gặt lúa, bó lúa và tìm hiểu mùa vụ miền Tây.',
+    'Du khách được tham gia vào một ngày làm nông thực thụ với các công việc như cắt lúa, bó lúa, gánh lúa và nghe người dân chia sẻ về quy trình trồng lúa nước. Hoạt động phù hợp cho khách muốn tìm hiểu văn hóa nông nghiệp truyền thống.',
+    '0918123456',
+    '/images/activities/gatlua/cover.jpg',
+    'Mùa vụ',
+    'FARM',
+    TRUE,
+    2
+),
+(
+    'Chèo xuồng ba lá trên rạch dừa nước',
+    'Bến Tre',
+    'Rạch dừa nước, Bến Tre',
+    'Ngồi xuồng ba lá len lỏi qua những con rạch xanh mát đặc trưng miền Tây.',
+    'Trải nghiệm chèo thuyền trên rạch dừa nước giúp du khách cảm nhận nhịp sống yên bình của vùng sông nước. Du khách có thể tự tay chèo xuồng hoặc ngồi cùng người lái địa phương, đi qua những hàng dừa nước, vườn cây và nghe kể chuyện đời sống miền quê.',
+    '0922123456',
+    '/images/activities/cheoxuong/cover.jpg',
+    'Sông nước',
+    'WATER',
+    TRUE,
+    3
+),
+(
+    'Chèo thuyền thúng ở Đà Nẵng',
+    'Đà Nẵng',
+    'Khu vực sông nước ven biển Đà Nẵng',
+    'Trải nghiệm chèo thuyền thúng, khám phá đời sống ngư dân và không gian sông nước địa phương.',
+    'Du khách được hướng dẫn cách giữ thăng bằng và chèo thuyền thúng trên mặt nước, tìm hiểu đời sống ngư dân ven biển và tham gia các hoạt động giao lưu dân dã. Đây là trải nghiệm phù hợp cho nhóm bạn, gia đình và du khách muốn khám phá nét văn hóa miền biển Đà Nẵng.',
+    '0933123456',
+    '/images/activities/cheothuyenthung/cover.jpg',
+    'Sông nước',
+    'WATER',
+    TRUE,
+    4
+),
+(
+    'Đan lát thủ công cùng nghệ nhân',
+    'Quảng Nam',
+    'Làng nghề truyền thống Hội An, Quảng Nam',
+    'Tìm hiểu nghề đan lát truyền thống và tự tay làm sản phẩm thủ công.',
+    'Hoạt động đan lát thủ công đưa du khách đến gần hơn với nghề truyền thống địa phương. Dưới sự hướng dẫn của nghệ nhân, du khách có thể học cách chọn nguyên liệu, đan giỏ nhỏ, mẹt hoặc vật trang trí đơn giản để mang về làm kỷ niệm.',
+    '0944123456',
+    '/images/activities/danlatthucong/cover.jpg',
+    'Làng nghề',
+    'CRAFT',
+    FALSE,
+    5
+),
+(
+    'Thu hoạch rau tại vườn',
+    'Lâm Đồng',
+    'Vườn rau ngoại ô Đà Lạt, Lâm Đồng',
+    'Tham quan nông trại, hái rau sạch và tìm hiểu cách canh tác vùng cao.',
+    'Du khách được tham quan vườn rau, nghe giới thiệu về quy trình trồng rau sạch, tự tay thu hoạch rau củ theo mùa và chụp ảnh trong không gian nông trại xanh mát. Hoạt động phù hợp cho khách yêu thiên nhiên và gia đình có trẻ nhỏ.',
+    '0955123456',
+    '/images/activities/thuhoachrau/cover.jpg',
+    'Nông trại',
+    'FARM',
+    TRUE,
+    6
+),
+(
+    'Trải nghiệm làm gốm',
+    'Ninh Bình',
+    'Làng nghề gốm truyền thống, Ninh Bình',
+    'Tự tay nặn gốm, tạo hình và trang trí sản phẩm dưới sự hướng dẫn của thợ gốm.',
+    'Du khách sẽ được tìm hiểu quy trình làm gốm thủ công, từ nhào đất, tạo hình trên bàn xoay đến trang trí sản phẩm. Đây là hoạt động phù hợp với khách thích sáng tạo và muốn tìm hiểu nghề thủ công truyền thống.',
+    '0966123456',
+    '/images/activities/lamgom/cover.jpg',
+    'Thủ công',
+    'CRAFT',
+    FALSE,
+    7
+),
+(
+    'Kéo lưới cùng ngư dân',
+    'Quảng Ninh',
+    'Làng chài ven biển Hạ Long, Quảng Ninh',
+    'Cùng ngư dân ra bãi biển kéo lưới và tìm hiểu đời sống làng chài.',
+    'Hoạt động kéo lưới cùng ngư dân giúp du khách cảm nhận công việc mưu sinh ven biển. Du khách sẽ được hướng dẫn cách kéo lưới, phân loại hải sản và nghe chia sẻ về văn hóa làng chài địa phương.',
+    '0977123456',
+    '/images/activities/keoluoi/cover.jpg',
+    'Làng chài',
+    'SEA',
+    TRUE,
+    8
+),
+(
+    'Làm bánh dân gian Nam Bộ',
+    'Sóc Trăng',
+    'Khu trải nghiệm ẩm thực dân gian, Sóc Trăng',
+    'Tự tay làm các loại bánh dân gian như bánh ít, bánh lá, bánh bò.',
+    'Du khách được hướng dẫn chuẩn bị nguyên liệu, gói bánh và hấp bánh theo cách truyền thống. Hoạt động mang tính trải nghiệm văn hóa ẩm thực, phù hợp cho khách muốn tìm hiểu món ăn địa phương và đời sống cộng đồng.',
+    '0988123456',
+    '/images/activities/lambanh/cover.jpg',
+    'Ẩm thực',
+    'FOOD',
+    FALSE,
+    9
+),
+(
+    'Nấu cơm lam và giao lưu bản địa',
+    'Lào Cai',
+    'Bản làng vùng cao Sa Pa, Lào Cai',
+    'Trải nghiệm nấu cơm lam, thưởng thức món bản địa và giao lưu với người dân.',
+    'Du khách được hướng dẫn chuẩn bị ống tre, vo gạo, nướng cơm lam trên than hồng và dùng bữa cùng người dân bản địa. Hoạt động giúp du khách hiểu hơn về văn hóa ẩm thực vùng cao và nhịp sống cộng đồng bản làng.',
+    '0999123456',
+    '/images/activities/naucomlam/cover.jpg',
+    'Vùng cao',
+    'CULTURE',
+    TRUE,
+    10
+);

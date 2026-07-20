@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { getPublicActivities } from '../../services/activityService';
 import { getPublicDestinations, getPublicHomestays } from '../../services/homestayService';
 
 const fallbackDestinationImage = 'https://images.unsplash.com/photo-1510798831971-661eb04b3739?q=80&w=900&auto=format&fit=crop';
 const DESTINATION_PAGE_SIZE = 6;
 const HOMESTAY_PAGE_SIZE = 4;
+const ACTIVITY_PAGE_SIZE = 3;
 
 function normalizeText(value) {
   return String(value || '')
@@ -20,11 +23,14 @@ function samePlace(left, right) {
 }
 
 export default function HomeDefaultContent({ setHasSearched, favorites, toggleFavorite, HomestayCard }) {
+  const navigate = useNavigate();
   const [destinations, setDestinations] = useState([]);
   const [homestays, setHomestays] = useState([]);
+  const [activities, setActivities] = useState([]);
   const [activeCity, setActiveCity] = useState('');
   const [destinationPage, setDestinationPage] = useState(0);
   const [homestayPage, setHomestayPage] = useState(0);
+  const [activityPage, setActivityPage] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -35,15 +41,17 @@ export default function HomeDefaultContent({ setHasSearched, favorites, toggleFa
       try {
         setIsLoading(true);
         setErrorMessage('');
-        const [destinationData, homestayData] = await Promise.all([
+        const [destinationData, homestayData, activityData] = await Promise.all([
           getPublicDestinations(),
           getPublicHomestays({ sort: 'recommended' }),
+          getPublicActivities(),
         ]);
 
         if (!isMounted) return;
         setDestinations(destinationData);
         setHomestays(homestayData);
-        const firstCity = destinationData[0]?.provinceName || homestayData[0]?.province || homestayData[0]?.city || '';
+        setActivities(activityData);
+        const firstCity = destinationData[0]?.city || homestayData[0]?.city || homestayData[0]?.province || '';
         setActiveCity((current) => current || firstCity);
       } catch (error) {
         if (!isMounted) return;
@@ -62,8 +70,8 @@ export default function HomeDefaultContent({ setHasSearched, favorites, toggleFa
 
 
   const cityTabs = useMemo(() => {
-    const fromDestinations = destinations.map((destination) => destination.provinceName).filter(Boolean);
-    const fromHomestays = homestays.map((homestay) => homestay.province || homestay.city).filter(Boolean);
+    const fromDestinations = destinations.map((destination) => destination.city || destination.provinceName).filter(Boolean);
+    const fromHomestays = homestays.map((homestay) => homestay.city || homestay.province).filter(Boolean);
     return [...new Set([...fromDestinations, ...fromHomestays])];
   }, [destinations, homestays]);
 
@@ -86,10 +94,17 @@ export default function HomeDefaultContent({ setHasSearched, favorites, toggleFa
     return activeCityHomestays.slice(start, start + HOMESTAY_PAGE_SIZE);
   }, [activeCityHomestays, homestayPage]);
 
+  const visibleActivities = useMemo(() => {
+    const start = activityPage * ACTIVITY_PAGE_SIZE;
+    return activities.slice(start, start + ACTIVITY_PAGE_SIZE);
+  }, [activities, activityPage]);
+
   const destinationPageCount = Math.max(1, Math.ceil(destinations.length / DESTINATION_PAGE_SIZE));
   const homestayPageCount = Math.max(1, Math.ceil(activeCityHomestays.length / HOMESTAY_PAGE_SIZE));
+  const activityPageCount = Math.max(1, Math.ceil(activities.length / ACTIVITY_PAGE_SIZE));
   const canSlideDestinations = destinations.length > DESTINATION_PAGE_SIZE;
   const canSlideHomestays = activeCityHomestays.length > HOMESTAY_PAGE_SIZE;
+  const canSlideActivities = activities.length > ACTIVITY_PAGE_SIZE;
 
   const goToSearch = (destination) => {
     setHasSearched(destination ? { destination } : {});
@@ -101,6 +116,19 @@ export default function HomeDefaultContent({ setHasSearched, favorites, toggleFa
 
   const changeHomestayPage = (direction) => {
     setHomestayPage((current) => (current + direction + homestayPageCount) % homestayPageCount);
+  };
+
+  const changeActivityPage = (direction) => {
+    setActivityPage((current) => (current + direction + activityPageCount) % activityPageCount);
+  };
+
+  const openActivityDetail = (activity) => {
+    navigate('/activities', { state: { activityId: activity.id } });
+  };
+
+  const searchActivityHomestays = (event, activity) => {
+    event.stopPropagation();
+    goToSearch(activity?.province || '');
   };
 
   return (
@@ -138,8 +166,8 @@ export default function HomeDefaultContent({ setHasSearched, favorites, toggleFa
               {visibleDestinations.map((destination) => (
                 <button
                   type="button"
-                  key={destination.slug || destination.provinceName}
-                  onClick={() => goToSearch(destination.provinceName)}
+                  key={destination.slug || destination.city || destination.provinceName}
+                  onClick={() => goToSearch(destination.city || destination.provinceName)}
                   className="relative h-56 rounded-2xl overflow-hidden shadow-md group cursor-pointer border border-[#6E473B]/5 text-left p-0 bg-transparent"
                 >
                   <img
@@ -182,97 +210,14 @@ export default function HomeDefaultContent({ setHasSearched, favorites, toggleFa
       </section>
 
       <section className="max-w-7xl mx-auto px-4 md:px-8 text-left">
-        <div className="mb-8">
-          <h2 className="font-classic text-2xl md:text-3xl font-bold text-[#2C1E15] mb-1">Gói trải nghiệm độc quyền</h2>
-          <p className="text-sm text-gray-400">Thiết kế chuyến đi trọn vẹn hơn khi kết hợp lưu trú cùng các hoạt động mang đậm bản sắc địa phương</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[
-            {
-              title: 'Tour lội suối cổ sơ & BBQ',
-              desc: 'Trekking nhẹ xuyên qua rừng thông, lội suối đá và thưởng thức tiệc nướng mộc mạc bên bờ suối.',
-              tag: 'Bán chạy nhất',
-              price: '450.000đ/khách',
-              bgImg: 'https://images.unsplash.com/photo-1448375240586-882707db888b?q=80&w=700&auto=format&fit=crop',
-            },
-            {
-              title: 'Bình minh chèo sup săn mây',
-              desc: 'Thức dậy sớm, chèo sup trên mặt hồ sương phủ và ngắm khoảnh khắc bình minh đổ vàng.',
-              tag: 'Trải nghiệm độc đáo',
-              price: '350.000đ/khách',
-              bgImg: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?q=80&w=700&auto=format&fit=crop',
-            },
-            {
-              title: 'Một ngày làm nông dân',
-              desc: 'Tự tay hái rau hữu cơ, vào vườn và học cách chế biến món địa phương cùng chủ nhà.',
-              tag: 'Văn hóa bản địa',
-              price: '290.000đ/khách',
-              bgImg: 'https://images.unsplash.com/photo-1599933310682-933fb45df8f5?q=80&w=700&auto=format&fit=crop',
-            },
-          ].map((exp) => (
-            <div key={exp.title} className="bg-white rounded-2xl border border-[#6E473B]/10 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group">
-              <div className="h-44 w-full overflow-hidden relative">
-                <img src={exp.bgImg} alt={exp.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
-                <span className="absolute top-3 left-3 bg-[#2C3E2B] text-white font-bold text-[10px] px-2.5 py-1 rounded-md shadow-sm">{exp.tag}</span>
-              </div>
-              <div className="p-5 flex-grow flex flex-col justify-between space-y-4">
-                <div className="space-y-1.5">
-                  <h3 className="font-classic text-sm font-bold text-[#2C1E15] group-hover:text-[#6E473B] transition">{exp.title}</h3>
-                  <p className="text-xs text-gray-500 leading-relaxed line-clamp-3">{exp.desc}</p>
-                </div>
-                <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
-                  <span className="text-xs font-bold text-[#6E473B]">{exp.price}</span>
-                  <button onClick={() => goToSearch(activeCity)} className="text-[11px] font-bold text-[#2C3E2B] hover:underline border-none bg-transparent cursor-pointer">
-                    Xem homestay áp dụng →
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="max-w-7xl mx-auto px-4 md:px-8 text-left">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="font-classic text-xl md:text-2xl font-bold text-[#2C1E15]">Chương trình khuyến mãi chỗ ở</h2>
-            <p className="text-sm text-gray-400 mt-0.5">Nhận các ưu đãi đặc quyền, giảm giá sâu cho hành trình của bạn</p>
-          </div>
-          <button onClick={() => goToSearch()} className="text-sm font-bold text-[#2C3E2B] hover:text-[#6E473B] flex items-center gap-1 transition border-none bg-transparent cursor-pointer">
-            Xem tất cả <span className="text-[10px]">❯</span>
-          </button>
-        </div>
-
-        <div className="relative flex items-center group">
-          <div className="w-full overflow-x-auto flex space-x-5 scrollbar-none pb-4 snap-x">
-            {[
-              ['from-purple-700 to-indigo-800', 'Độc quyền Cozygo', 'Nhận mọi ưu đãi của quý khách tại đây!', 'Áp dụng tự động khi thanh toán trực tuyến'],
-              ['from-teal-700 to-[#2C3E2B]', 'WORLDWIDE', 'Top Match-Day Mộc Lâm Homestay', 'Miễn phí dịch vụ nướng củi sân vườn đêm'],
-              ['from-green-600 to-[#7d9f81]', 'Nghỉ hè rực rỡ', 'Bơi, lướt, lặn, tiết kiệm - Giảm thêm 15%', 'Áp dụng cho các căn có hồ bơi hoặc sân vườn'],
-            ].map(([color, badge, title, desc]) => (
-              <div key={title} className={
-                'flex-shrink-0 w-[320px] sm:w-[380px] h-40 bg-gradient-to-r rounded-2xl p-5 relative overflow-hidden text-white flex flex-col justify-center snap-start border border-black/5 shadow-sm ' + color
-              }>
-                <span className="bg-white/20 text-[9px] font-bold px-2 py-0.5 rounded-full w-fit mb-2">{badge}</span>
-                <h4 className="text-lg font-black leading-tight whitespace-pre-line">{title}</h4>
-                <p className="text-[10px] text-white/75 mt-1 font-medium">✦ {desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="max-w-7xl mx-auto px-4 md:px-8 text-left">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6">
           <div>
             <h2 className="font-classic text-xl md:text-2xl font-bold text-[#2C1E15]">Những chỗ nghỉ nổi bật được đề xuất cho quý khách:</h2>
-            <p className="text-sm text-gray-400 mt-0.5">Dữ liệu được lấy trực tiếp từ bảng homestays trong database</p>
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={() => goToSearch(activeCity)}
-              className="text-sm font-bold text-[#2C3E2B] hover:text-[#6E473B] hover:underline whitespace-nowrap shrink-0 transition border-none bg-transparent cursor-pointer"
+              className="h-7 rounded-full border border-[#F2A65A]/40 bg-[#FFF4E8] px-4 text-xs font-black uppercase tracking-wider text-[#B65C20] shadow-sm transition hover:bg-[#e2be99] hover:text-white"
             >
               Xem thêm các chỗ nghỉ {activeCity ? '(' + activeCity + ')' : ''} ❯
             </button>
@@ -345,6 +290,134 @@ export default function HomeDefaultContent({ setHasSearched, favorites, toggleFa
             )}
           </div>
         )}
+      </section>
+
+      <section className="max-w-7xl mx-auto px-4 md:px-8 text-left">
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+          <div>
+            <h2 className="font-classic text-2xl md:text-3xl font-bold text-[#2C1E15] mb-1">Hoạt động trải nghiệm thú vị</h2>
+            <p className="text-sm text-gray-400">Khám phá các hoạt động bản địa đang có trong hệ thống Cozygo và tìm nhanh homestay gần khu vực đó</p>
+          </div>
+          <div className="hidden sm:flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate('/activities')}
+              className="h-7 rounded-full border border-[#F2A65A]/40 bg-[#FFF4E8] px-4 text-xs font-black uppercase tracking-wider text-[#B65C20] shadow-sm transition hover:bg-[#e2be99] hover:text-white"
+            >
+              Xem tất cả <span className="text-[10px]">❯</span>
+            </button>
+            {canSlideActivities && (
+              <>
+                <button type="button" onClick={() => changeActivityPage(-1)} className="w-10 h-10 rounded-full border border-gray-200 bg-white shadow-sm text-[#2C3E2B] font-black hover:bg-[#2C3E2B] hover:text-white transition">‹</button>
+                <button type="button" onClick={() => changeActivityPage(1)} className="w-10 h-10 rounded-full border border-gray-200 bg-white shadow-sm text-[#2C3E2B] font-black hover:bg-[#2C3E2B] hover:text-white transition">›</button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[1, 2, 3].map((item) => <div key={item} className="h-80 rounded-2xl bg-white/70 border border-gray-100 shadow-sm animate-pulse" />)}
+          </div>
+        ) : activities.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-sm font-semibold text-gray-400">
+            Chưa có hoạt động trải nghiệm nào để hiển thị.
+          </div>
+        ) : (
+          <div className="relative">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {visibleActivities.map((activity) => {
+                const imageUrl = activity.thumbnailUrl || activity.images?.[0]?.imageUrl || fallbackDestinationImage;
+                return (
+                  <article
+                    key={activity.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openActivityDetail(activity)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') openActivityDetail(activity);
+                    }}
+                    className="group relative h-80 cursor-pointer overflow-hidden rounded-2xl border border-[#6E473B]/10 bg-[#1f2d20] text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
+                  >
+                    <img src={imageUrl} alt={activity.title} className="absolute inset-0 h-full w-full object-cover brightness-[0.68] transition duration-700 group-hover:scale-105" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#23150d]/90 via-[#23150d]/24 to-black/10" />
+
+                    <div className="absolute left-4 right-4 top-4 flex items-start justify-between gap-3">
+                      <span className="rounded-full bg-[#2c3d2b]/75 px-3 py-1 text-[9px] font-black uppercase tracking-wider text-[#ffffff] shadow-md">
+                        {activity.badgeText || 'Mùa trải nghiệm'}
+                      </span>
+                      <span className="max-w-[46%] truncate rounded-full bg-[#dc824f]/75 px-3 py-1 text-[9px] font-black uppercase tracking-wider text-[#ffffff] shadow-md">
+                        {activity.province || 'Khu vực'}
+                      </span>
+                    </div>
+
+                    <div className="absolute bottom-0 left-0 right-0 space-y-3 p-5 text-white">
+                      <div>
+                        <h3 className="font-classic text-base font-bold leading-tight drop-shadow-sm">{activity.title}</h3>
+                        <p className="mt-1 line-clamp-2 text-[11px] font-medium leading-5 text-white/78">{activity.shortDescription || activity.description}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(event) => searchActivityHomestays(event, activity)}
+                        className="inline-flex h-9 items-center justify-center rounded-xl bg-[#be7143]/75 px-4 text-[10px] font-black uppercase tracking-wider text-white shadow-md transition hover:bg-[#E97820]"
+                      >
+                        Tìm homestay gần đây
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+
+            {canSlideActivities && (
+              <>
+                <button type="button" onClick={() => changeActivityPage(-1)} className="sm:hidden absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/95 shadow-lg text-[#2C3E2B] font-black">‹</button>
+                <button type="button" onClick={() => changeActivityPage(1)} className="sm:hidden absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/95 shadow-lg text-[#2C3E2B] font-black">›</button>
+                <div className="mt-5 flex justify-center gap-1.5">
+                  {Array.from({ length: activityPageCount }).map((_, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => setActivityPage(index)}
+                      className={'h-1.5 rounded-full transition-all border-none ' + (activityPage === index ? 'w-8 bg-[#2C3E2B]' : 'w-2 bg-gray-300')}
+                      aria-label={'Trang hoạt động ' + (index + 1)}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="max-w-7xl mx-auto px-4 md:px-8 text-left">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="font-classic text-xl md:text-2xl font-bold text-[#2C1E15]">Chương trình khuyến mãi chỗ ở</h2>
+            <p className="text-sm text-gray-400 mt-0.5">Nhận các ưu đãi đặc quyền, giảm giá sâu cho hành trình của bạn</p>
+          </div>
+          <button onClick={() => goToSearch()} className="h-7 rounded-full border border-[#F2A65A]/40 bg-[#FFF4E8] px-4 text-xs font-black uppercase tracking-wider text-[#B65C20] shadow-sm transition hover:bg-[#e2be99] hover:text-white">
+            Xem tất cả <span className="text-[10px]">❯</span>
+          </button>
+        </div>
+
+        <div className="relative flex items-center group">
+          <div className="w-full overflow-x-auto flex space-x-5 scrollbar-none pb-4 snap-x">
+            {[
+              ['from-purple-700 to-indigo-800', 'Độc quyền Cozygo', 'Nhận mọi ưu đãi của quý khách tại đây!', 'Áp dụng tự động khi thanh toán trực tuyến'],
+              ['from-teal-700 to-[#2C3E2B]', 'WORLDWIDE', 'Top Match-Day Mộc Lâm Homestay', 'Miễn phí dịch vụ nướng củi sân vườn đêm'],
+              ['from-green-600 to-[#7d9f81]', 'Nghỉ hè rực rỡ', 'Bơi, lướt, lặn, tiết kiệm - Giảm thêm 15%', 'Áp dụng cho các căn có hồ bơi hoặc sân vườn'],
+            ].map(([color, badge, title, desc]) => (
+              <div key={title} className={
+                'flex-shrink-0 w-[320px] sm:w-[380px] h-40 bg-gradient-to-r rounded-2xl p-5 relative overflow-hidden text-white flex flex-col justify-center snap-start border border-black/5 shadow-sm ' + color
+              }>
+                <span className="bg-white/20 text-[9px] font-bold px-2 py-0.5 rounded-full w-fit mb-2">{badge}</span>
+                <h4 className="text-lg font-black leading-tight whitespace-pre-line">{title}</h4>
+                <p className="text-[10px] text-white/75 mt-1 font-medium">✦ {desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className="max-w-7xl mx-auto px-4 md:px-8 text-left">

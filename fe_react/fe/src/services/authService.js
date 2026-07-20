@@ -12,6 +12,13 @@ export function login(payload) {
   });
 }
 
+export function loginWithGoogle(payload) {
+  return apiRequest(AUTH_ENDPOINTS.GOOGLE_LOGIN, {
+    method: 'POST',
+    body: payload,
+  });
+}
+
 export function register(payload) {
   return apiRequest(AUTH_ENDPOINTS.REGISTER, {
     method: 'POST',

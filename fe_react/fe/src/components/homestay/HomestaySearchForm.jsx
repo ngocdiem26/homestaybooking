@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { 
+import {
   HiMagnifyingGlass, 
   HiCalendarDays, 
   HiUsers, 
@@ -10,57 +10,94 @@ import {
   HiChevronRight
 } from 'react-icons/hi2';
 
-const initialSearch = {
-  destination: '',
-  checkIn: '',
-  checkOut: '',
-  guests: '',
-};
+import {
+  getStoredSearchHistory,
+  saveDestinationToHistory,
+  removeDestinationFromHistory,
+  clearSearchHistory,
+} from '../../services/searchHistoryService';
 
-const POPULAR_DESTINATIONS = ['Đà Lạt', 'Vũng Tàu', 'TP HCM', 'Hội An', 'Phú Quốc'];
-const INITIAL_HISTORY = ['Đà Lạt', 'Lavie House'];
+import { getStoredSearchState, saveSearchState, SEARCH_STATE_EVENT } from '../../services/searchState';
+
+const POPULAR_DESTINATIONS = ['Đà Lạt', 'Vũng Tàu', 'TP HCM', 'Hội An', 'Phú Quốc','Hà Nội', 'Nha Trang', 'Đà Nẵng', 'Huế', 'Cần Thơ'];
 
 export default function HomestaySearchForm({
   onSearch,
   className = '',
   destinationInputId = 'destination-input',
 }) {
-  const [search, setSearch] = useState(initialSearch);
+  const [search, setSearch] = useState(() => getStoredSearchState());
   const [showDropdown, setShowDropdown] = useState(null); // 'destination' hoặc 'date'
-  const [searchHistory, setSearchHistory] = useState(INITIAL_HISTORY);
-  
+const [searchHistory, setSearchHistory] = useState(() => getStoredSearchHistory());  
   // Quản lý lịch custom hiển thị 2 tháng liền kề
   const [currentDate, setCurrentDate] = useState(new Date());
   const [hoverDate, setHoverDate] = useState(null);
 
   const dropdownRef = useRef(null);
+  const dateDropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleSearchStateChange = (event) => {
+      setSearch(event.detail || getStoredSearchState());
+    };
+
+    window.addEventListener(SEARCH_STATE_EVENT, handleSearchStateChange);
+    window.addEventListener('storage', handleSearchStateChange);
+
+    return () => {
+      window.removeEventListener(SEARCH_STATE_EVENT, handleSearchStateChange);
+      window.removeEventListener('storage', handleSearchStateChange);
+    };
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(event) {
+      if (showDropdown === 'date') {
+        if (dateDropdownRef.current && !dateDropdownRef.current.contains(event.target)) {
+          setShowDropdown(null);
+          setHoverDate(null);
+        }
+        return;
+      }
+
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setShowDropdown(null);
         setHoverDate(null);
       }
     }
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [showDropdown]);
+
+  const updateSearch = (updater) => {
+    setSearch((current) => {
+      const nextSearch = typeof updater === 'function' ? updater(current) : { ...current, ...updater };
+      return saveSearchState(nextSearch);
+    });
+  };
 
   const updateField = (field, value) => {
-    setSearch((current) => ({ ...current, [field]: value }));
+    updateSearch((current) => ({ ...current, [field]: value }));
   };
 
   const removeHistoryItem = (e, item) => {
     e.stopPropagation();
-    setSearchHistory(prev => prev.filter(h => h !== item));
+    const nextHistory = removeDestinationFromHistory(item);
+    setSearchHistory(nextHistory);
   };
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    if (search.destination.trim() && !searchHistory.includes(search.destination.trim())) {
-      setSearchHistory(prev => [search.destination.trim(), ...prev.slice(0, 4)]);
+
+    const savedSearch = saveSearchState(search);
+
+    if (savedSearch.destination?.trim()) {
+      const nextHistory = saveDestinationToHistory(savedSearch.destination);
+      setSearchHistory(nextHistory);
     }
-    onSearch?.(search);
+
+    onSearch?.(savedSearch);
   };
 
   // --- LOGIC SINH NGÀY CHO BẢNG LỊCH CUSTOM ---
@@ -86,18 +123,18 @@ export default function HomestaySearchForm({
     const dateString = toDateValue(date);
 
     if (!search.checkIn || (search.checkIn && search.checkOut)) {
-      setSearch(curr => ({ ...curr, checkIn: dateString, checkOut: '' }));
+      updateSearch(curr => ({ ...curr, checkIn: dateString, checkOut: '' }));
       setHoverDate(null);
       return;
     }
 
     if (dateString >= search.checkIn) {
-      setSearch(curr => ({ ...curr, checkOut: dateString }));
+      updateSearch(curr => ({ ...curr, checkOut: dateString }));
       setHoverDate(null);
       return;
     }
 
-    setSearch(curr => ({ ...curr, checkIn: dateString, checkOut: '' }));
+    updateSearch(curr => ({ ...curr, checkIn: dateString, checkOut: '' }));
     setHoverDate(null);
   };
 
@@ -232,32 +269,62 @@ export default function HomestaySearchForm({
         </button>
       </form>
 
+
       {/* ── DROPDOWN 1: GỢI Ý ĐIỂM ĐẾN & LỊCH SỬ (Giữ nguyên phom của image_2a72fb.png) ── */}
       {showDropdown === 'destination' && (
         <div className="absolute left-0 mt-2 w-full md:w-[48%] bg-white rounded-[24px] shadow-xl border border-gray-100 z-50 overflow-hidden py-5 animate-fade-in text-left">
-          {searchHistory.length > 0 && (
-            <div className="mb-4">
-              <p className="px-5 text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1">
+          <div className="mb-4">
+            <div className="px-5 flex items-center justify-between">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1">
                 <HiClock size={12} /> Tìm kiếm gần đây
               </p>
-              <div className="mt-1">
-                {searchHistory.map((item, idx) => (
+
+              {searchHistory.length > 0 && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    const nextHistory = clearSearchHistory();
+                    setSearchHistory(nextHistory);
+                  }}
+                  className="text-[10px] font-bold text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer"
+                >
+                  Xóa tất cả
+                </button>
+              )}
+            </div>
+
+            <div className="mt-1">
+              {searchHistory.length === 0 ? (
+                <div className="px-5 py-3 text-xs font-semibold text-gray-400">
+                  Chưa có lịch sử tìm kiếm. Hãy nhập nơi đến và bấm tìm kiếm.
+                </div>
+              ) : (
+                searchHistory.map((item) => (
                   <div
-                    key={idx}
-                    onClick={() => { updateField('destination', item); setShowDropdown('date'); }}
+                    key={item}
+                    onClick={() => {
+                      updateField('destination', item);
+                      setShowDropdown('date');
+                    }}
                     className="px-5 py-2.5 hover:bg-gray-50 text-xs font-bold text-gray-700 flex items-center justify-between cursor-pointer group transition"
                   >
                     <span className="flex items-center gap-2 text-gray-500 group-hover:text-[#2C3E2B]">
                       <span>⏳</span> {item}
                     </span>
-                    <button onClick={(e) => removeHistoryItem(e, item)} className="text-gray-300 hover:text-red-500 bg-transparent border-none p-1 rounded cursor-pointer">
+
+                    <button
+                      type="button"
+                      onClick={(e) => removeHistoryItem(e, item)}
+                      className="text-gray-300 hover:text-red-500 bg-transparent border-none p-1 rounded cursor-pointer"
+                    >
                       <HiXMark size={14} />
                     </button>
                   </div>
-                ))}
-              </div>
+                ))
+              )}
             </div>
-          )}
+          </div>
 
           <div>
             <p className="px-5 text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1">
@@ -281,6 +348,7 @@ export default function HomestaySearchForm({
       {/* ── DROPDOWN 2: BẢNG LỊCH CHỌN NGÀY CUSTOM ĐỒNG BỘ HOÀN HẢO ── */}
       {showDropdown === 'date' && (
         <div
+          ref={dateDropdownRef}
           className="absolute right-0 md:right-[15%] mt-2 w-full md:w-[620px] bg-white rounded-[24px] shadow-xl border border-gray-100 z-50 overflow-hidden p-5 animate-fade-in text-left"
           onMouseLeave={() => setHoverDate(null)}
         >
@@ -339,7 +407,7 @@ export default function HomestaySearchForm({
             </div>
             <button 
               type="button" 
-              onClick={() => { setSearch(curr => ({ ...curr, checkIn: '', checkOut: '' })); setHoverDate(null); }}
+              onClick={() => { updateSearch(curr => ({ ...curr, checkIn: '', checkOut: '' })); setHoverDate(null); }}
               className="text-[10px] font-bold text-red-500 hover:underline bg-transparent border-none cursor-pointer"
             >
               Xóa ngày chọn
