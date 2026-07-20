@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import UserLayout from '../../layouts/UserLayout';
+import { useAuth } from '../../hooks/useAuth';
 
 // Import toàn bộ các mảnh ghép component vừa bóc tách
 import ProfileDashboard from '../../components/profile/ProfileDashboard';
@@ -16,6 +17,7 @@ import ModalPortal from '../../components/common/ModalPortal';
 import { cancelMyBooking, getMyBookings } from '../../services/bookingService';
 import { createReview, getMyReviews, updateReview } from '../../services/reviewService';
 import { createComplaint, getMyComplaints } from '../../services/complaintService';
+import { updateMyAvatar } from '../../services/profileService';
 
 
 function formatBookingDate(value) {
@@ -78,7 +80,7 @@ function mapPaymentStatusKey(status) {
 
 function mapPaymentMethodLabel(method) {
   const normalized = String(method || '').toUpperCase();
-  if (normalized === 'SEPAY') return 'SePay';
+  if (normalized === 'VNPAY') return 'VNPay';
   if (normalized === 'PAY_AT_PROPERTY') return 'Thanh toán tại chỗ';
   return method || 'Chưa chọn';
 }
@@ -207,6 +209,7 @@ function BookingDetailModal({ booking, review, onClose, onCancel, onViewReview, 
 
 export default function Profile() {
   const fileInputRef = useRef(null);
+  const { user: authUser, updateUser } = useAuth();
   const [currentView, setCurrentView] = useState('dashboard');
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [focusedReviewId, setFocusedReviewId] = useState(null);
@@ -222,9 +225,15 @@ export default function Profile() {
     dob: "2004-03-15",
     gender: "female",
     address: "Ninh Kiều, Cần Thơ",
-    avatar: null 
-  });
+    avatar: authUser?.avatar || authUser?.avatarUrl || authUser?.imageUrl || authUser?.profileImage || null });
   const [tempInfo, setTempInfo] = useState({ ...userInfo });
+
+  useEffect(() => {
+    const syncAvatar = authUser?.avatar || authUser?.avatarUrl || authUser?.imageUrl || authUser?.profileImage;
+    if (!syncAvatar) return;
+    setUserInfo((current) => current.avatar === syncAvatar ? current : { ...current, avatar: syncAvatar });
+    setTempInfo((current) => current.avatar === syncAvatar ? current : { ...current, avatar: syncAvatar });
+  }, [authUser?.avatar, authUser?.avatarUrl, authUser?.imageUrl, authUser?.profileImage]);
 
   const [bookings, setBookings] = useState([]);
   const [bookingFilter, setBookingFilter] = useState('all');
@@ -384,11 +393,32 @@ export default function Profile() {
 
   const handleAvatarChange = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      const imageUrl = URL.createObjectURL(file);
-      setUserInfo(prev => ({ ...prev, avatar: imageUrl }));
-      setTempInfo(prev => ({ ...prev, avatar: imageUrl }));
-    }
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const imageUrl = String(reader.result || '');
+      setUserInfo((current) => ({ ...current, avatar: imageUrl }));
+      setTempInfo((current) => ({ ...current, avatar: imageUrl }));
+
+      try {
+        const updatedProfile = await updateMyAvatar(imageUrl);
+        updateUser?.({
+          avatar: updatedProfile.avatar,
+          fullName: updatedProfile.fullName,
+          email: updatedProfile.email,
+          phoneNumber: updatedProfile.phoneNumber,
+          address: updatedProfile.address,
+          gender: updatedProfile.gender,
+          roleName: updatedProfile.roleName,
+        });
+        setUserInfo((current) => ({ ...current, avatar: updatedProfile.avatar || imageUrl }));
+        setTempInfo((current) => ({ ...current, avatar: updatedProfile.avatar || imageUrl }));
+      } catch (error) {
+        alert(error.message || 'Khong luu duoc avatar vao he thong');
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSaveInfo = (e) => {

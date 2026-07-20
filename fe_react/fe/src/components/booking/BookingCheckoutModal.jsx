@@ -7,7 +7,8 @@ import GuestInfoStep from './GuestInfoStep';
 import BookingConfirmStep from './BookingConfirmStep';
 import PaymentMethodStep from './PaymentMethodStep';
 import BookingResultStep from './BookingResultStep';
-import { createBooking, createBookingQuote, getBookingPaymentStatus } from '../../services/bookingService';
+import { createBooking, createBookingQuote } from '../../services/bookingService';
+import { checkPublicHomestayAvailability } from '../../services/homestayService';
 import { calculateNights } from '../../services/searchState';
 
 function toDateString(value) {
@@ -42,10 +43,9 @@ export default function BookingCheckoutModal({ homestay, user, bookingDefaults, 
   const [paymentMethod, setPaymentMethod] = useState('PAY_AT_PROPERTY');
   const [quote, setQuote] = useState(null);
   const errorMessageRef = useRef(null);
-  const [pendingPayment, setPendingPayment] = useState(null);
   const [result, setResult] = useState(null);
-  const [remainingSeconds, setRemainingSeconds] = useState(15 * 60);
   const [errorMessage, setErrorMessage] = useState('');
+  const [availabilityWarning, setAvailabilityWarning] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const booking = useMemo(() => ({
@@ -55,6 +55,31 @@ export default function BookingCheckoutModal({ homestay, user, bookingDefaults, 
     numberOfGuest: Number(bookingDraft.numberOfGuest) || 1,
     nights: calculateNights(bookingDraft.checkInDate, bookingDraft.checkOutDate),
   }), [bookingDraft, homestay]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function verifyAvailability() {
+      if (!booking.homeId || !booking.checkInDate || !booking.checkOutDate || booking.nights <= 0) {
+        setAvailabilityWarning('');
+        return;
+      }
+
+      try {
+        const result = await checkPublicHomestayAvailability(booking.homeId, booking.checkInDate, booking.checkOutDate);
+        if (cancelled) return;
+        const isUnavailable = result?.unavailable || result?.dateRangeBooked || result?.available === false;
+        setAvailabilityWarning(isUnavailable ? (result?.message || 'Khoảng thời gian này đã có người đặt') : '');
+      } catch {
+        if (!cancelled) setAvailabilityWarning('');
+      }
+    }
+
+    verifyAvailability();
+    return () => {
+      cancelled = true;
+    };
+  }, [booking.homeId, booking.checkInDate, booking.checkOutDate, booking.nights]);
 
   const buildQuotePayload = (overridePromotionCode = promotionCode) => ({
     homeId: booking.homeId,
@@ -69,9 +94,7 @@ export default function BookingCheckoutModal({ homestay, user, bookingDefaults, 
   });
 
   const loadQuote = async (overridePromotionCode = promotionCode, options = {}) => {
-    if (!options.keepError) {
-      setErrorMessage('');
-    }
+    if (!options.keepError) setErrorMessage('');
     const data = await createBookingQuote(buildQuotePayload(overridePromotionCode));
     setQuote(data);
     return data;
@@ -79,72 +102,17 @@ export default function BookingCheckoutModal({ homestay, user, bookingDefaults, 
 
   useEffect(() => {
     if (step !== 2) return undefined;
-
     const timer = window.setTimeout(() => {
       loadQuote().catch((error) => setErrorMessage(error.message || 'Không tính được tiền đặt phòng'));
     }, 0);
-
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedServices, step]);
 
   useEffect(() => {
-    if (!pendingPayment?.bookingId) return undefined;
-
-    const expiresAt = pendingPayment.expiresAt ? new Date(pendingPayment.expiresAt).getTime() : Date.now() + 15 * 60 * 1000;
-    const tick = () => {
-      const seconds = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
-      setRemainingSeconds(seconds);
-      if (seconds <= 0) {
-        setResult({
-          status: 'FAILED',
-          title: 'Thanh toán chưa hoàn tất',
-          message: 'Giao dịch SePay đã quá hạn. Bạn có thể đặt lại hoặc chọn phương thức khác.',
-          bookingCode: pendingPayment.bookingCode,
-          bookingStatus: 'Quá hạn',
-          paymentText: 'SePay chưa thanh toán',
-        });
-        setStep(4);
-      }
-    };
-
-    tick();
-    const timer = window.setInterval(tick, 1000);
-    const poller = window.setInterval(async () => {
-      try {
-        const status = await getBookingPaymentStatus(pendingPayment.bookingId);
-        if (status.paymentStatus === 'PAID' || status.bookingStatus === 'CONFIRMED') {
-          setResult({
-            status: 'SUCCESS',
-            title: 'Thanh toán thành công',
-            message: 'Hệ thống đã ghi nhận thanh toán SePay. Đơn của bạn đang chờ chủ homestay xác nhận.',
-            bookingCode: status.bookingCode,
-            bookingStatus: 'Chờ chủ homestay xác nhận',
-            paymentText: 'Đã thanh toán online',
-          });
-          setStep(4);
-        }
-        if (status.paymentStatus === 'EXPIRED' || status.bookingStatus === 'EXPIRED') {
-          setResult({
-            status: 'FAILED',
-            title: 'Thanh toán chưa hoàn tất',
-            message: 'Giao dịch SePay đã quá hạn. Bạn có thể đặt lại hoặc chọn phương thức khác.',
-            bookingCode: status.bookingCode,
-            bookingStatus: 'Quá hạn',
-            paymentText: 'SePay chưa thanh toán',
-          });
-          setStep(4);
-        }
-      } catch {
-        // Giữ thông báo lỗi mã khuyến mãi, không chặn người dùng tiếp tục nếu quote còn dùng được.
-      }
-    }, 4000);
-
-    return () => {
-      window.clearInterval(timer);
-      window.clearInterval(poller);
-    };
-  }, [pendingPayment]);
+    if (!errorMessage) return;
+    errorMessageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [errorMessage]);
 
   const updateGuestInfo = (field, value) => {
     setGuestInfo((current) => ({ ...current, [field]: value }));
@@ -155,17 +123,13 @@ export default function BookingCheckoutModal({ homestay, user, bookingDefaults, 
     setQuote(null);
   };
 
-  useEffect(() => {
-    if (!errorMessage) return;
-    errorMessageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [errorMessage]);
-
   const validateGuestInfo = () => {
     if (!guestInfo.customerName.trim()) return 'Vui lòng nhập họ tên khách đặt';
     if (!guestInfo.customerEmail.trim()) return 'Vui lòng nhập email khách đặt';
     if (!guestInfo.customerPhone.trim()) return 'Vui lòng nhập số điện thoại khách đặt';
     if (!booking.checkInDate || !booking.checkOutDate) return 'Vui lòng chọn ngày nhận và trả phòng';
     if (booking.nights <= 0) return 'Ngày trả phòng phải sau ngày nhận phòng';
+    if (availabilityWarning) return availabilityWarning;
     return '';
   };
 
@@ -228,7 +192,7 @@ export default function BookingCheckoutModal({ homestay, user, bookingDefaults, 
       try {
         await loadQuote('', { keepError: true });
       } catch {
-        // Keep the promotion error visible if the fallback quote refresh also fails.
+        // Giữ thông báo lỗi mã khuyến mãi nếu quote dự phòng cũng lỗi.
       }
     } finally {
       setIsSubmitting(false);
@@ -260,8 +224,12 @@ export default function BookingCheckoutModal({ homestay, user, bookingDefaults, 
         paymentMethod,
       });
 
-      if (paymentMethod === 'SEPAY') {
-        setPendingPayment(bookingResponse);
+      if (paymentMethod === 'VNPAY') {
+        const paymentUrl = bookingResponse.paymentUrl;
+        if (!paymentUrl || !/^https?:\/\//i.test(paymentUrl)) {
+          throw new Error('Backend chưa trả về URL thanh toán VNPAY Sandbox. Vui lòng kiểm tra cấu hình VNPAY.');
+        }
+        window.location.assign(paymentUrl);
         return;
       }
 
@@ -279,12 +247,6 @@ export default function BookingCheckoutModal({ homestay, user, bookingDefaults, 
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const resetSepay = () => {
-    setPendingPayment(null);
-    setResult(null);
-    setStep(3);
   };
 
   return (
@@ -310,13 +272,13 @@ export default function BookingCheckoutModal({ homestay, user, bookingDefaults, 
         )}
 
         <main className="min-h-0 flex-1 overflow-y-auto bg-white p-5 pt-0 md:p-7 md:pt-0">
-          {step === 1 && <GuestInfoStep homestay={homestay} form={guestInfo} booking={booking} maxGuests={homestay.maxGuest || 1} onChange={updateGuestInfo} onBookingChange={updateBookingDraft} />}
+          {step === 1 && <GuestInfoStep homestay={homestay} form={guestInfo} booking={booking} maxGuests={homestay.maxGuest || 1} availabilityWarning={availabilityWarning} onChange={updateGuestInfo} onBookingChange={updateBookingDraft} />}
           {step === 2 && <BookingConfirmStep homestay={homestay} quote={quote} booking={booking} guestInfo={guestInfo} selectedServices={selectedServices} promotionCode={promotionCode} acceptedPolicy={acceptedPolicy} onToggleService={toggleService} onChangeServiceQty={changeServiceQty} onPromotionChange={setPromotionCode} onApplyPromotion={applyPromotion} onAcceptPolicy={setAcceptedPolicy} onPromotionNotice={setErrorMessage} />}
-          {step === 3 && <PaymentMethodStep quote={quote} paymentMethod={paymentMethod} pendingPayment={pendingPayment} remainingSeconds={remainingSeconds} onSelectPaymentMethod={setPaymentMethod} onCreateBooking={submitBooking} isSubmitting={isSubmitting} />}
-          {step === 4 && <BookingResultStep result={result} onHome={() => navigate('/')} onMyBookings={() => navigate('/profile')} onRetry={() => { setStep(1); setResult(null); setPendingPayment(null); }} onChooseOther={resetSepay} />}
+          {step === 3 && <PaymentMethodStep quote={quote} paymentMethod={paymentMethod} onSelectPaymentMethod={setPaymentMethod} onCreateBooking={submitBooking} isSubmitting={isSubmitting} />}
+          {step === 4 && <BookingResultStep result={result} onHome={() => navigate('/')} onMyBookings={() => navigate('/profile')} onRetry={() => { setStep(1); setResult(null); }} />}
         </main>
 
-        {step < 4 && !pendingPayment && (
+        {step < 4 && (
           <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-gray-100 bg-white px-5 py-4 md:px-7">
             <button type="button" onClick={step === 1 ? onClose : () => setStep(step - 1)} className="h-11 rounded-2xl bg-[#F4F1EA] px-5 text-sm font-black text-[#2C1E15]">{step === 1 ? 'Hủy' : 'Quay lại'}</button>
             {step < 3 && <button type="button" onClick={goNext} disabled={isSubmitting} className="h-11 rounded-2xl bg-[#2C3E2B] px-6 text-sm font-black text-white shadow-lg disabled:opacity-60">{isSubmitting ? 'Đang xử lý...' : 'Tiếp tục'}</button>}

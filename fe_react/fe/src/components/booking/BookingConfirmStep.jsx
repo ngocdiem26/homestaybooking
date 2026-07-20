@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import { HiCalendarDays, HiInformationCircle, HiTicket, HiTrash, HiUserGroup } from 'react-icons/hi2';
 
 function money(value) {
@@ -32,6 +33,21 @@ function isPromoUnavailable(promo) {
     || ['INACTIVE', 'EXPIRED', 'DISABLED', 'USED_UP'].includes(status);
 }
 
+function estimatedDiscount(promo) {
+  return Number(promo?.estimatedDiscount || promo?.discountAmount || 0);
+}
+
+function promoValueText(promo) {
+  const estimated = estimatedDiscount(promo);
+  if (estimated > 0) return `Giảm ${money(estimated)}`;
+  const type = String(promo?.discountType || '').toUpperCase();
+  const value = Number(promo?.discountValue || 0);
+  if (type === 'PERCENT') {
+    return promo?.maxDiscount ? `Giảm ${value}% tối đa ${money(promo.maxDiscount)}` : `Giảm ${value}%`;
+  }
+  return `Giảm ${money(value)}`;
+}
+
 function BookingStickySummary({ homestay, quote, booking, guestInfo }) {
   return (
     <section className="sticky top-0 z-20 rounded-3xl border border-[#E9E2D5] bg-white/95 p-4 shadow-lg shadow-[#2C1E15]/5 backdrop-blur">
@@ -58,10 +74,13 @@ function BookingStickySummary({ homestay, quote, booking, guestInfo }) {
 }
 
 export default function BookingConfirmStep({ homestay, quote, booking, guestInfo, selectedServices, promotionCode, acceptedPolicy, onToggleService, onChangeServiceQty, onPromotionChange, onApplyPromotion, onAcceptPolicy, onPromotionNotice }) {
+  const [manualPromotionCode, setManualPromotionCode] = useState('');
   const availableServices = (homestay.serviceItems || []).filter((service) => String(service.status || '').toUpperCase() === 'APPROVED');
   const selectedPromotionCode = typeof promotionCode === 'string' ? promotionCode : '';
   const appliedPromotionCode = quote?.appliedPromotionCode || '';
-  const promotions = quote?.availablePromotions || [];
+  const promotions = useMemo(() => (quote?.availablePromotions || [])
+    .filter((promo) => !isPromoUnavailable(promo))
+    .sort((a, b) => estimatedDiscount(b) - estimatedDiscount(a) || Number(b?.discountValue || 0) - Number(a?.discountValue || 0)), [quote]);
 
   const selectPromotion = (promo) => {
     const code = getPromoCode(promo);
@@ -74,10 +93,17 @@ export default function BookingConfirmStep({ homestay, quote, booking, guestInfo
     }
 
     onPromotionChange(code);
-    if (isPromoUnavailable(promo)) {
-      onPromotionNotice?.(getPromoUnavailableReason(promo) || 'Mã khuyến mãi này hiện không đủ điều kiện áp dụng cho đơn đặt phòng.');
+    onPromotionNotice?.('');
+    onApplyPromotion(code);
+  };
+
+  const applyManualPromotion = () => {
+    const code = manualPromotionCode.trim().toUpperCase();
+    if (!code) {
+      onPromotionNotice?.('Vui lòng nhập mã khuyến mãi trước khi áp dụng.');
       return;
     }
+    onPromotionChange(code);
     onApplyPromotion(code);
   };
 
@@ -100,7 +126,7 @@ export default function BookingConfirmStep({ homestay, quote, booking, guestInfo
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <p className="font-black text-[#2C1E15]">{service.serviceName || service.name}</p>
-                      <p className="text-sm font-bold text-[#6E473B]">{money(service.price)} / lần</p>
+                      <p className="text-sm font-bold text-[#6E473B]">{money(service.price)} / ngày</p>
                     </div>
                     {service.description && <p className="mt-1 text-xs font-semibold text-gray-400">{service.description}</p>}
                   </div>
@@ -132,17 +158,16 @@ export default function BookingConfirmStep({ homestay, quote, booking, guestInfo
         </div>
 
         <div className="mt-4 space-y-2">
-          {promotions.length === 0 && <p className="rounded-2xl bg-[#F7F4EC] px-4 py-3 text-sm font-bold text-gray-500">Hiện chưa có mã khuyến mãi phù hợp. Bạn vẫn có thể nhập mã thủ công nếu có.</p>}
+          {promotions.length === 0 && <p className="rounded-2xl bg-[#F7F4EC] px-4 py-3 text-sm font-bold text-gray-500">Hiện chưa có mã khuyến mãi phù hợp với hạng thành viên và đơn đặt này. Nếu admin gửi mã riêng, bạn có thể nhập ở bên dưới.</p>}
           {promotions.map((promo) => {
             const code = getPromoCode(promo);
-            const disabled = isPromoUnavailable(promo);
             const selected = selectedPromotionCode === code || appliedPromotionCode === code;
             return (
               <button
                 key={code}
                 type="button"
                 onClick={() => selectPromotion(promo)}
-                className={(selected ? 'border-[#2C3E2B] bg-[#F7F4EC]' : 'border-gray-200 bg-white hover:border-[#2C3E2B]/40') + (disabled ? ' opacity-70' : '') + ' flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition'}
+                className={(selected ? 'border-[#2C3E2B] bg-[#F7F4EC]' : 'border-gray-200 bg-white hover:border-[#2C3E2B]/40') + ' flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition'}
               >
                 <span className={(selected ? 'border-[#2C3E2B] bg-[#2C3E2B]' : 'border-gray-300 bg-white') + ' flex h-5 w-5 shrink-0 items-center justify-center rounded-full border'}>
                   {selected && <span className="h-2 w-2 rounded-full bg-white" />}
@@ -151,16 +176,16 @@ export default function BookingConfirmStep({ homestay, quote, booking, guestInfo
                 <span className="min-w-0 flex-1">
                   <span className="mr-2 rounded-full bg-[#F4F1EA] px-2 py-1 text-xs font-black text-[#6E473B]">{code}</span>
                   <span className="text-sm font-bold text-[#2C1E15]">{getPromoName(promo)}</span>
-                  {disabled && <span className="mt-1 block text-xs font-bold text-red-500">{getPromoUnavailableReason(promo) || 'Không đủ điều kiện áp dụng'}</span>}
                 </span>
+                <span className="shrink-0 text-xs font-black text-emerald-700">{promoValueText(promo)}</span>
               </button>
             );
           })}
         </div>
 
         <div className="mt-4 grid gap-2 md:grid-cols-[1fr_auto_auto] md:items-center">
-          <input value={selectedPromotionCode} onChange={(event) => onPromotionChange(event.target.value.toUpperCase())} className="h-12 rounded-2xl border border-gray-200 px-4 text-sm font-black uppercase outline-none focus:border-[#2C3E2B]" placeholder="Nhập mã giảm giá" />
-          <button type="button" onClick={() => onApplyPromotion(selectedPromotionCode)} className="h-12 rounded-2xl bg-[#2C3E2B] px-5 text-sm font-black text-white shadow">Áp dụng</button>
+          <input value={manualPromotionCode} onChange={(event) => setManualPromotionCode(event.target.value.toUpperCase())} className="h-12 rounded-2xl border border-gray-200 px-4 text-sm font-black uppercase outline-none focus:border-[#2C3E2B]" placeholder="Nhập mã riêng nếu có" />
+          <button type="button" onClick={applyManualPromotion} className="h-12 rounded-2xl bg-[#2C3E2B] px-5 text-sm font-black text-white shadow">Áp dụng</button>
           {quote?.discountAmount > 0 && <span className="text-sm font-black text-emerald-700">Giảm {money(quote.discountAmount)}</span>}
         </div>
       </section>

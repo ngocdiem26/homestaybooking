@@ -1,10 +1,10 @@
 import { HiCheck, HiCreditCard, HiShieldCheck, HiUser, HiCheckCircle } from 'react-icons/hi2';
 
 const steps = [
-  { label: 'Th\u00f4ng tin KH', icon: HiUser },
-  { label: 'X\u00e1c nh\u1eadn', icon: HiShieldCheck },
-  { label: 'Thanh to\u00e1n', icon: HiCreditCard },
-  { label: 'K\u1ebft qu\u1ea3', icon: HiCheckCircle },
+  { label: 'Thông tin KH', icon: HiUser },
+  { label: 'Xác nhận', icon: HiShieldCheck },
+  { label: 'Thanh toán', icon: HiCreditCard },
+  { label: 'Kết quả', icon: HiCheckCircle },
 ];
 
 export default function BookingStepIndicator({ currentStep }) {

@@ -5,7 +5,7 @@ function formatDate(value) {
   return new Date(value + 'T00:00:00').toLocaleDateString('vi-VN');
 }
 
-export default function GuestInfoStep({ homestay, form, booking, maxGuests = 1, onChange, onBookingChange }) {
+export default function GuestInfoStep({ homestay, form, booking, maxGuests = 1, availabilityWarning = '', onChange, onBookingChange }) {
   const updateGuests = (value) => {
     const nextGuests = Math.min(maxGuests, Math.max(1, Number(value) || 1));
     onBookingChange('numberOfGuest', nextGuests);
@@ -55,6 +55,12 @@ export default function GuestInfoStep({ homestay, form, booking, maxGuests = 1, 
             </div>
           </div>
         </div>
+
+        {availabilityWarning && (
+          <div className="mt-3 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-xs font-black leading-5 text-red-700">
+            ⚠ {availabilityWarning}
+          </div>
+        )}
       </section>
 
       <section className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
