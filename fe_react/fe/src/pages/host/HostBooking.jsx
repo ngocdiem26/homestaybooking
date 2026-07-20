@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
 import {
   HiOutlineHome,
   HiOutlineFilter,
@@ -12,6 +14,7 @@ import {
   HiOutlineCash,
   HiOutlineCalendar,
   HiOutlineUsers,
+  HiOutlineArrowLeft,
 
   HiOutlineClipboardList,
   HiOutlineCube,
@@ -79,7 +82,7 @@ function mapPaymentStatus(status) {
 
 function mapPaymentMethod(method) {
   const normalized = String(method || '').toUpperCase();
-  if (normalized === 'SEPAY') return 'SePay';
+  if (normalized === 'VNPAY') return 'VNPay';
   if (normalized === 'PAY_AT_PROPERTY') return 'Thanh toán tại chỗ';
   return method || 'Chưa chọn';
 }
@@ -159,6 +162,7 @@ function PaymentBadge({ status }) {
 
 // ─── Main component ────────────────────────────────────────────────────────
 export default function HostBookings() {
+  const navigate = useNavigate();
   const [bookings, setBookings] = useState(MOCK_BOOKINGS);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -245,7 +249,12 @@ export default function HostBookings() {
   return (
     <HostLayout>
       <div className="animate-fade-in text-sm -mt-6" style={{ fontFamily: "'Be Vietnam Pro', 'Inter', sans-serif" }}>
-
+        <div className="mb-4 flex justify-start">
+          <button className="inline-flex h-10 items-center gap-2 rounded-xl bg-white px-4 text-xs font-black text-gray-600 shadow-sm border border-gray-200 hover:bg-gray-50 transition" onClick={() => navigate('/host')} type="button">
+            <HiOutlineArrowLeft size={16} />
+            Về bảng điều khiển
+          </button>
+        </div>
         {/* ── Page header ── */}
         <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-5 mb-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>

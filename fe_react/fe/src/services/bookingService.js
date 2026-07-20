@@ -62,3 +62,5 @@ export function confirmAdminBookingPayment(bookingId) {
     method: 'PATCH',
   });
 }
+
+

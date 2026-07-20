@@ -2,13 +2,13 @@ package com.homestaybooking.controller;
 
 import com.homestaybooking.dto.request.BookingCreateRequest;
 import com.homestaybooking.dto.request.BookingQuoteRequest;
-import com.homestaybooking.dto.request.SepayWebhookRequest;
 import com.homestaybooking.dto.request.UpdateBookingStatusRequest;
 import com.homestaybooking.dto.response.BookingListItemResponse;
 import com.homestaybooking.dto.response.BookingPaymentStatusResponse;
 import com.homestaybooking.dto.response.BookingPriceQuoteResponse;
 import com.homestaybooking.dto.response.BookingResponse;
 import com.homestaybooking.service.BookingService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -102,9 +102,10 @@ public class BookingController {
     @PostMapping
     public BookingResponse createBooking(
             @RequestBody BookingCreateRequest request,
-            @RequestHeader(value = "Authorization", required = false) String authorizationHeader
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            HttpServletRequest servletRequest
     ) {
-        return bookingService.createBooking(request, authorizationHeader);
+        return bookingService.createBooking(request, authorizationHeader, getClientIp(servletRequest));
     }
 
     @GetMapping("/{bookingId}/payment-status")
@@ -112,8 +113,11 @@ public class BookingController {
         return bookingService.getPaymentStatus(bookingId);
     }
 
-    @PostMapping("/sepay/webhook")
-    public BookingPaymentStatusResponse sepayWebhook(@RequestBody SepayWebhookRequest request) {
-        return bookingService.handleSepayWebhook(request);
+    private String getClientIp(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            return forwardedFor.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 }
