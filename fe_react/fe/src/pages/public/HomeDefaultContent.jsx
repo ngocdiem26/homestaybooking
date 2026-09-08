@@ -1,12 +1,47 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getPublicActivities } from '../../services/activityService';
 import { getPublicDestinations, getPublicHomestays } from '../../services/homestayService';
+import PromotionCard from '../../components/promotion/PromotionCard';
+import { getPublicPromotions } from '../../services/promotionService';
+import { getFeaturedReviews } from '../../services/reviewService';
+import { buildSearchParams, saveSearchState } from '../../services/searchState';
 
 const fallbackDestinationImage = 'https://images.unsplash.com/photo-1510798831971-661eb04b3739?q=80&w=900&auto=format&fit=crop';
 const DESTINATION_PAGE_SIZE = 6;
 const HOMESTAY_PAGE_SIZE = 4;
 const ACTIVITY_PAGE_SIZE = 3;
+
+function getPromotionScrollAmount(container) {
+  const card = container?.querySelector('[data-promotion-card]');
+  if (!container || !card) return 560;
+  const styles = window.getComputedStyle(container);
+  const gap = Number.parseFloat(styles.columnGap || styles.gap || '24') || 24;
+  return card.getBoundingClientRect().width + gap;
+}
+
+function getReviewScrollAmount(container) {
+  const card = container?.querySelector('[data-review-card]');
+  if (!container || !card) return 420;
+  const styles = window.getComputedStyle(container);
+  const gap = Number.parseFloat(styles.columnGap || styles.gap || '24') || 24;
+  return card.getBoundingClientRect().width + gap;
+}
+
+function formatDateTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('vi-VN');
+}
+
+const HOME_PROMO_TEXT = {
+  title: 'Ch\u01b0\u01a1ng tr\u00ecnh khuy\u1ebfn m\u00e3i ch\u1ed7 \u1edf',
+  subtitle: 'Nh\u1eadn c\u00e1c \u01b0u \u0111\u00e3i \u0111ang ph\u00e1t h\u00e0nh t\u1eeb Cozygo cho h\u00e0nh tr\u00ecnh c\u1ee7a b\u1ea1n',
+  viewAll: 'Xem t\u1ea5t c\u1ea3',
+  empty: 'Ch\u01b0a c\u00f3 m\u00e3 khuy\u1ebfn m\u00e3i n\u00e0o \u0111ang hi\u1ec3n th\u1ecb.',
+  pageLabel: 'Trang khuy\u1ebfn m\u00e3i',
+};
 
 function normalizeText(value) {
   return String(value || '')
@@ -27,10 +62,14 @@ export default function HomeDefaultContent({ setHasSearched, favorites, toggleFa
   const [destinations, setDestinations] = useState([]);
   const [homestays, setHomestays] = useState([]);
   const [activities, setActivities] = useState([]);
+  const [promotions, setPromotions] = useState([]);
+  const [featuredReviews, setFeaturedReviews] = useState([]);
   const [activeCity, setActiveCity] = useState('');
   const [destinationPage, setDestinationPage] = useState(0);
   const [homestayPage, setHomestayPage] = useState(0);
   const [activityPage, setActivityPage] = useState(0);
+  const promotionScrollRef = useRef(null);
+  const reviewScrollRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -41,16 +80,20 @@ export default function HomeDefaultContent({ setHasSearched, favorites, toggleFa
       try {
         setIsLoading(true);
         setErrorMessage('');
-        const [destinationData, homestayData, activityData] = await Promise.all([
+        const [destinationData, homestayData, activityData, promotionData, featuredReviewData] = await Promise.all([
           getPublicDestinations(),
           getPublicHomestays({ sort: 'recommended' }),
           getPublicActivities(),
+          getPublicPromotions(),
+          getFeaturedReviews(),
         ]);
 
         if (!isMounted) return;
         setDestinations(destinationData);
         setHomestays(homestayData);
         setActivities(activityData);
+        setPromotions(promotionData);
+        setFeaturedReviews(Array.isArray(featuredReviewData) ? featuredReviewData : []);
         const firstCity = destinationData[0]?.city || homestayData[0]?.city || homestayData[0]?.province || '';
         setActiveCity((current) => current || firstCity);
       } catch (error) {
@@ -99,12 +142,15 @@ export default function HomeDefaultContent({ setHasSearched, favorites, toggleFa
     return activities.slice(start, start + ACTIVITY_PAGE_SIZE);
   }, [activities, activityPage]);
 
+
   const destinationPageCount = Math.max(1, Math.ceil(destinations.length / DESTINATION_PAGE_SIZE));
   const homestayPageCount = Math.max(1, Math.ceil(activeCityHomestays.length / HOMESTAY_PAGE_SIZE));
   const activityPageCount = Math.max(1, Math.ceil(activities.length / ACTIVITY_PAGE_SIZE));
   const canSlideDestinations = destinations.length > DESTINATION_PAGE_SIZE;
   const canSlideHomestays = activeCityHomestays.length > HOMESTAY_PAGE_SIZE;
   const canSlideActivities = activities.length > ACTIVITY_PAGE_SIZE;
+  const canSlidePromotions = promotions.length > 1;
+  const canSlideReviews = featuredReviews.length > 3;
 
   const goToSearch = (destination) => {
     setHasSearched(destination ? { destination } : {});
@@ -122,6 +168,30 @@ export default function HomeDefaultContent({ setHasSearched, favorites, toggleFa
     setActivityPage((current) => (current + direction + activityPageCount) % activityPageCount);
   };
 
+  const slidePromotions = (direction) => {
+    const container = promotionScrollRef.current;
+    if (!container) return;
+    container.scrollBy({
+      left: getPromotionScrollAmount(container) * direction,
+      behavior: 'smooth',
+    });
+  };
+
+  const slideFeaturedReviews = (direction) => {
+    const container = reviewScrollRef.current;
+    if (!container) return;
+    container.scrollBy({
+      left: getReviewScrollAmount(container) * direction,
+      behavior: 'smooth',
+    });
+  };
+
+  const openReviewDetail = (review) => {
+    if (!review?.homeId) return;
+    const reviewQuery = review.reviewId ? '?reviewId=' + encodeURIComponent(review.reviewId) : '';
+    navigate('/homestay/' + review.homeId + reviewQuery + '#reviews');
+  };
+
   const openActivityDetail = (activity) => {
     navigate('/activities', { state: { activityId: activity.id } });
   };
@@ -134,6 +204,12 @@ export default function HomeDefaultContent({ setHasSearched, favorites, toggleFa
         scrollToNearby: true,
       },
     });
+  };
+
+  const usePromotion = (promotion) => {
+    const saved = saveSearchState({ promotionCode: promotion.promotionCode });
+    const params = buildSearchParams(saved);
+    navigate('/search' + (params.toString() ? '?' + params.toString() : ''));
   };
 
   return (
@@ -396,64 +472,108 @@ export default function HomeDefaultContent({ setHasSearched, favorites, toggleFa
       </section>
 
       <section className="max-w-7xl mx-auto px-4 md:px-8 text-left">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between gap-4 mb-6">
           <div>
-            <h2 className="font-classic text-xl md:text-2xl font-bold text-[#2C1E15]">Chương trình khuyến mãi chỗ ở</h2>
-            <p className="text-sm text-gray-400 mt-0.5">Nhận các ưu đãi đặc quyền, giảm giá sâu cho hành trình của bạn</p>
+            <h2 className="font-classic text-xl md:text-2xl font-bold text-[#2C1E15]">{HOME_PROMO_TEXT.title}</h2>
+            <p className="text-sm text-gray-400 mt-0.5">{HOME_PROMO_TEXT.subtitle}</p>
           </div>
-          <button onClick={() => goToSearch()} className="h-7 rounded-full border border-[#F2A65A]/40 bg-[#FFF4E8] px-4 text-xs font-black uppercase tracking-wider text-[#B65C20] shadow-sm transition hover:bg-[#e2be99] hover:text-white">
-            Xem tất cả <span className="text-[10px]">❯</span>
+          <button onClick={() => navigate('/promotions')} className="h-8 rounded-full border border-[#F2A65A]/40 bg-[#FFF4E8] px-4 text-xs font-black uppercase tracking-wider text-[#B65C20] shadow-sm transition hover:bg-[#FF9800] hover:text-white">
+            {HOME_PROMO_TEXT.viewAll} <span className="text-[10px]">&rsaquo;</span>
           </button>
         </div>
 
-        <div className="relative flex items-center group">
-          <div className="w-full overflow-x-auto flex space-x-5 scrollbar-none pb-4 snap-x">
-            {[
-              ['from-purple-700 to-indigo-800', 'Độc quyền Cozygo', 'Nhận mọi ưu đãi của quý khách tại đây!', 'Áp dụng tự động khi thanh toán trực tuyến'],
-              ['from-teal-700 to-[#2C3E2B]', 'WORLDWIDE', 'Top Match-Day Mộc Lâm Homestay', 'Miễn phí dịch vụ nướng củi sân vườn đêm'],
-              ['from-green-600 to-[#7d9f81]', 'Nghỉ hè rực rỡ', 'Bơi, lướt, lặn, tiết kiệm - Giảm thêm 15%', 'Áp dụng cho các căn có hồ bơi hoặc sân vườn'],
-            ].map(([color, badge, title, desc]) => (
-              <div key={title} className={
-                'flex-shrink-0 w-[320px] sm:w-[380px] h-40 bg-gradient-to-r rounded-2xl p-5 relative overflow-hidden text-white flex flex-col justify-center snap-start border border-black/5 shadow-sm ' + color
-              }>
-                <span className="bg-white/20 text-[9px] font-bold px-2 py-0.5 rounded-full w-fit mb-2">{badge}</span>
-                <h4 className="text-lg font-black leading-tight whitespace-pre-line">{title}</h4>
-                <p className="text-[10px] text-white/75 mt-1 font-medium">✦ {desc}</p>
-              </div>
-            ))}
+        {isLoading ? (
+          <div className="flex gap-6 overflow-hidden pb-4">
+            {[1, 2, 3].map((item) => <div key={item} className="h-[176px] min-w-[520px] animate-pulse rounded-2xl bg-white/70" />)}
           </div>
-        </div>
+        ) : promotions.length === 0 ? (
+          <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-sm font-semibold text-gray-400">
+            {HOME_PROMO_TEXT.empty}
+          </div>
+        ) : (
+          <div className="relative">
+            <div ref={promotionScrollRef} className="flex gap-6 overflow-x-auto scroll-smooth pb-4 snap-x snap-mandatory scrollbar-none">
+              {promotions.map((promotion) => (
+                <div key={promotion.promotionId} data-promotion-card className="min-w-[360px] sm:min-w-[520px] lg:min-w-[560px] snap-start">
+                  <PromotionCard promotion={promotion} compact onUse={usePromotion} />
+                </div>
+              ))}
+            </div>
+            {canSlidePromotions && (
+              <>
+                <button type="button" onClick={() => slidePromotions(-1)} className="absolute -left-8 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 rounded-full bg-white/95 text-[#2C3E2B] shadow-lg ring-1 ring-gray-100 transition hover:bg-[#2C3E2B] hover:text-white lg:flex lg:items-center lg:justify-center xl:-left-12" aria-label={'Tr\u01b0\u1ee3t sang tr\u00e1i'}>&lsaquo;</button>
+                <button type="button" onClick={() => slidePromotions(1)} className="absolute -right-8 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 rounded-full bg-white/95 text-[#2C3E2B] shadow-lg ring-1 ring-gray-100 transition hover:bg-[#2C3E2B] hover:text-white lg:flex lg:items-center lg:justify-center xl:-right-12" aria-label={'Tr\u01b0\u1ee3t sang ph\u1ea3i'}>&rsaquo;</button>
+              </>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="max-w-7xl mx-auto px-4 md:px-8 text-left">
-        <div className="mb-8">
-          <h2 className="font-classic text-2xl md:text-3xl font-bold text-[#2C1E15] mb-1">Nhật ký những bước chân ấm</h2>
-          <p className="text-sm text-gray-400">Những chia sẻ mộc mạc từ người lữ hành đã chọn dừng chân tại Cozygo</p>
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="font-classic text-2xl md:text-3xl font-bold text-[#2C1E15] mb-1">Nhật ký những bước chân ấm</h2>
+            <p className="text-sm text-gray-400">6 đánh giá 5 sao từ các homestay có điểm đánh giá cao nhất trên Cozygo.</p>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[
-            { name: 'Minh Tú', role: 'Cặp đôi trải nghiệm', avatar: 'M', comment: 'Căn homestay ven hồ thực sự làm tụi mình bất ngờ. Đêm lạnh, nhóm lò sưởi và nhâm nhi tách trà là đủ nhớ mãi.', target: 'Cozygo Lake House', stars: '★★★★★' },
-            { name: 'Khánh Linh', role: 'Solo Traveler', avatar: 'K', comment: 'Đi trốn deadline một mình mà tìm được chỗ rất ưng. Phòng sạch, chủ nhà nhiệt tình và chỉ nhiều quán địa phương ngon.', target: 'Nhà Mộc Riêng Biệt', stars: '★★★★★' },
-            { name: 'Gia đình anh Đức', role: 'Chuyến đi 5 thành viên', avatar: 'Đ', comment: 'Sân vườn rộng, các bé chạy nhảy thoải mái. Tối cả nhà cùng mở tiệc BBQ rất đáng nhớ.', target: 'Mộc Lâm Đỉnh Villa', stars: '★★★★☆' },
-          ].map((rev) => (
-            <div key={rev.name} className="bg-white p-6 rounded-2xl border border-[#6E473B]/5 shadow-sm flex flex-col justify-between space-y-4">
-              <div className="space-y-2">
-                <div className="text-amber-400 text-xs tracking-tighter">{rev.stars}</div>
-                <p className="text-xs text-gray-600 italic leading-relaxed">"{rev.comment}"</p>
-              </div>
-              <div className="flex items-center space-x-3 pt-2 border-t border-gray-50">
-                <div className="w-8 h-8 rounded-full bg-[#2C3E2B] text-[#F4F1EA] text-xs font-bold flex items-center justify-center">{rev.avatar}</div>
-                <div>
-                  <h4 className="text-sm font-bold text-[#2C1E15]">{rev.name}</h4>
-                  <p className="text-[12px] text-gray-400 font-medium">{rev.role} • <span className="text-[#6E473B] font-semibold">{rev.target}</span></p>
-                </div>
-              </div>
+        {isLoading ? (
+          <div className="flex gap-6 overflow-hidden pb-4">
+            {[1, 2, 3].map((item) => <div key={item} className="h-[220px] w-[340px] flex-none animate-pulse rounded-2xl bg-white/70 sm:w-[360px] xl:w-[380px]" />)}
+          </div>
+        ) : featuredReviews.length === 0 ? (
+          <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-sm font-semibold text-gray-400">
+            Chưa có đánh giá 5 sao nào để hiển thị.
+          </div>
+        ) : (
+          <div className="relative">
+            <div ref={reviewScrollRef} className="flex gap-6 overflow-x-auto scroll-smooth pb-4 snap-x snap-mandatory scrollbar-none">
+              {featuredReviews.map((review) => (
+                <article key={review.reviewId} data-review-card className="flex min-h-[220px] w-[340px] flex-none snap-start flex-col justify-between rounded-2xl border border-[#6E473B]/5 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl sm:w-[360px] xl:w-[380px]">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-1 text-amber-400">
+                      {Array.from({ length: 5 }).map((_, index) => <span key={index} className="text-sm leading-none">★</span>)}
+                      <span className="ml-2 rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-black text-amber-700">5 sao</span>
+                    </div>
+                    <p className="line-clamp-5 text-sm font-semibold italic leading-7 text-gray-600">
+                      “{review.comment}”
+                    </p>
+                  </div>
+
+                  <div className="mt-5 flex items-center gap-3 border-t border-gray-50 pt-4">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#2C3E2B] text-xs font-black text-[#F4F1EA]">
+                      {review.customerAvatar ? (
+                        <img src={review.customerAvatar} alt={review.customerName || 'Khách Cozygo'} className="h-full w-full object-cover" />
+                      ) : (
+                        (review.customerName || 'K').charAt(0).toUpperCase()
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="truncate text-sm font-black text-[#2C1E15]">{review.customerName || 'Khách Cozygo'}</h4>
+                      <p className="mt-0.5 truncate text-[12px] font-medium text-gray-400">
+                        {formatDateTime(review.createdAt)} ·{' '}
+                        <button type="button" onClick={() => openReviewDetail(review)} className="bg-transparent p-0 text-left font-bold text-[#6E473B] transition hover:text-[#2C3E2B] hover:underline">
+                          {review.homestayName || 'Homestay Cozygo'}
+                        </button>
+                      </p>
+                    </div>
+                  </div>
+                </article>
+              ))}
             </div>
-          ))}
-        </div>
+            {canSlideReviews && (
+              <>
+                <button type="button" onClick={() => slideFeaturedReviews(-1)} className="absolute -left-8 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 rounded-full bg-white/95 text-[#2C3E2B] shadow-lg ring-1 ring-gray-100 transition hover:bg-[#2C3E2B] hover:text-white lg:flex lg:items-center lg:justify-center xl:-left-12" aria-label="Trượt đánh giá sang trái">&lsaquo;</button>
+                <button type="button" onClick={() => slideFeaturedReviews(1)} className="absolute -right-8 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 rounded-full bg-white/95 text-[#2C3E2B] shadow-lg ring-1 ring-gray-100 transition hover:bg-[#2C3E2B] hover:text-white lg:flex lg:items-center lg:justify-center xl:-right-12" aria-label="Trượt đánh giá sang phải">&rsaquo;</button>
+              </>
+            )}
+          </div>
+        )}
+
       </section>
     </div>
   );
 }
+
+
 

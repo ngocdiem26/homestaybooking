@@ -1,4 +1,4 @@
-import { HiOutlineRefresh, HiOutlineSearch } from 'react-icons/hi';
+﻿import { HiOutlineRefresh, HiOutlineSearch } from 'react-icons/hi';
 
 export default function SearchBar({
   value,
@@ -35,3 +35,4 @@ export default function SearchBar({
     </div>
   );
 }
+

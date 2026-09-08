@@ -1,4 +1,4 @@
--- Homestay Booking Database
+﻿-- Homestay Booking Database
 -- Fixed version: UTF-8, MySQL-compatible, clean foreign key names
 -- Charset: utf8mb4
 CREATE DATABASE IF NOT EXISTS lvtn
@@ -264,6 +264,12 @@ CREATE TABLE payments (
     currency VARCHAR(20) DEFAULT 'VND',
     transaction_code VARCHAR(50),
     paid_at TIMESTAMP NULL DEFAULT NULL,
+    expires_at TIMESTAMP NULL DEFAULT NULL,
+    refund_amount DECIMAL(12,2) NULL,
+    refund_status VARCHAR(50) NULL,
+    refund_transaction_code VARCHAR(80) NULL,
+    refund_note VARCHAR(500) NULL,
+    refunded_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (payment_id),
     KEY idx_payments_booking_id (booking_id),
@@ -716,6 +722,13 @@ ADD COLUMN payment_expires_at DATETIME;
 
 ALTER TABLE payments
 ADD COLUMN expires_at DATETIME;
+
+ALTER TABLE payments
+ADD COLUMN refund_amount DECIMAL(12,2) NULL,
+ADD COLUMN refund_status VARCHAR(50) NULL,
+ADD COLUMN refund_transaction_code VARCHAR(80) NULL,
+ADD COLUMN refund_note VARCHAR(500) NULL,
+ADD COLUMN refunded_at TIMESTAMP NULL DEFAULT NULL;
 
 -- 1. Bổ sung 2 cột còn thiếu vào bảng reviews
 ALTER TABLE reviews 
@@ -1470,9 +1483,26 @@ LEFT JOIN (
         b.user_id,
         COUNT(DISTINCT b.booking_id) AS completed_count
     FROM bookings b
+    JOIN users u ON u.user_id = b.user_id
     JOIN booking_details bd ON bd.booking_id = b.booking_id
-    WHERE UPPER(b.booking_status) = 'COMPLETED'
-      AND bd.checkout_date >= DATE_SUB(CURRENT_DATE, INTERVAL 2 YEAR)
+    WHERE COALESCE(b.created_at, CURRENT_TIMESTAMP) >= COALESCE(u.created_at, '1970-01-01 00:00:00')
+      AND UPPER(COALESCE(b.booking_status, '')) NOT IN ('CANCELLED','CANCELED','EXPIRED','NO_SHOW','REJECTED','DELETED')
+      AND (
+          UPPER(COALESCE(b.booking_status, '')) IN ('COMPLETED','DONE','FINISHED')
+          OR (
+              (
+                  UPPER(COALESCE(b.payment_status, '')) IN ('PAID','SUCCESS','COMPLETED','DA_THANH_TOAN')
+                  OR EXISTS (
+                      SELECT 1
+                      FROM payments p
+                      WHERE p.booking_id = b.booking_id
+                        AND UPPER(COALESCE(p.payment_status, '')) IN ('PAID','SUCCESS','COMPLETED','DA_THANH_TOAN')
+                  )
+              )
+              AND bd.checkin_date IS NOT NULL
+              AND bd.checkin_date < CURRENT_DATE
+          )
+      )
     GROUP BY b.user_id
 ) completed ON completed.user_id = cta.user_id
 SET 
@@ -1511,9 +1541,26 @@ LEFT JOIN (
         b.user_id,
         COUNT(DISTINCT b.booking_id) AS completed_count
     FROM bookings b
+    JOIN users u ON u.user_id = b.user_id
     JOIN booking_details bd ON bd.booking_id = b.booking_id
-    WHERE UPPER(b.booking_status) = 'COMPLETED'
-      AND bd.checkout_date >= DATE_SUB(CURRENT_DATE, INTERVAL 2 YEAR)
+    WHERE COALESCE(b.created_at, CURRENT_TIMESTAMP) >= COALESCE(u.created_at, '1970-01-01 00:00:00')
+      AND UPPER(COALESCE(b.booking_status, '')) NOT IN ('CANCELLED','CANCELED','EXPIRED','NO_SHOW','REJECTED','DELETED')
+      AND (
+          UPPER(COALESCE(b.booking_status, '')) IN ('COMPLETED','DONE','FINISHED')
+          OR (
+              (
+                  UPPER(COALESCE(b.payment_status, '')) IN ('PAID','SUCCESS','COMPLETED','DA_THANH_TOAN')
+                  OR EXISTS (
+                      SELECT 1
+                      FROM payments p
+                      WHERE p.booking_id = b.booking_id
+                        AND UPPER(COALESCE(p.payment_status, '')) IN ('PAID','SUCCESS','COMPLETED','DA_THANH_TOAN')
+                  )
+              )
+              AND bd.checkin_date IS NOT NULL
+              AND bd.checkin_date < CURRENT_DATE
+          )
+      )
     GROUP BY b.user_id
 ) completed ON completed.user_id = cta.user_id
 SET 
@@ -1575,85 +1622,1975 @@ UPDATE `lvtn`.`promotions` SET `discount_value` = '20.00' WHERE (`promotion_id` 
 UPDATE `lvtn`.`promotions` SET `discount_value` = '30.00' WHERE (`promotion_id` = '5');
 UPDATE `lvtn`.`promotions` SET `discount_value` = '40.00' WHERE (`promotion_id` = '6');
 
-ALTER TABLE users MODIFY avatar LONGTEXT;
+-- ALTER TABLE users MODIFY avatar LONGTEXT;
 
-ALTER TABLE reviews
-ADD COLUMN moderation_status VARCHAR(30) NULL,
-ADD COLUMN moderation_action VARCHAR(30) NULL,
-ADD COLUMN moderation_reason TEXT NULL,
+-- ALTER TABLE reviews
+-- ADD COLUMN moderation_status VARCHAR(30) NULL,
+-- ADD COLUMN moderation_action VARCHAR(30) NULL,
+-- ADD COLUMN moderation_reason TEXT NULL,
 
-ADD COLUMN toxicity_score DECIMAL(5,4) NULL,
-ADD COLUMN profanity_score DECIMAL(5,4) NULL,
-ADD COLUMN insult_score DECIMAL(5,4) NULL,
-ADD COLUMN threat_score DECIMAL(5,4) NULL,
-ADD COLUMN hate_score DECIMAL(5,4) NULL,
-ADD COLUMN death_related_score DECIMAL(5,4) NULL,
-ADD COLUMN spam_score DECIMAL(5,4) NULL,
-ADD COLUMN privacy_score DECIMAL(5,4) NULL,
+-- ADD COLUMN toxicity_score DECIMAL(5,4) NULL,
+-- ADD COLUMN profanity_score DECIMAL(5,4) NULL,
+-- ADD COLUMN insult_score DECIMAL(5,4) NULL,
+-- ADD COLUMN threat_score DECIMAL(5,4) NULL,
+-- ADD COLUMN hate_score DECIMAL(5,4) NULL,
+-- ADD COLUMN death_related_score DECIMAL(5,4) NULL,
+-- ADD COLUMN spam_score DECIMAL(5,4) NULL,
+-- ADD COLUMN privacy_score DECIMAL(5,4) NULL,
 
-ADD COLUMN sentiment VARCHAR(30) NULL,
-ADD COLUMN rating_comment_mismatch BOOLEAN NOT NULL DEFAULT FALSE,
-ADD COLUMN moderation_categories JSON NULL,
-ADD COLUMN moderated_at TIMESTAMP NULL;
+-- ADD COLUMN sentiment VARCHAR(30) NULL,
+-- ADD COLUMN rating_comment_mismatch BOOLEAN NOT NULL DEFAULT FALSE,
+-- ADD COLUMN moderation_categories JSON NULL,
+-- ADD COLUMN moderated_at TIMESTAMP NULL;
 
-ALTER TABLE reviews
-ADD COLUMN admin_review_status VARCHAR(30) NOT NULL DEFAULT 'NONE'
-AFTER review_status,
-ADD COLUMN moderated_by INT NULL AFTER moderated_at,
-ADD COLUMN hidden_reason TEXT NULL AFTER moderated_by;
+-- ALTER TABLE reviews
+-- ADD COLUMN admin_review_status VARCHAR(30) NOT NULL DEFAULT 'NONE'
+-- AFTER review_status,
+-- ADD COLUMN moderated_by INT NULL AFTER moderated_at,
+-- ADD COLUMN hidden_reason TEXT NULL AFTER moderated_by;
 
-CREATE TABLE IF NOT EXISTS review_moderation_logs (
-    log_id BIGINT NOT NULL AUTO_INCREMENT,
-    review_id INT NOT NULL,
+-- CREATE TABLE IF NOT EXISTS review_moderation_logs (
+--     log_id BIGINT NOT NULL AUTO_INCREMENT,
+--     review_id INT NOT NULL,
 
-    provider VARCHAR(50) NOT NULL,
-    model_name VARCHAR(100) NULL,
+--     provider VARCHAR(50) NOT NULL,
+--     model_name VARCHAR(100) NULL,
 
-    moderation_action VARCHAR(30) NOT NULL,
-    admin_review_status VARCHAR(30) NULL,
-    moderation_reason TEXT NULL,
+--     moderation_action VARCHAR(30) NOT NULL,
+--     admin_review_status VARCHAR(30) NULL,
+--     moderation_reason TEXT NULL,
 
-    toxicity_score DECIMAL(5,4) NULL,
-    profanity_score DECIMAL(5,4) NULL,
-    insult_score DECIMAL(5,4) NULL,
-    threat_score DECIMAL(5,4) NULL,
-    hate_score DECIMAL(5,4) NULL,
-    death_related_score DECIMAL(5,4) NULL,
-    spam_score DECIMAL(5,4) NULL,
-    privacy_score DECIMAL(5,4) NULL,
-    final_score DECIMAL(5,4) NULL,
+--     toxicity_score DECIMAL(5,4) NULL,
+--     profanity_score DECIMAL(5,4) NULL,
+--     insult_score DECIMAL(5,4) NULL,
+--     threat_score DECIMAL(5,4) NULL,
+--     hate_score DECIMAL(5,4) NULL,
+--     death_related_score DECIMAL(5,4) NULL,
+--     spam_score DECIMAL(5,4) NULL,
+--     privacy_score DECIMAL(5,4) NULL,
+--     final_score DECIMAL(5,4) NULL,
 
-    sentiment VARCHAR(30) NULL,
-    rating_comment_mismatch BOOLEAN NOT NULL DEFAULT FALSE,
-    raw_response LONGTEXT NULL,
+--     sentiment VARCHAR(30) NULL,
+--     rating_comment_mismatch BOOLEAN NOT NULL DEFAULT FALSE,
+--     raw_response LONGTEXT NULL,
+
+--     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+--     PRIMARY KEY (log_id),
+
+--     KEY idx_review_moderation_logs_review_id (review_id),
+
+--     CONSTRAINT fk_review_moderation_logs_review
+--         FOREIGN KEY (review_id) REFERENCES reviews(review_id)
+--         ON DELETE CASCADE
+-- );
+
+-- ALTER TABLE reviews
+--   MODIFY moderation_reason TEXT NULL,
+--   MODIFY hidden_reason TEXT NULL;
+
+-- ALTER TABLE review_moderation_logs
+--   MODIFY moderation_reason TEXT NULL,
+--   MODIFY raw_response LONGTEXT NULL;
+
+-- ALTER TABLE review_moderation_logs
+--   MODIFY moderation_reason TEXT NULL,
+--   MODIFY raw_response LONGTEXT NULL;
+  
+-- ALTER TABLE review_moderation_logs
+
+-- CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- ALTER TABLE reviews
+
+-- CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE activities
+ADD COLUMN opening_time TIME NULL,
+ADD COLUMN closing_time TIME NULL,
+ADD COLUMN recommended_duration_minutes INT NULL,
+ADD COLUMN best_time_of_day VARCHAR(30) NULL,
+ADD COLUMN activity_intensity VARCHAR(30) NULL,
+ADD COLUMN estimated_cost_min DECIMAL(12,2) NULL,
+ADD COLUMN estimated_cost_max DECIMAL(12,2) NULL,
+ADD COLUMN activity_tags JSON NULL,
+ADD COLUMN suitable_group_types JSON NULL,
+ADD COLUMN suitable_travel_styles JSON NULL;
+
+
+SET SQL_SAFE_UPDATES = 0;
+
+UPDATE activities
+SET 
+    opening_time = '07:00:00',
+    closing_time = '17:00:00',
+    recommended_duration_minutes = 180,
+    best_time_of_day = 'MORNING',
+    activity_intensity = 'MEDIUM',
+    estimated_cost_min = 150000,
+    estimated_cost_max = 300000,
+    activity_tags = JSON_ARRAY('rural_experience', 'nature', 'local_life', 'farming', 'food'),
+    suitable_group_types = JSON_ARRAY('FAMILY', 'FRIENDS', 'COUPLE'),
+    suitable_travel_styles = JSON_ARRAY('DISCOVERY', 'NATURE', 'FAMILY')
+WHERE activity_id = 1;
+
+UPDATE activities
+SET 
+    opening_time = '06:00:00',
+    closing_time = '16:00:00',
+    recommended_duration_minutes = 180,
+    best_time_of_day = 'MORNING',
+    activity_intensity = 'MEDIUM',
+    estimated_cost_min = 100000,
+    estimated_cost_max = 250000,
+    activity_tags = JSON_ARRAY('farming', 'local_experience', 'culture', 'nature', 'photo_spot'),
+    suitable_group_types = JSON_ARRAY('FAMILY', 'FRIENDS', 'COUPLE'),
+    suitable_travel_styles = JSON_ARRAY('DISCOVERY', 'NATURE', 'LOCAL_EXPERIENCE')
+WHERE activity_id = 2;
+
+UPDATE activities
+SET 
+    opening_time = '07:00:00',
+    closing_time = '17:00:00',
+    recommended_duration_minutes = 120,
+    best_time_of_day = 'MORNING',
+    activity_intensity = 'LIGHT',
+    estimated_cost_min = 120000,
+    estimated_cost_max = 250000,
+    activity_tags = JSON_ARRAY('river', 'boating', 'local_experience', 'nature', 'relaxing'),
+    suitable_group_types = JSON_ARRAY('FAMILY', 'COUPLE', 'FRIENDS'),
+    suitable_travel_styles = JSON_ARRAY('RELAXING', 'DISCOVERY', 'NATURE')
+WHERE activity_id = 3;
+
+UPDATE activities
+SET 
+    opening_time = '08:00:00',
+    closing_time = '17:00:00',
+    recommended_duration_minutes = 90,
+    best_time_of_day = 'AFTERNOON',
+    activity_intensity = 'MEDIUM',
+    estimated_cost_min = 100000,
+    estimated_cost_max = 250000,
+    activity_tags = JSON_ARRAY('boating', 'water_activity', 'local_experience', 'photo_spot', 'adventure'),
+    suitable_group_types = JSON_ARRAY('FAMILY', 'FRIENDS', 'COUPLE'),
+    suitable_travel_styles = JSON_ARRAY('DISCOVERY', 'ADVENTURE', 'LOCAL_EXPERIENCE')
+WHERE activity_id = 4;
+
+UPDATE activities
+SET 
+    opening_time = '08:00:00',
+    closing_time = '17:00:00',
+    recommended_duration_minutes = 90,
+    best_time_of_day = 'AFTERNOON',
+    activity_intensity = 'LIGHT',
+    estimated_cost_min = 80000,
+    estimated_cost_max = 200000,
+    activity_tags = JSON_ARRAY('handicraft', 'culture', 'local_experience', 'workshop', 'family'),
+    suitable_group_types = JSON_ARRAY('FAMILY', 'COUPLE', 'FRIENDS'),
+    suitable_travel_styles = JSON_ARRAY('RELAXING', 'CULTURE', 'LOCAL_EXPERIENCE')
+WHERE activity_id = 5;
+
+UPDATE activities
+SET 
+    opening_time = '07:00:00',
+    closing_time = '16:00:00',
+    recommended_duration_minutes = 120,
+    best_time_of_day = 'MORNING',
+    activity_intensity = 'LIGHT',
+    estimated_cost_min = 100000,
+    estimated_cost_max = 250000,
+    activity_tags = JSON_ARRAY('farm', 'vegetable_garden', 'nature', 'local_experience', 'family'),
+    suitable_group_types = JSON_ARRAY('FAMILY', 'COUPLE', 'FRIENDS'),
+    suitable_travel_styles = JSON_ARRAY('RELAXING', 'NATURE', 'LOCAL_EXPERIENCE')
+WHERE activity_id = 6;
+
+UPDATE activities
+SET 
+    opening_time = '08:00:00',
+    closing_time = '17:00:00',
+    recommended_duration_minutes = 120,
+    best_time_of_day = 'AFTERNOON',
+    activity_intensity = 'LIGHT',
+    estimated_cost_min = 100000,
+    estimated_cost_max = 250000,
+    activity_tags = JSON_ARRAY('pottery', 'handicraft', 'culture', 'workshop', 'local_experience'),
+    suitable_group_types = JSON_ARRAY('FAMILY', 'COUPLE', 'FRIENDS'),
+    suitable_travel_styles = JSON_ARRAY('RELAXING', 'CULTURE', 'LOCAL_EXPERIENCE')
+WHERE activity_id = 7;
+
+UPDATE activities
+SET 
+    opening_time = '05:30:00',
+    closing_time = '10:00:00',
+    recommended_duration_minutes = 120,
+    best_time_of_day = 'MORNING',
+    activity_intensity = 'MEDIUM',
+    estimated_cost_min = 150000,
+    estimated_cost_max = 350000,
+    activity_tags = JSON_ARRAY('fishing', 'sea', 'local_experience', 'adventure', 'nature'),
+    suitable_group_types = JSON_ARRAY('FRIENDS', 'COUPLE', 'FAMILY'),
+    suitable_travel_styles = JSON_ARRAY('DISCOVERY', 'ADVENTURE', 'LOCAL_EXPERIENCE')
+WHERE activity_id = 8;
+
+UPDATE activities
+SET 
+    opening_time = '08:00:00',
+    closing_time = '17:00:00',
+    recommended_duration_minutes = 120,
+    best_time_of_day = 'AFTERNOON',
+    activity_intensity = 'LIGHT',
+    estimated_cost_min = 80000,
+    estimated_cost_max = 200000,
+    activity_tags = JSON_ARRAY('cuisine', 'local_food', 'culture', 'workshop', 'family'),
+    suitable_group_types = JSON_ARRAY('FAMILY', 'COUPLE', 'FRIENDS'),
+    suitable_travel_styles = JSON_ARRAY('RELAXING', 'CULTURE', 'LOCAL_EXPERIENCE')
+WHERE activity_id = 9;
+
+UPDATE activities
+SET 
+    opening_time = '16:00:00',
+    closing_time = '20:30:00',
+    recommended_duration_minutes = 150,
+    best_time_of_day = 'EVENING',
+    activity_intensity = 'LIGHT',
+    estimated_cost_min = 150000,
+    estimated_cost_max = 350000,
+    activity_tags = JSON_ARRAY('cuisine', 'ethnic_culture', 'local_experience', 'mountain', 'community'),
+    suitable_group_types = JSON_ARRAY('FAMILY', 'COUPLE', 'FRIENDS'),
+    suitable_travel_styles = JSON_ARRAY('RELAXING', 'CULTURE', 'LOCAL_EXPERIENCE')
+WHERE activity_id = 10;
+
+SET SQL_SAFE_UPDATES = 1;
+
+ALTER TABLE activities ADD COLUMN city VARCHAR(100) NULL AFTER province;
+
+UPDATE activities SET city='Cần Thơ', province='Cần Thơ' WHERE activity_id=1;
+UPDATE activities SET city='Sa Đéc', province='Đồng Tháp' WHERE activity_id=2;
+UPDATE activities SET city='Bến Tre', province='Bến Tre' WHERE activity_id=3;
+UPDATE activities SET city='Hội An', province='Quảng Nam' WHERE activity_id=4;
+UPDATE activities SET city='Hội An', province='Quảng Nam' WHERE activity_id=5;
+UPDATE activities SET city='Đà Lạt', province='Lâm Đồng' WHERE activity_id=6;
+UPDATE activities SET city='Yên Mô', province='Ninh Bình' WHERE activity_id=7;
+UPDATE activities SET city='Hạ Long', province='Quảng Ninh' WHERE activity_id=8;
+UPDATE activities SET city='Kế Sách', province='Sóc Trăng' WHERE activity_id=9;
+UPDATE activities SET city='Sa Pa', province='Lào Cai' WHERE activity_id=10;
+
+
+DROP TABLE IF EXISTS itinerary_items;
+DROP TABLE IF EXISTS itineraries;
+DROP TABLE IF EXISTS user_itineraries;
+
+CREATE TABLE itineraries (
+    itinerary_id BIGINT NOT NULL AUTO_INCREMENT,
+    itinerary_code VARCHAR(50) NOT NULL,
+    user_id INT NOT NULL,
+
+    itinerary_title VARCHAR(255) NOT NULL,
+    destination_keyword VARCHAR(255) NULL,
+    city VARCHAR(100) NULL,
+    province VARCHAR(100) NULL,
+
+    start_date DATE NULL,
+    end_date DATE NULL,
+    total_days INT NOT NULL DEFAULT 1,
+    traveler_count INT NULL,
+
+    travel_style VARCHAR(50) NULL,
+    pace VARCHAR(30) NULL,
+    interests JSON NULL,
+
+    selected_home_id INT NULL,
+
+    itinerary_summary TEXT NULL,
+
+    ai_provider VARCHAR(30) NULL DEFAULT 'GEMINI',
+    ai_model VARCHAR(100) NULL DEFAULT 'gemini-2.5-flash',
+
+    raw_user_request LONGTEXT NULL,
+    raw_ai_response LONGTEXT NULL,
+
+    generation_status VARCHAR(30) NOT NULL DEFAULT 'SUCCESS',
+    generation_error TEXT NULL,
+
+    itinerary_status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
 
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT NULL
+        ON UPDATE CURRENT_TIMESTAMP,
 
-    PRIMARY KEY (log_id),
+    PRIMARY KEY (itinerary_id),
 
-    KEY idx_review_moderation_logs_review_id (review_id),
+    UNIQUE KEY uk_itineraries_code (itinerary_code),
 
-    CONSTRAINT fk_review_moderation_logs_review
-        FOREIGN KEY (review_id) REFERENCES reviews(review_id)
+    KEY idx_itineraries_user (user_id),
+    KEY idx_itineraries_user_status (
+        user_id,
+        itinerary_status,
+        created_at
+    ),
+    KEY idx_itineraries_destination (
+        province,
+        city
+    ),
+
+    CONSTRAINT fk_itineraries_user
+        FOREIGN KEY (user_id)
+        REFERENCES users(user_id)
         ON DELETE CASCADE
+        ON UPDATE RESTRICT,
+
+    CONSTRAINT fk_itineraries_selected_home
+        FOREIGN KEY (selected_home_id)
+        REFERENCES homestays(home_id)
+        ON DELETE SET NULL
+        ON UPDATE RESTRICT
+)
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8mb4
+COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE itinerary_items (
+    item_id BIGINT NOT NULL AUTO_INCREMENT,
+    itinerary_id BIGINT NOT NULL,
+
+    day_number INT NOT NULL,
+
+    start_time TIME NULL,
+    end_time TIME NULL,
+    duration_minutes INT NULL,
+
+    preferred_time_of_day VARCHAR(30) NULL DEFAULT 'ANY',
+    fixed_time BOOLEAN NOT NULL DEFAULT FALSE,
+
+    title VARCHAR(255) NOT NULL,
+    address VARCHAR(500) NULL,
+
+    item_type VARCHAR(30) NOT NULL,
+    source_type VARCHAR(30) NOT NULL,
+
+    activity_id INT NULL,
+    homestay_id INT NULL,
+
+    latitude DECIMAL(10,7) NULL,
+    longitude DECIMAL(10,7) NULL,
+
+    estimated_cost DECIMAL(12,2) NULL,
+    transport_note VARCHAR(500) NULL,
+    note TEXT NULL,
+
+    display_order INT NOT NULL DEFAULT 0,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT NULL
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (item_id),
+
+    KEY idx_itinerary_items_itinerary (itinerary_id),
+
+    KEY idx_itinerary_items_timeline (
+        itinerary_id,
+        day_number,
+        display_order,
+        start_time
+    ),
+
+    KEY idx_itinerary_items_activity (activity_id),
+    KEY idx_itinerary_items_homestay (homestay_id),
+
+    CONSTRAINT fk_itinerary_items_itinerary
+        FOREIGN KEY (itinerary_id)
+        REFERENCES itineraries(itinerary_id)
+        ON DELETE CASCADE
+        ON UPDATE RESTRICT,
+
+    CONSTRAINT fk_itinerary_items_activity
+        FOREIGN KEY (activity_id)
+        REFERENCES activities(activity_id)
+        ON DELETE SET NULL
+        ON UPDATE RESTRICT,
+
+    CONSTRAINT fk_itinerary_items_homestay
+        FOREIGN KEY (homestay_id)
+        REFERENCES homestays(home_id)
+        ON DELETE SET NULL
+        ON UPDATE RESTRICT
+)
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8mb4
+COLLATE = utf8mb4_unicode_ci;
+ 
+-- ALTER TABLE payments
+-- ADD COLUMN refund_amount DECIMAL(12,2) NULL,
+-- ADD COLUMN refund_status VARCHAR(50) NULL,
+-- ADD COLUMN refund_transaction_code VARCHAR(80) NULL,
+-- ADD COLUMN refund_note VARCHAR(500) NULL,
+-- ADD COLUMN refunded_at TIMESTAMP NULL DEFAULT NULL;
+
+ALTER TABLE users
+ADD COLUMN host_subscription_status VARCHAR(30) NULL
+    COMMENT 'TRIAL, ACTIVE, OVERDUE, SUSPENDED',
+ADD COLUMN host_subscription_expires_at DATE NULL
+    COMMENT 'Ngày hết hạn phí duy trì',
+ADD COLUMN host_can_receive_booking BOOLEAN NOT NULL DEFAULT TRUE
+    COMMENT 'Host có được nhận booking mới hay không';
+    
+CREATE TABLE platform_fee_settings (
+    setting_id BIGINT NOT NULL AUTO_INCREMENT,
+
+    setting_name VARCHAR(150) NOT NULL,
+
+    commission_rate DECIMAL(5,2) NOT NULL DEFAULT 10.00
+        COMMENT 'Tỷ lệ phần trăm, ví dụ 10.00 là 10%',
+
+    monthly_maintenance_fee DECIMAL(14,2) NOT NULL DEFAULT 99000,
+
+    free_trial_days INT NOT NULL DEFAULT 30,
+    grace_period_days INT NOT NULL DEFAULT 3,
+
+    effective_from DATE NOT NULL,
+    effective_to DATE NULL,
+
+    setting_status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE'
+        COMMENT 'ACTIVE, INACTIVE',
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT NULL
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (setting_id),
+
+    KEY idx_platform_fee_status_date (
+        setting_status,
+        effective_from,
+        effective_to
+    )
+)
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8mb4
+COLLATE = utf8mb4_unicode_ci;
+
+INSERT INTO platform_fee_settings (
+    setting_name,
+    commission_rate,
+    monthly_maintenance_fee,
+    free_trial_days,
+    grace_period_days,
+    effective_from,
+    effective_to,
+    setting_status
+)
+VALUES (
+    'Phí mặc định Cozygo',
+    10.00,
+    99000,
+    30,
+    3,
+    CURRENT_DATE,
+    NULL,
+    'ACTIVE'
 );
 
-ALTER TABLE reviews
-  MODIFY moderation_reason TEXT NULL,
-  MODIFY hidden_reason TEXT NULL;
+CREATE TABLE booking_commissions (
+    commission_id BIGINT NOT NULL AUTO_INCREMENT,
 
-ALTER TABLE review_moderation_logs
-  MODIFY moderation_reason TEXT NULL,
-  MODIFY raw_response LONGTEXT NULL;
+    booking_id INT NOT NULL,
+    host_id INT NOT NULL,
 
-ALTER TABLE review_moderation_logs
-  MODIFY moderation_reason TEXT NULL,
-  MODIFY raw_response LONGTEXT NULL;
-  
-ALTER TABLE review_moderation_logs
+    booking_amount DECIMAL(14,2) NOT NULL DEFAULT 0
+        COMMENT 'Tổng tiền booking dùng để tính phí',
 
-CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    commission_rate DECIMAL(5,2) NOT NULL
+        COMMENT 'Tỷ lệ được chốt tại thời điểm tạo hoa hồng',
 
-ALTER TABLE reviews
+    commission_amount DECIMAL(14,2) NOT NULL DEFAULT 0
+        COMMENT 'Tiền hoa hồng sàn nhận',
 
-CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    host_receivable_amount DECIMAL(14,2) NOT NULL DEFAULT 0
+        COMMENT 'Số tiền host được nhận sau khi trừ hoa hồng',
+
+    commission_status VARCHAR(30) NOT NULL DEFAULT 'PENDING'
+        COMMENT 'PENDING, RECOGNIZED, CANCELLED, PAID_OUT',
+
+    calculated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    recognized_at TIMESTAMP NULL,
+    paid_to_host_at TIMESTAMP NULL,
+
+    admin_note TEXT NULL,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT NULL
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (commission_id),
+
+    UNIQUE KEY uk_booking_commissions_booking (booking_id),
+
+    KEY idx_booking_commissions_host (host_id),
+    KEY idx_booking_commissions_status (commission_status),
+    KEY idx_booking_commissions_recognized_at (recognized_at),
+
+    CONSTRAINT fk_booking_commissions_booking
+        FOREIGN KEY (booking_id)
+        REFERENCES bookings(booking_id)
+        ON DELETE CASCADE
+        ON UPDATE RESTRICT,
+
+    CONSTRAINT fk_booking_commissions_host
+        FOREIGN KEY (host_id)
+        REFERENCES users(user_id)
+        ON DELETE RESTRICT
+        ON UPDATE RESTRICT
+)
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8mb4
+COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE host_maintenance_fees (
+    maintenance_fee_id BIGINT NOT NULL AUTO_INCREMENT,
+
+    host_id INT NOT NULL,
+
+    billing_month TINYINT NOT NULL,
+    billing_year SMALLINT NOT NULL,
+
+    period_start DATE NOT NULL,
+    period_end DATE NOT NULL,
+
+    fee_amount DECIMAL(14,2) NOT NULL,
+
+    due_date DATE NOT NULL,
+
+    payment_status VARCHAR(30) NOT NULL DEFAULT 'PENDING'
+        COMMENT 'PENDING, PAID, OVERDUE, WAIVED, CANCELLED',
+
+    paid_at TIMESTAMP NULL,
+
+    payment_method VARCHAR(30) NULL
+        COMMENT 'BANK_TRANSFER, VNPAY, CASH, ADMIN_CONFIRM',
+
+    transaction_reference VARCHAR(150) NULL,
+
+    admin_note TEXT NULL,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT NULL
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (maintenance_fee_id),
+
+    UNIQUE KEY uk_host_maintenance_month (
+        host_id,
+        billing_year,
+        billing_month
+    ),
+
+    KEY idx_host_maintenance_status_due (
+        payment_status,
+        due_date
+    ),
+
+    KEY idx_host_maintenance_host (
+        host_id,
+        billing_year,
+        billing_month
+    ),
+
+    CONSTRAINT fk_host_maintenance_fees_host
+        FOREIGN KEY (host_id)ont
+        REFERENCES users(user_id)
+        ON DELETE CASCADE
+        ON UPDATE RESTRICT
+)
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8mb4
+COLLATE = utf8mb4_unicode_ci;
+
+ALTER TABLE promotion_users
+ADD COLUMN granted_at TIMESTAMP NOT NULL
+    DEFAULT CURRENT_TIMESTAMP
+    COMMENT 'Thời điểm user được cấp mã',
+
+ADD COLUMN valid_from DATETIME NOT NULL
+    DEFAULT CURRENT_TIMESTAMP
+    COMMENT 'Thời điểm bắt đầu được sử dụng',
+
+ADD COLUMN valid_until DATETIME NULL
+    COMMENT 'Hạn sử dụng riêng của user',
+
+ADD COLUMN user_promotion_status VARCHAR(30)
+    NOT NULL DEFAULT 'ACTIVE'
+    COMMENT 'ACTIVE, USED_UP, EXPIRED, REVOKED',
+
+ADD COLUMN granted_reason VARCHAR(100) NULL
+    COMMENT 'TIER_UPGRADE, ADMIN_GRANT, CAMPAIGN',
+
+ADD COLUMN granted_tier_id INT NULL
+    COMMENT 'Hạng tại thời điểm được cấp',
+
+ADD COLUMN usage_limit INT NOT NULL DEFAULT 1
+    COMMENT 'Số lần user được dùng quyền này',
+
+ADD COLUMN used_count INT NOT NULL DEFAULT 0
+    COMMENT 'Số lần đã sử dụng';
+
+    
+ALTER TABLE promotion_users
+ADD UNIQUE KEY uk_promotion_user (
+    promotion_id,
+    user_id
+);
+
+
+ALTER TABLE promotion_tiers
+ADD COLUMN validity_days INT NOT NULL DEFAULT 30
+    COMMENT 'Số ngày user được sử dụng sau khi mở khóa';
+
+UPDATE promotion_tiers pt
+JOIN loyalty_tiers lt
+    ON lt.tier_id = pt.tier_id
+SET pt.validity_days =
+    CASE lt.tier_code
+        WHEN 'BRONZE' THEN 30
+        WHEN 'SILVER' THEN 90
+        WHEN 'GOLD' THEN 180
+        WHEN 'DIAMOND' THEN 270
+        ELSE 30
+    END
+WHERE pt.promotion_id > 0;
+
+ALTER TABLE promotions
+MODIFY COLUMN start_date DATE NULL,
+MODIFY COLUMN end_date DATE NULL;
+
+UPDATE promotions
+SET start_date = NULL,
+    end_date = NULL,
+    status = 'ACTIVE',
+    updated_at = CURRENT_TIMESTAMP
+WHERE promotion_id > 0
+  AND promotion_scope = 'TIER';
+
+ALTER TABLE promotion_users
+ADD COLUMN updated_at DATETIME NOT NULL
+DEFAULT CURRENT_TIMESTAMP
+ON UPDATE CURRENT_TIMESTAMP;
+
+
+use lvtn;
+INSERT INTO activities (
+    activity_name,
+    province,
+    city,
+    activity_address,
+    latitude,
+    longitude,
+    short_description,
+    description,
+    hotline,
+    thumbnail_url,
+    badge_text,
+    badge_type,
+    activity_status,
+    is_featured,
+    display_order,
+    created_by,
+    opening_time,
+    closing_time,
+    recommended_duration_minutes,
+    best_time_of_day,
+    activity_intensity,
+    estimated_cost_min,
+    estimated_cost_max,
+    activity_tags,
+    suitable_group_types,
+    suitable_travel_styles
+)
+VALUES
+
+-- =========================================================
+-- 1. CẦN THƠ
+-- =========================================================
+
+(
+    'Khám phá chợ nổi Cái Răng bằng thuyền',
+    'Cần Thơ',
+    'Cần Thơ',
+    '2P3W+42X, đường Võ Tánh, phường Lê Bình, quận Cái Răng, thành phố Cần Thơ',
+    10.0028540,
+    105.7451017,
+    'Đi thuyền giữa chợ nổi, ngắm ghe buôn bán và trải nghiệm nhịp sống sông nước miền Tây.',
+    'Du khách đi thuyền tham quan chợ nổi Cái Răng vào buổi sáng, quan sát hoạt động mua bán nông sản trên sông, thưởng thức món ăn và cà phê trên ghe, chụp ảnh bình minh và tìm hiểu văn hóa giao thương đặc trưng của vùng Đồng bằng sông Cửu Long.',
+    NULL,
+    '/images/activities/chonoi.jpg',
+    'Sông nước',
+    'WATER',
+    'ACTIVE',
+    1,
+    11,
+    NULL,
+    '04:00:00',
+    '09:00:00',
+    180,
+    'MORNING',
+    'LIGHT',
+    50000.00,
+    150000.00,
+    '["floating_market","river","local_food","mekong","local_culture","boat"]',
+    '["FAMILY","COUPLE","FRIENDS"]',
+    '["DISCOVERY","CULTURE","LOCAL_EXPERIENCE","RELAXING"]'
+),
+
+(
+    'Trải nghiệm du lịch cộng đồng Cồn Sơn',
+    'Cần Thơ',
+    'Cần Thơ',
+    'Khu vực I, phường Bình Thủy, thành phố Cần Thơ; đi đò từ bến Cô Bắc, hẻm 13 đường Lê Hồng Phong',
+    10.0845300,
+    105.7504800,
+    'Khám phá cù lao giữa sông Hậu với vườn trái cây, bè cá và các trải nghiệm dân gian miền Tây.',
+    'Du khách đi đò sang Cồn Sơn, tham quan vườn cây ăn trái, bè cá, thưởng thức bánh dân gian, tìm hiểu đời sống của người dân trên cù lao và có thể xem các hoạt động đặc trưng của mô hình du lịch cộng đồng địa phương.',
+    '02923841512',
+    '/images/activities/conson.jpg',
+    'Miệt vườn',
+    'LOCAL',
+    'ACTIVE',
+    1,
+    12,
+    NULL,
+    '07:00:00',
+    '18:00:00',
+    240,
+    'MORNING',
+    'MEDIUM',
+    100000.00,
+    300000.00,
+    '["community_tourism","fruit_garden","river","fish_farm","local_food","mekong"]',
+    '["FAMILY","COUPLE","FRIENDS"]',
+    '["LOCAL_EXPERIENCE","NATURE","CULTURE","DISCOVERY"]'
+),
+
+(
+    'Trải nghiệm làm cacao tại vườn Mười Cương',
+    'Cần Thơ',
+    'Cần Thơ',
+    'XPQ5+MMV, ấp Mỹ Ái, xã Mỹ Khánh, huyện Phong Điền, thành phố Cần Thơ',
+    9.9892444,
+    105.7091827,
+    'Tham quan vườn cacao và tìm hiểu cách chế biến cacao, chocolate thủ công.',
+    'Du khách tham quan vườn cacao Mười Cương, tìm hiểu quá trình trồng, thu hoạch và chế biến trái cacao thành các sản phẩm như bột cacao và chocolate, đồng thời trải nghiệm không gian miệt vườn Phong Điền.',
+    '0939427589',
+    '/images/activities/vuoncacao.jpg',
+    'Nông trại',
+    'FARM',
+    'ACTIVE',
+    1,
+    13,
+    NULL,
+    '07:00:00',
+    '12:00:00',
+    150,
+    'MORNING',
+    'LIGHT',
+    50000.00,
+    200000.00,
+    '["cacao","chocolate","farm","local_product","fruit_garden","workshop"]',
+    '["FAMILY","COUPLE","FRIENDS"]',
+    '["LOCAL_EXPERIENCE","NATURE","CULTURE","DISCOVERY"]'
+),
+
+-- =========================================================
+-- 2. ĐÀ LẠT - LÂM ĐỒNG
+-- =========================================================
+
+(
+    'Săn mây và khám phá đồi chè Cầu Đất',
+    'Lâm Đồng',
+    'Đà Lạt',
+    'Quốc lộ 20, xã Xuân Trường, thành phố Đà Lạt, tỉnh Lâm Đồng',
+    11.8822500,
+    108.5574800,
+    'Dạo đồi chè xanh, ngắm cảnh cao nguyên và săn mây vào sáng sớm.',
+    'Trải nghiệm không gian đồi chè Cầu Đất với những luống chè trải dài trên cao nguyên, chụp ảnh phong cảnh, ngắm bình minh và tìm hiểu vùng sản xuất chè nổi tiếng ở ngoại ô Đà Lạt.',
+    NULL,
+    '/images/activities/caudatteahill.jpg',
+    'Cao nguyên',
+    'FARM',
+    'ACTIVE',
+    1,
+    14,
+    NULL,
+    '06:00:00',
+    '17:00:00',
+    180,
+    'MORNING',
+    'MEDIUM',
+    0.00,
+    100000.00,
+    '["tea_hill","cloud_hunting","nature","photography","highland","tea"]',
+    '["FAMILY","COUPLE","FRIENDS"]',
+    '["NATURE","DISCOVERY","RELAXING","LOCAL_EXPERIENCE"]'
+),
+
+(
+    'Tham quan Làng hoa Vạn Thành',
+    'Lâm Đồng',
+    'Đà Lạt',
+    '43 Vạn Thành, Phường 5, thành phố Đà Lạt, tỉnh Lâm Đồng',
+    11.9475800,
+    108.4084500,
+    'Khám phá làng trồng hoa lâu đời và tìm hiểu nghề trồng hoa đặc trưng của Đà Lạt.',
+    'Du khách đi giữa các khu trồng hoa, tìm hiểu phương pháp chăm sóc nhiều giống hoa đặc trưng của Đà Lạt, chụp ảnh và quan sát hoạt động sản xuất của người dân làng hoa.',
+    '0263535699',
+    '/images/activities/langhoavanthanh.jpg',
+    'Làng hoa',
+    'FARM',
+    'ACTIVE',
+    1,
+    15,
+    NULL,
+    '07:00:00',
+    '17:00:00',
+    120,
+    'MORNING',
+    'LIGHT',
+    20000.00,
+    40000.00,
+    '["flower_village","flower_farm","photography","agriculture","local_culture"]',
+    '["FAMILY","COUPLE","FRIENDS"]',
+    '["RELAXING","NATURE","LOCAL_EXPERIENCE","DISCOVERY"]'
+),
+
+(
+    'Hái dâu tại Ichigo Strawberry Farm',
+    'Lâm Đồng',
+    'Đà Lạt',
+    '100 Cam Ly, Phường 7, thành phố Đà Lạt, tỉnh Lâm Đồng',
+    11.9665316,
+    108.3937345,
+    'Tham quan vườn dâu và trải nghiệm hái dâu trực tiếp tại Đà Lạt.',
+    'Du khách tham quan khu trồng dâu, tìm hiểu cách chăm sóc dâu trong điều kiện khí hậu Đà Lạt, tự chọn và hái dâu tại vườn khi đúng mùa, đồng thời thưởng thức hoặc mua nông sản địa phương.',
+    '0924979799',
+    '/images/activities/ichigostrawberryfarm.jpg',
+    'Nông trại',
+    'FARM',
+    'ACTIVE',
+    1,
+    16,
+    NULL,
+    '07:00:00',
+    '18:00:00',
+    120,
+    'MORNING',
+    'LIGHT',
+    10000.00,
+    350000.00,
+    '["strawberry","fruit_picking","farm","agriculture","local_food","photography"]',
+    '["FAMILY","COUPLE","FRIENDS"]',
+    '["NATURE","LOCAL_EXPERIENCE","RELAXING","FAMILY"]'
+),
+
+-- =========================================================
+-- 3. ĐÀ NẴNG
+-- =========================================================
+
+(
+    'Khám phá nghề điêu khắc đá Non Nước',
+    'Đà Nẵng',
+    'Đà Nẵng',
+    '60 Huyền Trân Công Chúa, phường Hòa Hải, quận Ngũ Hành Sơn, thành phố Đà Nẵng',
+    16.0009500,
+    108.2666400,
+    'Tham quan làng nghề đá truyền thống và quan sát nghệ nhân chế tác sản phẩm mỹ nghệ.',
+    'Du khách khám phá làng đá mỹ nghệ Non Nước dưới chân Ngũ Hành Sơn, quan sát các công đoạn tạo hình, chạm khắc và hoàn thiện sản phẩm đá, tìm hiểu lịch sử làng nghề và lựa chọn sản phẩm thủ công làm quà.',
+    '0814347213',
+    '/images/activities/dieukhacdanonnuoc.jpg',
+    'Làng nghề',
+    'CRAFT',
+    'ACTIVE',
+    1,
+    17,
+    NULL,
+    '07:30:00',
+    '17:30:00',
+    120,
+    'MORNING',
+    'LIGHT',
+    0.00,
+    200000.00,
+    '["stone_carving","craft_village","handicraft","culture","artisan","souvenir"]',
+    '["FAMILY","COUPLE","FRIENDS"]',
+    '["CULTURE","LOCAL_EXPERIENCE","DISCOVERY"]'
+),
+
+(
+    'Tham quan làng nước mắm Nam Ô',
+    'Đà Nẵng',
+    'Đà Nẵng',
+    'Làng Nam Ô, phường Hòa Hiệp Nam, quận Liên Chiểu, thành phố Đà Nẵng',
+    16.1128300,
+    108.1300900,
+    'Tìm hiểu nghề làm nước mắm truyền thống của làng chài Nam Ô.',
+    'Du khách ghé làng Nam Ô để tìm hiểu quy trình làm nước mắm từ cá cơm, tham quan không gian làng chài ven biển, tìm hiểu đời sống ngư dân và các sản phẩm đặc trưng của địa phương.',
+    NULL,
+    '/images/activities/nuocmamnamo.jpg',
+    'Làng chài',
+    'LOCAL',
+    'ACTIVE',
+    1,
+    18,
+    NULL,
+    '07:30:00',
+    '17:00:00',
+    120,
+    'MORNING',
+    'LIGHT',
+    0.00,
+    150000.00,
+    '["fish_sauce","fishing_village","sea","traditional_craft","local_food","culture"]',
+    '["FAMILY","COUPLE","FRIENDS"]',
+    '["CULTURE","LOCAL_EXPERIENCE","DISCOVERY"]'
+),
+
+(
+    'Ngắm bình minh và tắm biển Mỹ Khê',
+    'Đà Nẵng',
+    'Đà Nẵng',
+    'Bãi biển Mỹ Khê, đường Võ Nguyên Giáp, phường Phước Mỹ, quận Sơn Trà, thành phố Đà Nẵng',
+    16.0700000,
+    108.2461111,
+    'Ngắm bình minh, đi bộ trên bãi cát và trải nghiệm không khí biển Đà Nẵng.',
+    'Du khách có thể bắt đầu ngày mới tại biển Mỹ Khê với hoạt động ngắm bình minh, đi bộ hoặc chạy nhẹ trên bãi biển, tắm biển trong khu vực được phép và thưởng thức không khí ven biển đặc trưng của Đà Nẵng.',
+    NULL,
+    '/images/activities/mykhe.jpg',
+    'Biển',
+    'SEA',
+    'ACTIVE',
+    1,
+    19,
+    NULL,
+    '06:00:00',
+    '18:00:00',
+    120,
+    'MORNING',
+    'LIGHT',
+    0.00,
+    100000.00,
+    '["beach","sunrise","swimming","sea","walking","photography"]',
+    '["FAMILY","COUPLE","FRIENDS"]',
+    '["RELAXING","NATURE","DISCOVERY"]'
+),
+
+-- =========================================================
+-- 4. HUẾ
+-- =========================================================
+
+(
+    'Trải nghiệm làm hương tại Làng hương Thủy Xuân',
+    'Huế',
+    'Huế',
+    '84 Huyền Trân Công Chúa, phường Thủy Xuân, thành phố Huế',
+    16.4359000,
+    107.5760000,
+    'Khám phá làng hương truyền thống và tìm hiểu các công đoạn làm hương thủ công.',
+    'Du khách tham quan những gian hàng hương nhiều màu sắc tại Thủy Xuân, tìm hiểu cách làm hương truyền thống, quan sát người dân se hương và chụp ảnh trong không gian làng nghề đặc trưng của Huế.',
+    NULL,
+    '/images/activities/langhuongthuyxuan.jpg',
+    'Làng nghề',
+    'CRAFT',
+    'ACTIVE',
+    1,
+    20,
+    NULL,
+    '07:30:00',
+    '17:30:00',
+    120,
+    'MORNING',
+    'LIGHT',
+    0.00,
+    100000.00,
+    '["incense","craft_village","handicraft","culture","photography","hue"]',
+    '["FAMILY","COUPLE","FRIENDS"]',
+    '["CULTURE","LOCAL_EXPERIENCE","RELAXING"]'
+),
+
+(
+    'Làm gốm và bánh truyền thống tại Làng cổ Phước Tích',
+    'Huế',
+    'Huế',
+    'Thôn Phước Phú, xã Phong Hòa, huyện Phong Điền, khu vực Huế',
+    16.6382400,
+    107.3099400,
+    'Khám phá làng cổ, nhà rường và các nghề thủ công truyền thống của Phước Tích.',
+    'Du khách dạo quanh làng cổ Phước Tích, tham quan nhà rường, tìm hiểu kiến trúc làng quê truyền thống và có thể tham gia các chương trình trải nghiệm như làm gốm, làm bánh hoặc trò chơi dân gian tùy thời điểm tổ chức.',
+    NULL,
+    '/images/activities/langcophuoctich.jpg',
+    'Di sản',
+    'CULTURE',
+    'ACTIVE',
+    1,
+    21,
+    NULL,
+    '08:00:00',
+    '17:00:00',
+    180,
+    'MORNING',
+    'LIGHT',
+    50000.00,
+    300000.00,
+    '["ancient_village","pottery","traditional_cake","heritage","culture","craft"]',
+    '["FAMILY","COUPLE","FRIENDS"]',
+    '["CULTURE","LOCAL_EXPERIENCE","DISCOVERY","RELAXING"]'
+),
+
+(
+    'Ngắm bình minh và khám phá Đầm Chuồn',
+    'Huế',
+    'Huế',
+    'Đầm Chuồn, xã Phú An, huyện Phú Vang, khu vực Huế',
+    16.5283486,
+    107.6392892,
+    'Khám phá cảnh quan đầm phá, đời sống ngư dân và ẩm thực vùng Đầm Chuồn.',
+    'Du khách đến Đầm Chuồn để ngắm cảnh đầm phá Tam Giang, quan sát hoạt động đánh bắt thủy sản của người dân, đi thuyền khi có dịch vụ phù hợp và thưởng thức các món hải sản địa phương.',
+    NULL,
+    '/images/activities/damchuon.jpg',
+    'Đầm phá',
+    'WATER',
+    'ACTIVE',
+    1,
+    22,
+    NULL,
+    '06:00:00',
+    '18:00:00',
+    180,
+    'MORNING',
+    'LIGHT',
+    50000.00,
+    250000.00,
+    '["lagoon","fishing","sunrise","seafood","local_life","nature"]',
+    '["FAMILY","COUPLE","FRIENDS"]',
+    '["NATURE","LOCAL_EXPERIENCE","DISCOVERY","RELAXING"]'
+),
+
+-- =========================================================
+-- 5. TRÀ VINH
+-- Giữ tên Trà Vinh theo dữ liệu địa danh của project để test
+-- =========================================================
+
+(
+    'Dạo Ao Bà Om và tìm hiểu văn hóa Khmer',
+    'Trà Vinh',
+    'Trà Vinh',
+    'Ao Bà Om, Khóm 4, Phường 8, thành phố Trà Vinh, tỉnh Trà Vinh',
+    9.9177100,
+    106.3040300,
+    'Dạo quanh ao cổ, hàng cây cổ thụ và khám phá không gian văn hóa Khmer Nam Bộ.',
+    'Du khách tham quan Ao Bà Om, đi bộ dưới những hàng cây cổ thụ, tìm hiểu truyền thuyết địa phương và kết hợp khám phá các công trình văn hóa Khmer nằm trong khu vực lân cận.',
+    NULL,
+    '/images/activities/aobaom.jpg',
+    'Văn hóa Khmer',
+    'CULTURE',
+    'ACTIVE',
+    1,
+    23,
+    NULL,
+    '06:00:00',
+    '18:00:00',
+    120,
+    'MORNING',
+    'LIGHT',
+    0.00,
+    50000.00,
+    '["khmer_culture","pond","heritage","ancient_trees","local_culture","walking"]',
+    '["FAMILY","COUPLE","FRIENDS"]',
+    '["CULTURE","RELAXING","LOCAL_EXPERIENCE","DISCOVERY"]'
+),
+
+(
+    'Tham quan làng nghề bánh tét Trà Cuôn',
+    'Trà Vinh',
+    'Trà Vinh',
+    'Ấp Trà Cuôn, xã Kim Hòa, huyện Cầu Ngang, tỉnh Trà Vinh, dọc Quốc lộ 53',
+    9.8569444,
+    106.4063889,
+    'Khám phá làng nghề bánh tét nổi tiếng và quan sát quy trình làm bánh truyền thống.',
+    'Du khách ghé làng nghề bánh tét Trà Cuôn để xem người dân chuẩn bị nếp, đậu xanh, nhân bánh, gói và nấu bánh theo cách truyền thống, đồng thời có thể mua các loại bánh tét địa phương làm quà.',
+    NULL,
+    '/images/activities/banhtettracuon.jpg',
+    'Ẩm thực',
+    'FOOD',
+    'ACTIVE',
+    1,
+    24,
+    NULL,
+    '07:00:00',
+    '17:00:00',
+    120,
+    'MORNING',
+    'LIGHT',
+    50000.00,
+    150000.00,
+    '["banh_tet","traditional_food","craft_village","local_food","cooking","culture"]',
+    '["FAMILY","COUPLE","FRIENDS"]',
+    '["LOCAL_EXPERIENCE","CULTURE","DISCOVERY"]'
+),
+
+(
+    'Trải nghiệm du lịch cộng đồng Cồn Chim',
+    'Trà Vinh',
+    'Trà Vinh',
+    'WCCF+482, Cồn Chim, xã Hòa Minh, huyện Châu Thành, tỉnh Trà Vinh',
+    9.9202712,
+    106.4232557,
+    'Trải nghiệm cuộc sống sông nước, câu cua, trò chơi dân gian và ẩm thực tại Cồn Chim.',
+    'Du khách khám phá mô hình du lịch cộng đồng Cồn Chim, trải nghiệm cảnh quan sông nước, tham gia các hoạt động dân gian, tìm hiểu cách người dân đánh bắt thủy sản như câu cua và đặt lú, đồng thời thưởng thức món ăn địa phương.',
+    NULL,
+    '/images/activities/conchim.jpg',
+    'Cộng đồng',
+    'LOCAL',
+    'ACTIVE',
+    1,
+    25,
+    NULL,
+    '07:00:00',
+    '17:00:00',
+    240,
+    'MORNING',
+    'MEDIUM',
+    150000.00,
+    350000.00,
+    '["community_tourism","crab_fishing","river","folk_game","local_food","mekong"]',
+    '["FAMILY","COUPLE","FRIENDS"]',
+    '["LOCAL_EXPERIENCE","NATURE","CULTURE","DISCOVERY"]'
+),
+
+-- =========================================================
+-- 6. BẾN TRE
+-- Giữ tên Bến Tre theo dữ liệu địa danh của project để test
+-- =========================================================
+
+(
+    'Trải nghiệm trò chơi dân gian tại Lan Vương',
+    'Bến Tre',
+    'Bến Tre',
+    'ĐT887, Ấp 2, xã Phú Nhuận, thành phố Bến Tre, tỉnh Bến Tre',
+    10.2085801,
+    106.3706958,
+    'Hóa thân thành người miền Tây và tham gia các trò chơi dân gian sông nước.',
+    'Du khách đến Lan Vương có thể tham gia các trò chơi vận động và hoạt động ngoài trời trong không gian sinh thái miền Tây, mặc áo bà ba, vui chơi theo nhóm và thưởng thức ẩm thực địa phương.',
+    '0888544898',
+    '/images/activities/lanvuong.jpg',
+    'Miền Tây',
+    'LOCAL',
+    'ACTIVE',
+    1,
+    26,
+    NULL,
+    '07:00:00',
+    '18:00:00',
+    240,
+    'MORNING',
+    'MEDIUM',
+    50000.00,
+    300000.00,
+    '["folk_game","mekong","team_building","local_food","water_game","local_experience"]',
+    '["FAMILY","FRIENDS","COUPLE"]',
+    '["LOCAL_EXPERIENCE","ADVENTURE","CULTURE","DISCOVERY"]'
+),
+
+(
+    'Tát mương bắt cá và làm bánh tại Phú An Khang',
+    'Bến Tre',
+    'Bến Tre',
+    'Số 319, ấp Phú Lợi, xã Bình Phú, thành phố Bến Tre, tỉnh Bến Tre',
+    10.2420991,
+    106.3436278,
+    'Trải nghiệm miệt vườn với chèo xuồng, cầu tre, bắt cá và làm món bánh Nam Bộ.',
+    'Du khách tham quan vườn cây ăn trái Phú An Khang, bơi xuồng, đi cầu tre, tham gia tát mương bắt cá và trải nghiệm làm các món bánh dân gian như bánh xèo hoặc bánh chuối tùy chương trình phục vụ.',
+    '02753838686',
+    '/images/activities/phu-an-khang.jpg',
+    'Miệt vườn',
+    'FARM',
+    'ACTIVE',
+    1,
+    27,
+    NULL,
+    '07:00:00',
+    '18:00:00',
+    240,
+    'MORNING',
+    'MEDIUM',
+    50000.00,
+    300000.00,
+    '["fruit_garden","ditch_fishing","boat","cooking","folk_game","agriculture"]',
+    '["FAMILY","FRIENDS","COUPLE"]',
+    '["LOCAL_EXPERIENCE","NATURE","ADVENTURE","FAMILY"]'
+),
+
+(
+    'Khám phá đời sống sông nước tại Khu du lịch Làng Bè',
+    'Bến Tre',
+    'Bến Tre',
+    '81B/6B, ấp An Thới B, xã An Khánh, huyện Châu Thành, tỉnh Bến Tre',
+    10.3274450,
+    106.3514793,
+    'Trải nghiệm nghề nuôi cá bè và các trò chơi dân gian đặc trưng của miền Tây.',
+    'Du khách khám phá cảnh quan sông nước Bến Tre, tìm hiểu nghề nuôi cá bè của người dân địa phương, mặc áo bà ba và tham gia các trò chơi như đạp xe qua cầu hẹp, đi cầu khỉ, đu dây và các hoạt động vận động dưới nước.',
+    '0949798822',
+    '/images/activities/lang-be.jpg',
+    'Sông nước',
+    'WATER',
+    'ACTIVE',
+    1,
+    28,
+    NULL,
+    '07:00:00',
+    '21:00:00',
+    240,
+    'MORNING',
+    'MEDIUM',
+    20000.00,
+    250000.00,
+    '["fish_farm","river","folk_game","water_game","mekong","local_life"]',
+    '["FAMILY","FRIENDS","COUPLE"]',
+    '["LOCAL_EXPERIENCE","ADVENTURE","NATURE","DISCOVERY"]'
+);
+
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/chonoi/cover.jpg' WHERE (`activity_id` = '11');
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/conson/cover.jpg' WHERE (`activity_id` = '12');
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/vuoncacao/cover.jpg' WHERE (`activity_id` = '13');
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/caudatteahill/cover.jpg' WHERE (`activity_id` = '14');
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/langhoavanthanh/cover.jpg' WHERE (`activity_id` = '15');
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/ichigostrawberryfarm/cover.jpg' WHERE (`activity_id` = '16');
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/dieukhacdanonnuoc/cover.jpg' WHERE (`activity_id` = '17');
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/nuocmamnamo/cover.jpg' WHERE (`activity_id` = '18');
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/mykhe/cover.jpg' WHERE (`activity_id` = '19');
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/langhuongthuyxuan/cover.jpg' WHERE (`activity_id` = '20');
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/langcophuoctich/cover.jpg' WHERE (`activity_id` = '21');
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/damchuon/cover.jpg' WHERE (`activity_id` = '22');
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/aobaom/cover.jpg' WHERE (`activity_id` = '23');
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/banhtettracuon/cover.jpg' WHERE (`activity_id` = '24');
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/conchim/cover.jpg' WHERE (`activity_id` = '25');
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/lanvuong/cover.jpg' WHERE (`activity_id` = '26');
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/phu-an-khang/cover.jpg' WHERE (`activity_id` = '27');
+UPDATE `lvtn`.`activities` SET `thumbnail_url` = '/images/activities/lang-be/cover.jpg' WHERE (`activity_id` = '28');
+
+
+INSERT INTO activity_images (
+    activity_id,
+    image_url,
+    is_thumbnail,
+    display_order,
+    created_at
+)
+VALUES
+
+-- =========================================================
+-- CẦN THƠ
+-- =========================================================
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Khám phá chợ nổi Cái Răng bằng thuyền'
+     LIMIT 1),
+    '/images/activities/cantho/cho-noi-cai-rang/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Khám phá chợ nổi Cái Răng bằng thuyền'
+     LIMIT 1),
+    '/images/activities/cantho/cho-noi-cai-rang/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Khám phá chợ nổi Cái Răng bằng thuyền'
+     LIMIT 1),
+    '/images/activities/cantho/cho-noi-cai-rang/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+),
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Trải nghiệm du lịch cộng đồng Cồn Sơn'
+     LIMIT 1),
+    '/images/activities/cantho/con-son/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Trải nghiệm du lịch cộng đồng Cồn Sơn'
+     LIMIT 1),
+    '/images/activities/cantho/con-son/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Trải nghiệm du lịch cộng đồng Cồn Sơn'
+     LIMIT 1),
+    '/images/activities/cantho/con-son/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+),
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Trải nghiệm làm cacao tại vườn Mười Cương'
+     LIMIT 1),
+    '/images/activities/cantho/cacao-muoi-cuong/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Trải nghiệm làm cacao tại vườn Mười Cương'
+     LIMIT 1),
+    '/images/activities/cantho/cacao-muoi-cuong/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Trải nghiệm làm cacao tại vườn Mười Cương'
+     LIMIT 1),
+    '/images/activities/cantho/cacao-muoi-cuong/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+),
+
+-- =========================================================
+-- ĐÀ LẠT
+-- =========================================================
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Săn mây và khám phá đồi chè Cầu Đất'
+     LIMIT 1),
+    '/images/activities/dalat/cau-dat-tea-hill/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Săn mây và khám phá đồi chè Cầu Đất'
+     LIMIT 1),
+    '/images/activities/dalat/cau-dat-tea-hill/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Săn mây và khám phá đồi chè Cầu Đất'
+     LIMIT 1),
+    '/images/activities/dalat/cau-dat-tea-hill/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+),
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Tham quan Làng hoa Vạn Thành'
+     LIMIT 1),
+    '/images/activities/dalat/lang-hoa-van-thanh/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Tham quan Làng hoa Vạn Thành'
+     LIMIT 1),
+    '/images/activities/dalat/lang-hoa-van-thanh/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Tham quan Làng hoa Vạn Thành'
+     LIMIT 1),
+    '/images/activities/dalat/lang-hoa-van-thanh/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+),
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Hái dâu tại Ichigo Strawberry Farm'
+     LIMIT 1),
+    '/images/activities/dalat/ichigo-strawberry-farm/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Hái dâu tại Ichigo Strawberry Farm'
+     LIMIT 1),
+    '/images/activities/dalat/ichigo-strawberry-farm/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Hái dâu tại Ichigo Strawberry Farm'
+     LIMIT 1),
+    '/images/activities/dalat/ichigo-strawberry-farm/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+),
+
+-- =========================================================
+-- ĐÀ NẴNG
+-- =========================================================
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Khám phá nghề điêu khắc đá Non Nước'
+     LIMIT 1),
+    '/images/activities/danang/lang-da-non-nuoc/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Khám phá nghề điêu khắc đá Non Nước'
+     LIMIT 1),
+    '/images/activities/danang/lang-da-non-nuoc/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Khám phá nghề điêu khắc đá Non Nước'
+     LIMIT 1),
+    '/images/activities/danang/lang-da-non-nuoc/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+),
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Tham quan làng nước mắm Nam Ô'
+     LIMIT 1),
+    '/images/activities/danang/nuoc-mam-nam-o/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Tham quan làng nước mắm Nam Ô'
+     LIMIT 1),
+    '/images/activities/danang/nuoc-mam-nam-o/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Tham quan làng nước mắm Nam Ô'
+     LIMIT 1),
+    '/images/activities/danang/nuoc-mam-nam-o/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+),
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Ngắm bình minh và tắm biển Mỹ Khê'
+     LIMIT 1),
+    '/images/activities/danang/my-khe-sunrise/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Ngắm bình minh và tắm biển Mỹ Khê'
+     LIMIT 1),
+    '/images/activities/danang/my-khe-sunrise/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Ngắm bình minh và tắm biển Mỹ Khê'
+     LIMIT 1),
+    '/images/activities/danang/my-khe-sunrise/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+),
+
+-- =========================================================
+-- HUẾ
+-- =========================================================
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Trải nghiệm làm hương tại Làng hương Thủy Xuân'
+     LIMIT 1),
+    '/images/activities/hue/lang-huong-thuy-xuan/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Trải nghiệm làm hương tại Làng hương Thủy Xuân'
+     LIMIT 1),
+    '/images/activities/hue/lang-huong-thuy-xuan/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Trải nghiệm làm hương tại Làng hương Thủy Xuân'
+     LIMIT 1),
+    '/images/activities/hue/lang-huong-thuy-xuan/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+),
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Làm gốm và bánh truyền thống tại Làng cổ Phước Tích'
+     LIMIT 1),
+    '/images/activities/hue/lang-co-phuoc-tich/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Làm gốm và bánh truyền thống tại Làng cổ Phước Tích'
+     LIMIT 1),
+    '/images/activities/hue/lang-co-phuoc-tich/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Làm gốm và bánh truyền thống tại Làng cổ Phước Tích'
+     LIMIT 1),
+    '/images/activities/hue/lang-co-phuoc-tich/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+),
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Ngắm bình minh và khám phá Đầm Chuồn'
+     LIMIT 1),
+    '/images/activities/hue/dam-chuon/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Ngắm bình minh và khám phá Đầm Chuồn'
+     LIMIT 1),
+    '/images/activities/hue/dam-chuon/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Ngắm bình minh và khám phá Đầm Chuồn'
+     LIMIT 1),
+    '/images/activities/hue/dam-chuon/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+),
+
+-- =========================================================
+-- TRÀ VINH
+-- =========================================================
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Dạo Ao Bà Om và tìm hiểu văn hóa Khmer'
+     LIMIT 1),
+    '/images/activities/travinh/ao-ba-om/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Dạo Ao Bà Om và tìm hiểu văn hóa Khmer'
+     LIMIT 1),
+    '/images/activities/travinh/ao-ba-om/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Dạo Ao Bà Om và tìm hiểu văn hóa Khmer'
+     LIMIT 1),
+    '/images/activities/travinh/ao-ba-om/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+),
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Tham quan làng nghề bánh tét Trà Cuôn'
+     LIMIT 1),
+    '/images/activities/travinh/banh-tet-tra-cuon/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Tham quan làng nghề bánh tét Trà Cuôn'
+     LIMIT 1),
+    '/images/activities/travinh/banh-tet-tra-cuon/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Tham quan làng nghề bánh tét Trà Cuôn'
+     LIMIT 1),
+    '/images/activities/travinh/banh-tet-tra-cuon/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+),
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Trải nghiệm du lịch cộng đồng Cồn Chim'
+     LIMIT 1),
+    '/images/activities/travinh/con-chim/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Trải nghiệm du lịch cộng đồng Cồn Chim'
+     LIMIT 1),
+    '/images/activities/travinh/con-chim/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Trải nghiệm du lịch cộng đồng Cồn Chim'
+     LIMIT 1),
+    '/images/activities/travinh/con-chim/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+),
+
+-- =========================================================
+-- BẾN TRE
+-- =========================================================
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Trải nghiệm trò chơi dân gian tại Lan Vương'
+     LIMIT 1),
+    '/images/activities/bentre/lan-vuong/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Trải nghiệm trò chơi dân gian tại Lan Vương'
+     LIMIT 1),
+    '/images/activities/bentre/lan-vuong/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Trải nghiệm trò chơi dân gian tại Lan Vương'
+     LIMIT 1),
+    '/images/activities/bentre/lan-vuong/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+),
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Tát mương bắt cá và làm bánh tại Phú An Khang'
+     LIMIT 1),
+    '/images/activities/bentre/phu-an-khang/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Tát mương bắt cá và làm bánh tại Phú An Khang'
+     LIMIT 1),
+    '/images/activities/bentre/phu-an-khang/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Tát mương bắt cá và làm bánh tại Phú An Khang'
+     LIMIT 1),
+    '/images/activities/bentre/phu-an-khang/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+),
+
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Khám phá đời sống sông nước tại Khu du lịch Làng Bè'
+     LIMIT 1),
+    '/images/activities/bentre/lang-be/cover.jpg',
+    1, 1, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Khám phá đời sống sông nước tại Khu du lịch Làng Bè'
+     LIMIT 1),
+    '/images/activities/bentre/lang-be/img1.jpg',
+    0, 2, CURRENT_TIMESTAMP
+),
+(
+    (SELECT activity_id FROM activities
+     WHERE activity_name = 'Khám phá đời sống sông nước tại Khu du lịch Làng Bè'
+     LIMIT 1),
+    '/images/activities/bentre/lang-be/img2.jpg',
+    0, 3, CURRENT_TIMESTAMP
+);
+///////////////////////Mới sửa mqh
+
+ALTER TABLE itinerary_items
+    DROP FOREIGN KEY fk_itinerary_items_homestay,
+    DROP COLUMN homestay_id;
+
+ALTER TABLE itineraries
+    DROP FOREIGN KEY fk_itineraries_selected_home,
+    DROP COLUMN selected_home_id;
+
+DROP TABLE destination_itinerary_items;
+
+ALTER TABLE activities
+DROP FOREIGN KEY fk_activities_created_by;
+ALTER TABLE activities
+DROP COLUMN created_by;
+
+ALTER TABLE homestay_services
+ADD COLUMN pricing_unit ENUM('PER_DAY', 'PER_USE')
+NOT NULL DEFAULT 'PER_DAY'
+AFTER price;
+
+UPDATE homestay_services
+SET pricing_unit = CASE
+    WHEN service_id = 1 THEN 'PER_USE'
+    WHEN service_id = 2 THEN 'PER_DAY'
+    WHEN service_id = 3 THEN 'PER_USE'
+    WHEN service_id = 4 THEN 'PER_DAY'
+    WHEN service_id = 5 THEN 'PER_USE'
+    ELSE 'PER_DAY'
+END
+WHERE homestay_service_id > 0;
+
+ALTER TABLE homestays
+ADD COLUMN checkin_end_time TIME NULL AFTER checkin_time,
+ADD COLUMN checkout_start_time TIME NULL AFTER checkin_end_time;
+
+USE lvtn;
+
+UPDATE homestays
+SET
+    checkin_end_time = '20:00:00',
+    checkout_start_time = '08:00:00'
+WHERE home_id IN (6, 7, 8, 9, 10, 11, 12, 13, 14);
+
+
+
+-- =========================================================
+-- COZYGO CHATBOT DOCUMENTS - RAG KNOWLEDGE
+-- PHÙ HỢP LOGIC HIỆN TẠI CỦA HỆ THỐNG
+-- Chỉ sử dụng VNPAY và PAY_AT_PROPERTY
+-- =========================================================
+
+DELETE FROM chatbot_documents
+WHERE title IN (
+    'Hướng dẫn đặt phòng',
+    'Chính sách đặt phòng',
+    'Chính sách hủy và không đến',
+    'Chính sách hủy và hoàn tiền',
+    'Thanh toán SePay',
+    'Thanh toán VNPAY',
+    'Thanh toán tại chỗ',
+    'Chính sách nhận và trả phòng',
+    'Quy trình khiếu nại',
+    'Hướng dẫn đánh giá'
+);
+
+INSERT INTO chatbot_documents (
+    title,
+    content,
+    document_type,
+    status
+)
+VALUES
+
+-- =========================================================
+-- 1. HƯỚNG DẪN ĐẶT PHÒNG
+-- =========================================================
+(
+    'Hướng dẫn đặt phòng',
+
+    'Để đặt homestay trên Cozygo, khách hàng tìm và chọn homestay phù hợp, '
+    'chọn ngày nhận phòng, ngày trả phòng và số lượng khách, sau đó nhấn nút Đặt phòng. '
+    'Hệ thống sẽ hiển thị bước xác nhận thông tin đặt phòng. '
+    'Khách hàng cần kiểm tra và nhập đầy đủ các thông tin được yêu cầu, '
+    'có thể chọn thêm dịch vụ và áp dụng mã khuyến mãi nếu có. '
+    'Nếu chưa đăng nhập, hệ thống sẽ yêu cầu khách hàng đăng nhập trước khi tiếp tục đặt phòng. '
+    'Sau khi xác nhận thông tin, khách hàng lựa chọn phương thức thanh toán được Cozygo hỗ trợ, '
+    'gồm thanh toán trực tuyến qua VNPAY hoặc thanh toán trực tiếp tại homestay. '
+    'Sau khi đơn được tạo thành công, khách hàng có thể theo dõi mã booking, '
+    'trạng thái booking và trạng thái thanh toán trong mục Đặt phòng của tôi.',
+
+    'BOOKING_GUIDE',
+    'ACTIVE'
+),
+
+-- =========================================================
+-- 2. CHÍNH SÁCH ĐẶT PHÒNG
+-- =========================================================
+(
+    'Chính sách đặt phòng',
+
+    'Trước khi xác nhận đặt homestay trên Cozygo, khách hàng cần kiểm tra đầy đủ '
+    'thông tin đơn đặt phòng bao gồm homestay, ngày nhận phòng, ngày trả phòng, '
+    'số lượng khách, giá phòng, dịch vụ bổ sung, mã khuyến mãi nếu có '
+    'và phương thức thanh toán. '
+    'Khả năng đặt phòng phụ thuộc vào tình trạng phòng trống của homestay '
+    'trong khoảng thời gian khách lựa chọn. '
+    'Một booking chỉ được xem là đã được tạo khi hệ thống tạo đơn đặt phòng thành công. '
+    'Trạng thái booking và trạng thái thanh toán được quản lý riêng, '
+    'do đó khách hàng nên kiểm tra cả hai trạng thái trong mục Đặt phòng của tôi. '
+    'Khách hàng cần cung cấp đúng số lượng khách và thông tin đặt phòng. '
+    'Ngoài ra, mỗi homestay có thể có giờ nhận phòng, giờ trả phòng '
+    'và nội quy lưu trú riêng mà khách hàng cần kiểm tra trước khi đặt.',
+
+    'BOOKING_POLICY',
+    'ACTIVE'
+),
+
+-- =========================================================
+-- 3. CHÍNH SÁCH HỦY VÀ HOÀN TIỀN
+-- =========================================================
+(
+    'Chính sách hủy và hoàn tiền',
+
+    'Khách hàng có thể tự hủy đơn đặt phòng trên Cozygo khi booking vẫn còn '
+    'ở trạng thái cho phép hủy và thời điểm hủy phải trước ngày nhận phòng ít nhất 1 ngày. '
+    'Ví dụ, nếu ngày nhận phòng là ngày 20 thì khách vẫn có thể hủy trong ngày 19, '
+    'nhưng không thể tự hủy từ ngày 20 trở đi. '
+
+    'Hệ thống không cho phép khách tự hủy booking đã ở các trạng thái '
+    'CANCELLED, EXPIRED, COMPLETED hoặc NO_SHOW. '
+
+    'Nếu booking được thanh toán trực tuyến bằng VNPAY và giao dịch đã có trạng thái PAID, '
+    'khi booking được hủy hợp lệ, Cozygo ghi nhận hoàn lại 100 phần trăm '
+    'số tiền đã thanh toán của giao dịch đó. '
+    'Payment được cập nhật sang trạng thái REFUNDED, '
+    'refund_status được ghi nhận SUCCESS và refund_amount bằng toàn bộ số tiền đã thanh toán. '
+    'Booking đồng thời được cập nhật trạng thái thanh toán thành REFUNDED. '
+
+    'Khi chủ homestay hoặc quản trị viên hủy một booking đã thanh toán thành công bằng VNPAY, '
+    'hệ thống cũng áp dụng xử lý hoàn toàn bộ số tiền đã thanh toán. '
+
+    'Đối với phương thức thanh toán tại homestay, nếu khách chưa thanh toán trực tiếp '
+    'thì không có khoản thanh toán trực tuyến cần hoàn khi booking bị hủy. '
+
+    'Trong phiên bản hiện tại của Cozygo sử dụng VNPAY Sandbox, '
+    'quy trình hoàn tiền được ghi nhận và quản lý trong cơ sở dữ liệu của Cozygo. '
+    'Hệ thống hiện chưa thực hiện gọi API hoàn tiền của VNPAY để chuyển tiền hoàn '
+    'thực tế về tài khoản thanh toán của khách hàng. '
+    'Vì vậy chatbot không được khẳng định rằng tiền đã thực sự được VNPAY '
+    'chuyển về tài khoản ngân hàng của khách.',
+
+    'CANCELLATION_POLICY',
+    'ACTIVE'
+),
+
+-- =========================================================
+-- 4. THANH TOÁN VNPAY
+-- =========================================================
+(
+    'Thanh toán VNPAY',
+
+    'VNPAY là phương thức thanh toán trực tuyến được Cozygo tích hợp '
+    'cho chức năng đặt homestay. '
+    'Trong phạm vi hệ thống hiện tại, Cozygo sử dụng môi trường VNPAY Sandbox '
+    'để phục vụ kiểm thử thanh toán. '
+
+    'Khi khách hàng chọn thanh toán bằng VNPAY, hệ thống tạo booking '
+    'và giao dịch thanh toán ở trạng thái chờ xử lý, '
+    'sau đó tạo đường dẫn thanh toán và chuyển khách sang cổng VNPAY Sandbox. '
+
+    'Khách hàng thực hiện giao dịch trên giao diện VNPAY. '
+    'Sau khi giao dịch hoàn tất, Return URL đưa khách trở lại Cozygo '
+    'để hiển thị kết quả thanh toán. '
+    'Đồng thời, VNPAY gửi IPN đến backend Cozygo để hệ thống '
+    'xác thực và xử lý kết quả giao dịch. '
+
+    'Nếu giao dịch được xác nhận thành công, trạng thái payment được cập nhật thành PAID '
+    'và booking được cập nhật theo trạng thái tương ứng. '
+    'Nếu giao dịch thất bại hoặc bị hủy, hệ thống không ghi nhận giao dịch là đã thanh toán. '
+
+    'Trong trường hợp một booking VNPAY đã thanh toán được hủy hợp lệ, '
+    'Cozygo có thể ghi nhận hoàn toàn bộ số tiền trong cơ sở dữ liệu. '
+    'Tuy nhiên, phiên bản hiện tại chưa gọi VNPAY Refund API '
+    'để thực hiện giao dịch hoàn tiền thực tế qua cổng VNPAY.',
+
+    'PAYMENT_GUIDE',
+    'ACTIVE'
+),
+
+-- =========================================================
+-- 5. THANH TOÁN TẠI HOMESTAY
+-- =========================================================
+(
+    'Thanh toán tại chỗ',
+
+    'Nếu khách hàng chọn thanh toán tại homestay, hệ thống sử dụng '
+    'phương thức PAY_AT_PROPERTY. '
+    'Khách hàng không cần thanh toán trực tuyến qua VNPAY tại thời điểm đặt phòng. '
+
+    'Booking được tạo và trạng thái thanh toán được giữ ở trạng thái '
+    'chờ thanh toán cho đến khi việc thanh toán trực tiếp được xác nhận. '
+    'Khách hàng thực hiện thanh toán trực tiếp tại homestay theo quy trình của đơn đặt phòng. '
+
+    'Khách hàng có thể theo dõi phương thức thanh toán, trạng thái booking '
+    'và trạng thái thanh toán trong mục Đặt phòng của tôi. '
+
+    'Nếu booking PAY_AT_PROPERTY bị hủy khi khách hàng chưa thực hiện thanh toán, '
+    'không có khoản thanh toán trực tuyến nào cần được hoàn lại.',
+
+    'PAYMENT_GUIDE',
+    'ACTIVE'
+),
+
+-- =========================================================
+-- 6. CHÍNH SÁCH NHẬN VÀ TRẢ PHÒNG
+-- =========================================================
+(
+    'Chính sách nhận và trả phòng',
+
+    'Mỗi homestay trên Cozygo có thể thiết lập khung giờ nhận phòng '
+    'và khung giờ trả phòng riêng. '
+    'Khách hàng cần kiểm tra giờ bắt đầu và kết thúc nhận phòng '
+    'cũng như giờ bắt đầu và kết thúc trả phòng '
+    'được hiển thị trong thông tin của homestay. '
+
+    'Khách hàng nên đến trong khung giờ nhận phòng mà homestay đã công bố '
+    'và hoàn tất trả phòng trong khung giờ quy định. '
+
+    'Nếu có nhu cầu nhận phòng sớm, trả phòng muộn hoặc yêu cầu đặc biệt, '
+    'khách hàng cần trao đổi với homestay. '
+    'Việc chấp nhận yêu cầu phụ thuộc vào điều kiện thực tế và quyết định của homestay. '
+
+    'Chatbot không được tự cam kết rằng khách chắc chắn được nhận phòng sớm '
+    'hoặc trả phòng muộn khi chưa có xác nhận từ homestay.',
+
+    'STAY_POLICY',
+    'ACTIVE'
+),
+
+-- =========================================================
+-- 7. QUY TRÌNH KHIẾU NẠI
+-- =========================================================
+(
+    'Quy trình khiếu nại',
+
+    'Khách hàng có thể gửi khiếu nại đối với đơn đặt phòng '
+    'đủ điều kiện trong hệ thống Cozygo. '
+
+    'Khách hàng truy cập mục Đặt phòng của tôi, '
+    'chọn đơn đặt phòng đã hoàn thành và sử dụng chức năng gửi khiếu nại '
+    'khi chức năng này được hệ thống cho phép. '
+
+    'Khách hàng cần mô tả rõ vấn đề gặp phải và cung cấp '
+    'các thông tin cần thiết để hỗ trợ quá trình xử lý. '
+
+    'Các vấn đề liên quan đến thanh toán, hoạt động của hệ thống, '
+    'homestay hoặc chủ homestay sẽ được quản trị viên tiếp nhận và xem xét. '
+
+    'Quản trị viên có thể trao đổi và phản hồi kết quả xử lý '
+    'cho khách hàng thông qua hệ thống hoặc email.',
+
+    'COMPLAINT_GUIDE',
+    'ACTIVE'
+),
+
+-- =========================================================
+-- 8. HƯỚNG DẪN ĐÁNH GIÁ
+-- =========================================================
+(
+    'Hướng dẫn đánh giá',
+
+    'Khách hàng chỉ có thể gửi đánh giá cho homestay '
+    'khi có đơn đặt phòng đáp ứng điều kiện đánh giá của Cozygo. '
+
+    'Đánh giá có thể bao gồm số sao và nội dung nhận xét '
+    'dựa trên trải nghiệm lưu trú thực tế của khách hàng. '
+
+    'Nội dung đánh giá được hệ thống kiểm duyệt tự động. '
+    'Những đánh giá bình thường có thể được hiển thị, '
+    'trong khi nội dung có dấu hiệu vi phạm như xúc phạm, đe dọa, spam '
+    'hoặc chứa thông tin riêng tư có thể bị đánh dấu, tạm ẩn '
+    'hoặc chuyển cho quản trị viên xem xét tùy theo mức độ. '
+
+    'Khách hàng nên đánh giá dựa trên trải nghiệm thực tế '
+    'và tránh đưa thông tin cá nhân nhạy cảm vào nội dung nhận xét.',
+
+    'REVIEW_GUIDE',
+    'ACTIVE'
+);

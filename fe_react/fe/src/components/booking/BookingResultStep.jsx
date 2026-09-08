@@ -1,11 +1,11 @@
-import { HiCheckCircle, HiExclamationTriangle, HiHome, HiClipboardDocumentList } from 'react-icons/hi2';
+﻿import { HiCheckCircle, HiExclamationTriangle, HiHome, HiClipboardDocumentList } from 'react-icons/hi2';
 
 export default function BookingResultStep({ result, onHome, onMyBookings, onRetry, onChooseOther }) {
   const success = result?.status === 'SUCCESS';
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-2xl border border-gray-100 bg-[#FAF8F3] p-5">
+    <div className="flex min-h-0 flex-col pb-4 pt-6">
+      <section className="mt-2 rounded-2xl border border-gray-100 bg-[#FAF8F3] p-5">
         <div className="flex items-start gap-3">
           <div className={(success ? 'bg-[#2C3E2B] text-white' : 'bg-amber-100 text-amber-700') + ' flex h-9 w-9 shrink-0 items-center justify-center rounded-full'}>
             {success ? <HiCheckCircle className="h-6 w-6" /> : <HiExclamationTriangle className="h-6 w-6" />}
@@ -24,7 +24,7 @@ export default function BookingResultStep({ result, onHome, onMyBookings, onRetr
         </div>
       </section>
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-5">
+      <div className="mt-6 rounded-2xl border border-gray-100 bg-white p-5">
         <p className="text-xs font-black uppercase tracking-wide text-gray-400">Bước tiếp theo</p>
         <p className="mt-2 text-sm font-semibold leading-6 text-gray-500">
           {success
@@ -33,11 +33,11 @@ export default function BookingResultStep({ result, onHome, onMyBookings, onRetr
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+      <div className="mt-35 flex flex-wrap items-center justify-between gap-3">
         {success ? (
           <>
             <button type="button" onClick={onHome} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-[#F4F1EA] px-5 text-sm font-black text-[#2C1E15]"><HiHome /> Đặt đơn khác</button>
-            <button type="button" onClick={onMyBookings} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-[#2C3E2B] px-5 text-sm font-black text-white shadow"><HiClipboardDocumentList /> Xem đơn của tôi</button>
+            <button type="button" onClick={onMyBookings} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-[#2C3E2B] px-5 text-sm font-black text-white shadow"><HiClipboardDocumentList /> {result?.profileButtonLabel || 'Xem đơn hàng của bạn'}</button>
           </>
         ) : (
           <>

@@ -1,4 +1,4 @@
-export const HOMESTAY_STATUS_OPTIONS = [
+﻿export const HOMESTAY_STATUS_OPTIONS = [
   { value: 'ALL', label: 'Tất cả' },
   { value: 'PENDING', label: 'Chờ duyệt' },
   { value: 'APPROVED', label: 'Đã duyệt' },
@@ -40,3 +40,4 @@ export function formatTime(time) {
 
   return time.slice(0, 5);
 }
+

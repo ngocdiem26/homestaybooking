@@ -1,4 +1,4 @@
-import { HiBanknotes, HiCalendarDays, HiCheckCircle, HiCreditCard, HiUserGroup } from 'react-icons/hi2';
+﻿import { HiBanknotes, HiCalendarDays, HiCheckCircle, HiCreditCard, HiUserGroup } from 'react-icons/hi2';
 
 function money(value) {
   return Number(value || 0).toLocaleString('vi-VN') + 'đ';
@@ -31,7 +31,7 @@ function QuoteSummary({ quote }) {
   );
 }
 
-export default function PaymentMethodStep({ quote, paymentMethod, onSelectPaymentMethod, onCreateBooking, isSubmitting }) {
+export default function PaymentMethodStep({ quote, paymentMethod, onSelectPaymentMethod }) {
   const methods = [
     { key: 'PAY_AT_PROPERTY', title: 'Thanh toán tại chỗ', desc: 'Đặt phòng trước và thanh toán khi nhận phòng tại homestay.', icon: HiBanknotes },
     { key: 'VNPAY', title: 'Thanh toán qua VNPAY', desc: 'Chuyển sang cổng VNPAY Sandbox để chọn ngân hàng, thẻ hoặc QR theo giao diện VNPAY.', icon: HiCreditCard },
@@ -71,12 +71,7 @@ export default function PaymentMethodStep({ quote, paymentMethod, onSelectPaymen
         </div>
       </section>
 
-      <div className="flex items-center justify-between pt-2">
-        <p className="text-xs font-semibold text-gray-400">Kiểm tra lại thông tin trước khi đặt phòng.</p>
-        <button type="button" onClick={onCreateBooking} disabled={isSubmitting} className="h-11 rounded-2xl bg-[#2C3E2B] px-6 text-sm font-black text-white shadow-lg transition hover:bg-[#223322] disabled:opacity-60">
-          {isSubmitting ? 'Đang xử lý...' : 'Đặt phòng'}
-        </button>
-      </div>
+      <p className="pt-2 text-xs font-semibold text-gray-400">Kiểm tra lại thông tin trước khi đặt phòng.</p>
     </div>
   );
 }

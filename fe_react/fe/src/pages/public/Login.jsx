@@ -4,6 +4,7 @@ import { useLoginForm } from '../../hooks/useLoginForm';
 
 export default function Login() {
   const {
+    errors,
     form,
     googleClientId,
     isSubmitting,
@@ -18,6 +19,7 @@ export default function Login() {
   return (
     <AuthShell>
       <LoginForm
+        errors={errors}
         form={form}
         googleClientId={googleClientId}
         isSubmitting={isSubmitting}

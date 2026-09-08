@@ -1,4 +1,4 @@
-import ModalPortal from '../../common/ModalPortal';
+﻿import ModalPortal from '../../common/ModalPortal';
 import {
   getAvatarLabel,
   getGenderLabel,
@@ -93,3 +93,4 @@ function InfoRow({ isMono = false, label, value }) {
     </p>
   );
 }
+

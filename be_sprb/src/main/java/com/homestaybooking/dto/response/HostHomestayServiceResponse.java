@@ -20,5 +20,6 @@ public class HostHomestayServiceResponse {
     private String serviceName;
     private String description;
     private BigDecimal price;
+    private String pricingUnit;
     private String status;
 }

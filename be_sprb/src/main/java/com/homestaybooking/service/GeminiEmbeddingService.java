@@ -34,14 +34,19 @@ public class GeminiEmbeddingService {
 
     private double[] embed(String text, String taskType) {
         if (apiKey == null || apiKey.isBlank()) {
+            System.err.println(
+                    "[GeminiEmbeddingService] Missing gemini.embedding.api.key. "
+                            + "RAG will use keyword fallback."
+            );
             return new double[0];
         }
 
         try {
-            String endpoint = "https://generativelanguage.googleapis.com/v1beta/models/"
-                    + embeddingModel
-                    + ":embedContent?key="
-                    + apiKey;
+            String endpoint =
+                    "https://generativelanguage.googleapis.com/v1beta/models/"
+                            + embeddingModel
+                            + ":embedContent?key="
+                            + apiKey.trim();
 
             ObjectNode body = objectMapper.createObjectNode();
             body.put("model", "models/" + embeddingModel);
@@ -50,17 +55,33 @@ public class GeminiEmbeddingService {
             ObjectNode content = body.putObject("content");
             content.putArray("parts")
                     .addObject()
-                    .put("text", text);
+                    .put("text", text == null ? "" : text);
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(endpoint))
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
+                    .POST(
+                            HttpRequest.BodyPublishers.ofString(
+                                    body.toString(),
+                                    StandardCharsets.UTF_8
+                            )
+                    )
                     .build();
 
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response =
+                    httpClient.send(
+                            request,
+                            HttpResponse.BodyHandlers.ofString()
+                    );
 
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                System.err.println(
+                        "[GeminiEmbeddingService] HTTP "
+                                + response.statusCode()
+                                + " from embedding API. Body: "
+                                + abbreviate(response.body(), 700)
+                                + ". RAG will use keyword fallback."
+                );
                 return new double[0];
             }
 
@@ -69,18 +90,48 @@ public class GeminiEmbeddingService {
                     .path("values");
 
             if (!values.isArray()) {
+                System.err.println(
+                        "[GeminiEmbeddingService] Embedding response has no values array. "
+                                + "RAG will use keyword fallback."
+                );
                 return new double[0];
             }
 
             double[] vector = new double[values.size()];
+
             for (int i = 0; i < values.size(); i++) {
                 vector[i] = values.get(i).asDouble();
             }
 
             return vector;
 
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            System.err.println(
+                    "[GeminiEmbeddingService] Embedding request interrupted. "
+                            + "RAG will use keyword fallback."
+            );
+            return new double[0];
+
         } catch (Exception exception) {
+            System.err.println(
+                    "[GeminiEmbeddingService] Embedding failed: "
+                            + exception.getMessage()
+                            + ". RAG will use keyword fallback."
+            );
             return new double[0];
         }
+    }
+
+    private String abbreviate(String value, int maxLength) {
+        if (value == null) {
+            return "";
+        }
+
+        if (value.length() <= maxLength) {
+            return value;
+        }
+
+        return value.substring(0, maxLength) + "...";
     }
 }

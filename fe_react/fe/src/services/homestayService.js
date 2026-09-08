@@ -16,6 +16,12 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function toNullableNumber(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function toCurrencyText(value) {
   return toNumber(value).toLocaleString('vi-VN');
 }
@@ -50,7 +56,31 @@ export function mapPublicHomestay(apiHomestay = {}) {
   }));
   const img = normalizeBackendUrl(apiHomestay.img || images[0]?.url);
   const amenities = apiHomestay.amenities || [];
-  const services = apiHomestay.services || (apiHomestay.serviceItems || []).map((service) => service.serviceName || service.name).filter(Boolean);
+  const rawServiceItems = Array.isArray(apiHomestay.serviceItems)
+    ? apiHomestay.serviceItems
+    : (Array.isArray(apiHomestay.services) && apiHomestay.services.some((service) => service && typeof service === 'object')
+        ? apiHomestay.services
+        : []);
+  const serviceItems = rawServiceItems.map((service) => ({
+    ...service,
+    homestayServiceId: service.homestayServiceId ?? service.homestay_service_id,
+    serviceId: service.serviceId ?? service.service_id,
+    name: service.name || service.serviceName || '',
+    serviceName: service.serviceName || service.name || '',
+    description: service.description || '',
+    price: toNumber(service.price ?? service.unitPrice ?? service.pricePerDay),
+    // Không tự ép PER_DAY. Đơn vị phải lấy đúng từ backend.
+    pricingUnit:
+      service.pricingUnit ||
+      service.pricing_unit ||
+      service.priceUnit ||
+      service.price_unit ||
+      '',
+    status: service.status || '',
+  }));
+  const services = serviceItems.length
+    ? serviceItems.map((service) => service.serviceName || service.name).filter(Boolean)
+    : (apiHomestay.services || []);
   const unavailable = Boolean(apiHomestay.unavailable || apiHomestay.dateRangeBooked);
   const availabilityMessage = apiHomestay.availabilityMessage || apiHomestay.message || (unavailable ? 'Khoảng thời gian này đã có người đặt' : '');
 
@@ -62,6 +92,8 @@ export function mapPublicHomestay(apiHomestay = {}) {
     address: apiHomestay.address || apiHomestay.homeAddress || '',
     city: apiHomestay.city || apiHomestay.location || apiHomestay.province || '',
     province: apiHomestay.province || '',
+    latitude: toNullableNumber(apiHomestay.latitude ?? apiHomestay.lat ?? apiHomestay.homeLatitude),
+    longitude: toNullableNumber(apiHomestay.longitude ?? apiHomestay.lng ?? apiHomestay.homeLongitude),
     location: apiHomestay.location || apiHomestay.city || apiHomestay.province || '',
     description: apiHomestay.description || apiHomestay.homeDescription || '',
     pricePerNight,
@@ -76,6 +108,7 @@ export function mapPublicHomestay(apiHomestay = {}) {
     orders: toNumber(apiHomestay.orders, reviewCount * 3),
     amenities,
     services,
+    serviceItems,
     images,
     img,
     roomType: apiHomestay.roomType || 'Homestay riêng tư',
@@ -126,4 +159,5 @@ export async function getPublicDestinations() {
   const data = await apiRequest(PUBLIC_HOMESTAY_ENDPOINTS.DESTINATIONS);
   return data.map(mapPublicDestination);
 }
+
 

@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 @Builder
 public class BookingPaymentStatusResponse {
     private Integer bookingId;
+    private Integer homeId;
     private String bookingCode;
     private String bookingStatus;
     private String paymentStatus;

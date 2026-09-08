@@ -1,0 +1,23 @@
+package com.homestaybooking.dto.response;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.time.LocalDate;
+
+@Getter
+@Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class HostAvailabilityDayResponse {
+    private LocalDate date;
+    private String status;
+    private String statusLabel;
+    private Boolean booked;
+    private String bookingCode;
+    private String customerName;
+}

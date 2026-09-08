@@ -2,6 +2,8 @@ package com.homestaybooking.dto.response;
 
 import lombok.*;
 
+import java.time.LocalDate;
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -18,6 +20,8 @@ public class AuthResponse {
     private String roleName;
 
     private String avatar;
+
+    private LocalDate birthday;
 
     private String token;
 }

@@ -1,8 +1,9 @@
-import { useEffect, useState, useRef } from 'react';
+﻿import { useCallback, useEffect, useState, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import UserLayout from '../../layouts/UserLayout';
 import { useAuth } from '../../hooks/useAuth';
 
-// Import toàn bộ các mảnh ghép component vừa bóc tách
+// Import các component đã tách cho trang hồ sơ
 import ProfileDashboard from '../../components/profile/ProfileDashboard';
 import ProfileSidebar from '../../components/profile/ProfileSidebar';
 import AccountInfo from '../../components/profile/AccountInfo';
@@ -14,12 +15,18 @@ import ReviewManager from '../../components/profile/ReviewManager';
 import ComplaintManager from '../../components/profile/ComplaintManager';
 import ComplaintFormModal from '../../components/profile/ComplaintFormModal';
 import ModalPortal from '../../components/common/ModalPortal';
-import { cancelMyBooking, getMyBookings } from '../../services/bookingService';
+import { cancelMyBooking, getMyBookings, getMyPaymentTransactions } from '../../services/bookingService';
 import { createReview, getMyReviews, updateReview } from '../../services/reviewService';
 import { createComplaint, getMyComplaints } from '../../services/complaintService';
-import { updateMyAvatar } from '../../services/profileService';
+import { getMyProfile, updateMyAvatar, updateMyProfile } from '../../services/profileService';
 
 
+
+function getProfileViewFromSearch(search) {
+  const view = new URLSearchParams(search || '').get('view');
+  const allowedViews = ['dashboard', 'info', 'bookings', 'payment', 'transactions', 'schedule', 'reviews', 'complaints'];
+  return allowedViews.includes(view) ? view : 'dashboard';
+}
 function formatBookingDate(value) {
   if (!value) return '';
   return new Date(value + 'T00:00:00').toLocaleDateString('vi-VN');
@@ -42,6 +49,36 @@ function isPastBookingCheckIn(value) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return checkIn < today;
+}
+
+function normalizeProfileGender(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (['male', 'nam', 'm'].includes(normalized)) return 'male';
+  if (['female', 'nu', 'nữ', 'f'].includes(normalized)) return 'female';
+  if (['other', 'khac', 'khác'].includes(normalized)) return 'other';
+  return normalized;
+}
+
+function mapProfileResponse(profile = {}, authUser = {}) {
+  return {
+    name: profile.fullName || authUser?.fullName || '',
+    email: profile.email || authUser?.email || '',
+    phone: profile.phoneNumber || authUser?.phoneNumber || '',
+    dob: profile.birthday || authUser?.birthday || authUser?.dob || '',
+    gender: normalizeProfileGender(profile.gender || authUser?.gender),
+    address: profile.address || authUser?.address || '',
+    avatar: profile.avatar || authUser?.avatar || authUser?.avatarUrl || authUser?.imageUrl || authUser?.profileImage || null,
+  };
+}
+
+function toProfilePayload(info = {}) {
+  return {
+    fullName: String(info.name || '').trim(),
+    phoneNumber: String(info.phone || '').trim(),
+    birthday: info.dob || null,
+    gender: info.gender || null,
+    address: String(info.address || '').trim(),
+  };
 }
 
 function mapBookingStatus(status, paymentStatus, checkInDate) {
@@ -131,74 +168,111 @@ function mapUserBooking(apiBooking) {
   };
 }
 
+function DetailItem({ label, value, strong = false }) {
+  return (
+    <div className="rounded-2xl bg-[#F8F6F0] px-4 py-3">
+      <p className="text-[11px] font-black uppercase tracking-wide text-gray-400">{label}</p>
+      <p className={(strong ? 'font-black text-[#2C1E15]' : 'font-bold text-gray-700') + ' mt-1'}>{value || '--'}</p>
+    </div>
+  );
+}
+
+function PriceRow({ label, value, highlight = false, negative = false }) {
+  return (
+    <div className={(highlight ? 'bg-[#7A5547] text-white' : 'bg-white text-gray-700') + ' flex items-center justify-between gap-4 px-5 py-3'}>
+      <span className="font-bold">{label}</span>
+      <strong className={negative ? 'text-emerald-700' : ''}>{negative ? '- ' : ''}{value}</strong>
+    </div>
+  );
+}
+
 function BookingDetailModal({ booking, review, onClose, onCancel, onViewReview, onOpenComplaint }) {
   const canCancel = booking.status === 'confirmed';
   const canComplaint = booking.status === 'completed';
   return (
-    <ModalPortal className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fade-in" onBackdropClick={onClose}>
-      <div onClick={(event) => event.stopPropagation()} className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-3xl bg-white text-sm font-semibold shadow-2xl">
-        <header className="flex items-start justify-between gap-4 bg-[#202c3c] px-6 py-5 text-white">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#E3B17A]">Chi tiết đơn đặt phòng</p>
-            <h3 className="mt-1 font-classic text-2xl font-black">{booking.homestay}</h3>
-            <p className="mt-1 font-mono text-xs text-white/70">{booking.id}</p>
+    <ModalPortal className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm animate-fade-in" onBackdropClick={onClose}>
+      <div onClick={(event) => event.stopPropagation()} className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-[28px] bg-white text-left text-sm font-semibold shadow-2xl">
+        <header className="bg-[#F6EFE6] px-6 py-5 text-[#2C1E15]">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-[#B66A3C]">Chi tiết đơn đặt phòng</p>
+              <h3 className="mt-1 font-classic text-2xl font-black">{booking.homestay}</h3>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-white px-3 py-1 font-mono text-xs font-black text-gray-700 ring-1 ring-gray-200">{booking.id}</span>
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-emerald-200">{mapBookingStatusDetailLabel(booking.status)}</span>
+                <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700 ring-1 ring-amber-200">{booking.paymentStatusLabel}</span>
+              </div>
+            </div>
+            <button onClick={onClose} className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-xl font-black text-gray-600 shadow-sm ring-1 ring-gray-200 transition hover:bg-[#2C3E2B] hover:text-white" aria-label="Đóng">×</button>
           </div>
-          <button onClick={onClose} className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white hover:text-[#202c3c]">×</button>
         </header>
-        <div className="max-h-[calc(90vh-92px)] overflow-y-auto p-6">
-          <div className="grid gap-4 md:grid-cols-[180px_1fr]">
-            <div className="overflow-hidden rounded-2xl bg-[#F4F1EA]">
-              {booking.imageUrl ? <img src={booking.imageUrl} alt={booking.homestay} className="h-44 w-full object-cover md:h-full" /> : <div className="flex h-44 items-center justify-center text-gray-400">Không có ảnh</div>}
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl bg-[#F8F6F0] p-4"><p className="text-xs font-black uppercase text-gray-400">Thời gian tạo</p><p className="mt-1 text-[#2C1E15]">{booking.createdAt || '--'}</p></div>
-              <div className="rounded-2xl bg-[#F8F6F0] p-4"><p className="text-xs font-black uppercase text-gray-400">Khu vực</p><p className="mt-1 text-[#2C1E15]">{booking.location || '--'}</p></div>
-              <div className="rounded-2xl bg-[#F8F6F0] p-4"><p className="text-xs font-black uppercase text-gray-400">Nhận phòng</p><p className="mt-1 text-[#2C1E15]">{booking.checkIn}</p></div>
-              <div className="rounded-2xl bg-[#F8F6F0] p-4"><p className="text-xs font-black uppercase text-gray-400">Trả phòng</p><p className="mt-1 text-[#2C1E15]">{booking.checkOut}</p></div>
-              <div className="rounded-2xl bg-[#F8F6F0] p-4"><p className="text-xs font-black uppercase text-gray-400">Số khách</p><p className="mt-1 text-[#2C1E15]">{booking.guests}</p></div>
-              <div className="rounded-2xl bg-[#F8F6F0] p-4"><p className="text-xs font-black uppercase text-gray-400">Số đêm</p><p className="mt-1 text-[#2C1E15]">{booking.nights} đêm</p></div>
-            </div>
-          </div>
 
-          <section className="mt-5 rounded-2xl border border-gray-100 bg-white p-4">
-            <h4 className="font-black text-[#2C1E15]">Thông tin lưu trú</h4>
-            <div className="mt-3 space-y-2 text-gray-600">
-              <p><span className="text-gray-400">Địa chỉ:</span> <span className="text-gray-800">{booking.address || booking.location || '--'}</span></p>
-              <p><span className="text-gray-400">Trạng thái đơn:</span> <span className="font-black text-[#2C3E2B]">{mapBookingStatusDetailLabel(booking.status)}</span></p>
-              <p><span className="text-gray-400">Thanh toán:</span> <span className="font-black text-[#2C3E2B]">{booking.paymentStatusLabel}</span></p>
-              <p><span className="text-gray-400">Phương thức:</span> <span className="font-black text-[#2C1E15]">{booking.paymentMethodLabel}</span></p>
-              {booking.note && <p><span className="text-gray-400">Ghi chú:</span> <span className="italic text-gray-700">{booking.note}</span></p>}
+        <div className="max-h-[calc(90vh-112px)] overflow-y-auto p-6">
+          <section className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-2 border-b border-gray-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-[#B6784F]">Thông tin đơn hàng</p>
+                <h4 className="mt-1 text-xl font-black text-[#2C1E15]">{booking.homestay}</h4>
+                <p className="mt-1 text-sm font-semibold text-gray-500">{booking.address || booking.location || '--'}</p>
+              </div>
+              <div className="rounded-2xl bg-[#F8F6F0] px-4 py-3 text-right">
+                <p className="text-[11px] font-black uppercase text-gray-400">Tổng thanh toán</p>
+                <p className="mt-1 text-xl font-black text-[#2C3E2B]">{booking.totalPrice}</p>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <DetailItem label="Thời gian tạo" value={booking.createdAt} />
+              <DetailItem label="Khu vực" value={booking.location} />
+              <DetailItem label="Phương thức" value={booking.paymentMethodLabel} />
+              <DetailItem label="Nhận phòng" value={booking.checkIn} strong />
+              <DetailItem label="Trả phòng" value={booking.checkOut} strong />
+              <DetailItem label="Số khách" value={booking.guests} />
+              <DetailItem label="Số đêm" value={`${booking.nights} đêm`} />
+              <DetailItem label="Trạng thái đơn" value={mapBookingStatusDetailLabel(booking.status)} />
+              <DetailItem label="Trạng thái thanh toán" value={booking.paymentStatusLabel} />
+            </div>
+
+            {booking.note && (
+              <div className="mt-4 rounded-2xl bg-[#FFF8ED] px-4 py-3 text-sm font-bold text-[#7A4E2E]">
+                Ghi chú: <span className="font-semibold italic">{booking.note}</span>
+              </div>
+            )}
+          </section>
+
+          <section className="mt-5 overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
+            <div className="border-b border-gray-100 bg-[#F8F6F0] px-5 py-4">
+              <h4 className="font-black text-[#2C1E15]">Chi phí đơn đặt phòng</h4>
+            </div>
+            <div className="divide-y divide-gray-100">
+              <PriceRow label="Giá mỗi đêm" value={booking.unitPrice} />
+              <PriceRow label={`Tiền phòng (${booking.nights} đêm)`} value={booking.roomTotal} />
+              <PriceRow label="Dịch vụ thêm" value={booking.serviceTotal} />
+              <PriceRow label="Giảm giá" value={booking.discountAmount} negative />
+              <PriceRow label="Tổng cộng" value={booking.totalPrice} highlight />
             </div>
           </section>
 
-          <section className="mt-5 overflow-hidden rounded-2xl border border-gray-100 bg-white">
-            <div className="bg-[#F8F6F0] px-4 py-3 font-black text-[#2C1E15]">Bảng giá</div>
-            <div className="divide-y divide-gray-100 text-sm">
-              <div className="flex justify-between px-4 py-3"><span>Giá mỗi đêm</span><strong>{booking.unitPrice}</strong></div>
-              <div className="flex justify-between px-4 py-3"><span>Tiền phòng ({booking.nights} đêm)</span><strong>{booking.roomTotal}</strong></div>
-              <div className="flex justify-between px-4 py-3"><span>Dịch vụ thêm</span><strong>{booking.serviceTotal}</strong></div>
-              <div className="flex justify-between px-4 py-3 text-emerald-700"><span>Giảm giá</span><strong>- {booking.discountAmount}</strong></div>
-              <div className="flex justify-between bg-[#2C3E2B] px-4 py-4 text-base text-white"><span>Tổng cộng</span><strong>{booking.totalPrice}</strong></div>
-            </div>
-          </section>
-
-          <section className="mt-5 rounded-2xl border border-gray-100 bg-white p-4">
+          <section className="mt-5 rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
             <h4 className="font-black text-[#2C1E15]">Dịch vụ đi kèm</h4>
             {booking.services?.length ? (
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 grid gap-2">
                 {booking.services.map((service, index) => (
-                  <div key={service.homestayServiceId || index} className="flex items-center justify-between rounded-xl bg-[#F8F6F0] px-4 py-3">
-                    <div><p className="font-black text-[#2C1E15]">{service.serviceName}</p><p className="text-xs text-gray-400">x{service.quantity} · {service.unitPriceLabel}</p></div>
+                  <div key={service.homestayServiceId || index} className="flex items-center justify-between gap-4 rounded-2xl bg-[#F8F6F0] px-4 py-3">
+                    <div>
+                      <p className="font-black text-[#2C1E15]">{service.serviceName}</p>
+                      <p className="text-xs font-semibold text-gray-400">x{service.quantity} · {service.unitPriceLabel}</p>
+                    </div>
                     <strong className="text-[#6E473B]">{service.totalPriceLabel}</strong>
                   </div>
                 ))}
               </div>
-            ) : <p className="mt-2 text-gray-400">Không chọn dịch vụ thêm.</p>}
+            ) : <p className="mt-2 rounded-2xl bg-[#F8F6F0] px-4 py-3 text-gray-400">Không chọn dịch vụ thêm.</p>}
           </section>
 
           <div className="mt-6 flex flex-wrap justify-end gap-3 border-t border-gray-100 pt-4">
             {review && <button onClick={() => onViewReview(review)} className="rounded-2xl bg-amber-100 px-5 py-3 text-sm font-black text-amber-800 shadow-sm ring-1 ring-amber-200 transition hover:bg-amber-200 hover:text-amber-900">Xem đánh giá</button>}
-            {canComplaint && <button onClick={() => onOpenComplaint(booking)} className="rounded-2xl bg-[#2C3E2B] px-5 py-3 text-sm font-black text-white shadow transition hover:bg-[#1f2d1f]">Viết khiếu nại</button>}
+            {canComplaint && <button onClick={() => onOpenComplaint(booking)} className="rounded-2xl bg-[#7A5547] px-5 py-3 text-sm font-black text-white shadow transition hover:bg-[#6C483A]">Viết khiếu nại</button>}
             {canCancel && <button onClick={() => onCancel(booking.id)} className="rounded-2xl bg-red-600 px-5 py-3 text-sm font-black text-white shadow transition hover:bg-red-700">Yêu cầu hủy đơn</button>}
           </div>
         </div>
@@ -206,35 +280,56 @@ function BookingDetailModal({ booking, review, onClose, onCancel, onViewReview, 
     </ModalPortal>
   );
 }
-
 export default function Profile() {
   const fileInputRef = useRef(null);
+  const location = useLocation();
   const { user: authUser, updateUser } = useAuth();
-  const [currentView, setCurrentView] = useState('dashboard');
+  const [currentView, setCurrentView] = useState(() => getProfileViewFromSearch(location.search));
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [focusedReviewId, setFocusedReviewId] = useState(null);
   const [complaintBooking, setComplaintBooking] = useState(null);
   const [complaintToast, setComplaintToast] = useState('');
+  const isScheduleView = currentView === 'schedule';
 
-  // STATE NGUỒN DỮ LIỆU GỐC (GIỮ NGUYÊN HOÀN TOÀN)
+  // State dữ liệu gốc của trang hồ sơ
   const [isEditing, setIsEditing] = useState(false);
-  const [userInfo, setUserInfo] = useState({
-    name: "Thạch Thị Ngọc Diểm",
-    email: "ngocdiem.ctump@gmail.com",
-    phone: "0912 345 678",
-    dob: "2004-03-15",
-    gender: "female",
-    address: "Ninh Kiều, Cần Thơ",
-    avatar: authUser?.avatar || authUser?.avatarUrl || authUser?.imageUrl || authUser?.profileImage || null });
-  const [tempInfo, setTempInfo] = useState({ ...userInfo });
+  const [userInfo, setUserInfo] = useState(() => mapProfileResponse({}, authUser));
+  const [tempInfo, setTempInfo] = useState(() => mapProfileResponse({}, authUser));
+  const [profileError, setProfileError] = useState('');
 
   useEffect(() => {
-    const syncAvatar = authUser?.avatar || authUser?.avatarUrl || authUser?.imageUrl || authUser?.profileImage;
-    if (!syncAvatar) return;
-    setUserInfo((current) => current.avatar === syncAvatar ? current : { ...current, avatar: syncAvatar });
-    setTempInfo((current) => current.avatar === syncAvatar ? current : { ...current, avatar: syncAvatar });
-  }, [authUser?.avatar, authUser?.avatarUrl, authUser?.imageUrl, authUser?.profileImage]);
+    let isMounted = true;
 
+    async function loadProfile() {
+      try {
+        setProfileError('');
+        const profile = await getMyProfile();
+        if (!isMounted) return;
+        const mappedProfile = mapProfileResponse(profile, authUser);
+        setUserInfo(mappedProfile);
+        setTempInfo(mappedProfile);
+        updateUser?.({
+          avatar: profile.avatar,
+          fullName: profile.fullName,
+          email: profile.email,
+          phoneNumber: profile.phoneNumber,
+          birthday: profile.birthday,
+          address: profile.address,
+          gender: profile.gender,
+          roleName: profile.roleName,
+        });
+      } catch (error) {
+        if (isMounted) setProfileError(error.message || 'Không tải được hồ sơ cá nhân');
+      }
+    }
+
+    loadProfile();
+    return () => {
+      isMounted = false;
+    };
+  // Chỉ tải hồ sơ một lần khi vào trang; updateUser sẽ cập nhật auth storage sau khi API trả về.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [bookings, setBookings] = useState([]);
   const [bookingFilter, setBookingFilter] = useState('all');
   const [bookingError, setBookingError] = useState('');
@@ -258,11 +353,26 @@ export default function Profile() {
     };
   }, []);
 
-  const [transactions] = useState([
-    { id: "TXN-5517", bookingId: "CZG-8892", date: "2026-06-05", amount: "2,400,000đ", method: "Visa (Ending 8892)", status: "Thành công" },
-    { id: "TXN-1926", bookingId: "CZG-9374", date: "2026-03-28", amount: "1,200,000đ", method: "Ví Điện Tử", status: "Thành công" },
-    { id: "TXN-0012", bookingId: "CZG-1102", date: "2026-01-02", amount: "3,500,000đ", method: "Thẻ nội địa", status: "Đã hoàn tiền" }
-  ]);
+  const [transactions, setTransactions] = useState([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
+  const [transactionError, setTransactionError] = useState('');
+  const loadTransactions = useCallback(async () => {
+    try {
+      setTransactionsLoading(true);
+      setTransactionError('');
+      const data = await getMyPaymentTransactions();
+      setTransactions(Array.isArray(data) ? data : []);
+    } catch (error) {
+      setTransactionError(error.message || 'Không tải được lịch sử giao dịch');
+    } finally {
+      setTransactionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (currentView !== 'transactions') return;
+    queueMicrotask(() => loadTransactions());
+  }, [currentView, loadTransactions]);
 
   const [cards, setCards] = useState([
     { id: 1, type: "Visa", number: "**** **** **** 8892", expiry: "12/29", holder: "THACH THI NGOC DIEM" }
@@ -275,14 +385,14 @@ export default function Profile() {
       id: 1,
       name: "Chuyến trốn nắng Đà Lạt cùng gia đình",
       items: [
-        { time: "05:00", location: "Săn mây đỉnh đồi ngoại ô", note: "Mang theo áo khoác dày vì nhiệt độ sáng sớm khá lạnh." },
+        { time: "05:00", location: "Săn mây Đỉnh Đồi Ngoại Ô", note: "Mang theo áo khoác dày vì nhiệt độ sáng sớm khá lạnh." },
         { time: "18:00", location: "Tiệc nướng BBQ củi than tại homestay", note: "Đã đặt trước chủ nhà chuẩn bị khoai lùi." }
       ]
     }
   ]);
   const [scheduleName, setScheduleName] = useState('');
   
-  // KHẮC PHỤC DỨT ĐIỂM TRANG TRẮNG: Luôn mồi sẵn 1 object cấu trúc chuỗi trống rỗng cho mảng input ban đầu
+  // Luôn mồi sẵn một dòng để form lịch trình không bị trống khi mới mở.
   const [scheduleItems, setScheduleItems] = useState([{ time: '', location: '', note: '' }]);
   const [reviews, setReviews] = useState([]);
   const [reviewError, setReviewError] = useState('');
@@ -312,7 +422,7 @@ export default function Profile() {
     };
   }, []);
 
-  // LOGIC ĐIỀU PHỐI (HANDLERS)
+  // Handlers điều phối dữ liệu người dùng
   useEffect(() => {
     if (currentView !== 'complaints') return;
     let isMounted = true;
@@ -341,9 +451,11 @@ export default function Profile() {
       const updated = await cancelMyBooking(booking?.bookingId || id);
       setBookings((current) => current.map((item) => item.bookingId === updated.bookingId ? mapUserBooking(updated) : item));
       setSelectedBooking(null);
-      alert("Hủy đơn đặt phòng thành công!");
+      await loadTransactions();
+      const refunded = String(updated.paymentStatus || '').toUpperCase() === 'REFUNDED';
+      alert(refunded ? "Hủy đơn thành công. Hệ thống đã ghi nhận hoàn tiền VNPay." : "Hủy đơn đặt phòng thành công!");
     } catch (error) {
-      alert(error.message || "Không hủy được đơn đặt phòng");
+      alert(error.message || "Không cập nhật được thông tin hồ sơ");
     }
   };
 
@@ -408,6 +520,7 @@ export default function Profile() {
           fullName: updatedProfile.fullName,
           email: updatedProfile.email,
           phoneNumber: updatedProfile.phoneNumber,
+          birthday: updatedProfile.birthday,
           address: updatedProfile.address,
           gender: updatedProfile.gender,
           roleName: updatedProfile.roleName,
@@ -415,17 +528,35 @@ export default function Profile() {
         setUserInfo((current) => ({ ...current, avatar: updatedProfile.avatar || imageUrl }));
         setTempInfo((current) => ({ ...current, avatar: updatedProfile.avatar || imageUrl }));
       } catch (error) {
-        alert(error.message || 'Khong luu duoc avatar vao he thong');
+        alert(error.message || 'Không lưu được avatar vào hệ thống');
       }
     };
     reader.readAsDataURL(file);
   };
 
-  const handleSaveInfo = (e) => {
+  const handleSaveInfo = async (e) => {
     e.preventDefault();
-    setUserInfo({ ...tempInfo });
-    setIsEditing(false);
-    alert("Cập nhật thông tin thành công!");
+
+    try {
+      const updatedProfile = await updateMyProfile(toProfilePayload(tempInfo));
+      const mappedProfile = mapProfileResponse(updatedProfile, authUser);
+      setUserInfo(mappedProfile);
+      setTempInfo(mappedProfile);
+      updateUser?.({
+        avatar: updatedProfile.avatar,
+        fullName: updatedProfile.fullName,
+        email: updatedProfile.email,
+        phoneNumber: updatedProfile.phoneNumber,
+        birthday: updatedProfile.birthday,
+        address: updatedProfile.address,
+        gender: updatedProfile.gender,
+        roleName: updatedProfile.roleName,
+      });
+      setIsEditing(false);
+      alert("Cập nhật thông tin thành công!");
+    } catch (error) {
+      alert(error.message || "Không cập nhật được thông tin hồ sơ");
+    }
   };
 
   const handleAddCard = (e) => {
@@ -458,8 +589,9 @@ export default function Profile() {
   return (
     <UserLayout>
       <div className="bg-[#F4F1EA] min-h-screen text-[#23150d] animate-fade-in text-left pb-24">
+        <input type="file" ref={fileInputRef} onChange={handleAvatarChange} accept="image/*" className="hidden" />
         
-        {/* VIEW 1: TRANG DASHBOARD TỔNG QUAN */}
+        {/* View tổng quan */}
         {currentView === 'dashboard' && (
           <ProfileDashboard 
             userInfo={userInfo} fileInputRef={fileInputRef} handleAvatarChange={handleAvatarChange}
@@ -467,20 +599,21 @@ export default function Profile() {
           />
         )}
 
-        {/* VIEW 2: TRANG CHI TIẾT PHÂN HỆ DẠNG LIST */}
+        {/* View chi tiết theo từng mục */}
         {currentView !== 'dashboard' && (
-          <div className="max-w-7xl mx-auto px-4 md:px-8 grid grid-cols-1 lg:grid-cols-4 gap-8 pt-10 items-start">
+          <div className="mx-auto grid max-w-[1760px] grid-cols-1 gap-6 px-4 pt-6 md:px-8 lg:grid-cols-[300px_minmax(0,1fr)] items-start">
             
-            <ProfileSidebar currentView={currentView} setCurrentView={setCurrentView} setIsEditing={setIsEditing} userInfo={userInfo} />
+            <ProfileSidebar currentView={currentView} setCurrentView={setCurrentView} setIsEditing={setIsEditing} />
 
-            <main className="lg:col-span-3 bg-white p-6 md:p-8 rounded-3xl border border-[#6E473B]/10 shadow-sm min-h-[520px]">
-              {currentView === 'info' && <AccountInfo isEditing={isEditing} setIsEditing={setIsEditing} tempInfo={tempInfo} setTempInfo={setTempInfo} handleSaveInfo={handleSaveInfo} />}
+            <main className={isScheduleView ? 'min-h-[520px] min-w-0' : 'min-h-[520px] min-w-0 rounded-3xl border border-[#6E473B]/10 bg-white p-5 shadow-sm md:p-6'}>
+              {currentView === 'info' && profileError && <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-600">{profileError}</div>}
+              {currentView === 'info' && <AccountInfo isEditing={isEditing} setIsEditing={setIsEditing} tempInfo={tempInfo} setTempInfo={setTempInfo} handleSaveInfo={handleSaveInfo} fileInputRef={fileInputRef} handleAvatarChange={handleAvatarChange} />}
               {currentView === 'bookings' && <>
                 {bookingError && <div className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold text-red-600">{bookingError}</div>}
                 <BookingManager bookings={bookings} bookingFilter={bookingFilter} setBookingFilter={setBookingFilter} setSelectedBooking={setSelectedBooking} handleCancelBooking={handleCancelBooking} onSubmitReview={handleSubmitReview} reviews={reviews} onViewReview={handleViewReview} />
               </>}
               {currentView === 'payment' && <PaymentManager cards={cards} showAddCard={showAddCard} setShowAddCard={setShowAddCard} newCard={newCard} setNewCard={setNewCard} handleAddCard={handleAddCard} />}
-              {currentView === 'transactions' && <TransactionHistory transactions={transactions} />}
+              {currentView === 'transactions' && <TransactionHistory transactions={transactions} isLoading={transactionsLoading} errorMessage={transactionError} />}
               {currentView === 'schedule' && <CustomSchedule scheduleName={scheduleName} setScheduleName={setScheduleName} scheduleItems={scheduleItems} handleItemChange={handleItemChange} handleAddField={handleAddField} handleCreateSchedule={handleCreateSchedule} mySchedules={mySchedules} />}
               {currentView === 'reviews' && <ReviewManager errorMessage={reviewError} reviews={reviews} focusedReviewId={focusedReviewId} onUpdateReview={handleUpdateReview} />}
               {currentView === 'complaints' && <ComplaintManager complaints={complaints} errorMessage={complaintError} />}
@@ -520,3 +653,13 @@ export default function Profile() {
     </UserLayout>
   );
 }
+
+
+
+
+
+
+
+
+
+

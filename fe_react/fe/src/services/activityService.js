@@ -1,4 +1,4 @@
-﻿import { apiRequest } from '../api/axiosClient';
+import { apiRequest } from '../api/axiosClient';
 import { mapPublicHomestay } from './homestayService';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
@@ -30,6 +30,8 @@ export function mapPublicActivity(activity = {}) {
     shortDescription: activity.shortDescription || '',
     description: activity.description || activity.shortDescription || '',
     hotline: activity.hotline || '',
+    openingTime: activity.openingTime || activity.opening_time || '',
+    closingTime: activity.closingTime || activity.closing_time || '',
     thumbnailUrl,
     images: images.length ? images : (thumbnailUrl ? [{ imageId: 'thumb', imageUrl: thumbnailUrl, isThumbnail: true, displayOrder: 0 }] : []),
     badgeText: activity.badgeText || 'Trải nghiệm địa phương',

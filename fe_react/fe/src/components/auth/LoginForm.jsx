@@ -1,45 +1,57 @@
-import { useEffect, useRef } from 'react';
+﻿import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import Logo from '../common/Logo';
 import AuthToast from './AuthToast';
 
-const SHOW_GOOGLE_LOGIN = false;
+const SHOW_GOOGLE_LOGIN = true;
+
+function FieldError({ message }) {
+  if (!message) return null;
+  return <p className="text-[11px] font-semibold text-red-600">{message}</p>;
+}
 
 function GoogleSignInButton({ clientId, disabled, onCredential }) {
   const buttonRef = useRef(null);
 
   useEffect(() => {
-    if (!clientId || !buttonRef.current || !onCredential) {
-      return undefined;
-    }
-
+    if (!clientId || !buttonRef.current || !onCredential) return undefined;
     let cancelled = false;
 
     const renderButton = () => {
-      if (cancelled || !buttonRef.current || !window.google?.accounts?.id) {
-        return;
-      }
-
+      if (cancelled || !buttonRef.current || !window.google?.accounts?.id) return;
       buttonRef.current.innerHTML = '';
       window.google.accounts.id.initialize({
         client_id: clientId,
         callback: (response) => onCredential(response?.credential),
         ux_mode: 'popup',
       });
-      window.google.accounts.id.renderButton(buttonRef.current, {
-        theme: 'outline',
-        size: 'large',
-        shape: 'pill',
-        text: 'signin_with',
-        width: buttonRef.current.offsetWidth || 320,
-      });
-    };
+     
+      const availableWidth =
+      buttonRef.current.parentElement?.clientWidth || 320;
+
+      const googleButtonWidth = Math.min(
+        availableWidth,
+        400,
+      );
+
+      window.google.accounts.id.renderButton(
+        buttonRef.current,
+        {
+          theme: 'outline',
+          size: 'large',
+          shape: 'pill',
+          text: 'signin_with',
+          logo_alignment: 'left',
+          locale: 'vi',
+          width: googleButtonWidth,
+        },
+      );
+   };
 
     if (window.google?.accounts?.id) {
       renderButton();
     } else {
       const existingScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
-
       if (existingScript) {
         existingScript.addEventListener('load', renderButton, { once: true });
       } else {
@@ -59,26 +71,32 @@ function GoogleSignInButton({ clientId, disabled, onCredential }) {
 
   if (!clientId) {
     return (
-      <button
-        type="button"
-        disabled
-        className="w-full rounded-xl border border-gray-200 bg-gray-100 px-4 py-3 text-xs font-bold text-gray-400"
-      >
+      <button type="button" disabled className="mx-auto block w-full max-w-[500px] rounded-xl border border-gray-200 bg-gray-100 px-4 py-3 text-xs font-bold text-gray-400">
         Chưa cấu hình Google Client ID
       </button>
     );
   }
 
-  return (
-    <div
-      ref={buttonRef}
-      className={disabled ? 'pointer-events-none opacity-60' : ''}
-      aria-disabled={disabled}
-    />
-  );
+    return (
+      <div
+        className={[
+          'mx-auto flex w-full justify-center',
+          disabled
+            ? 'pointer-events-none opacity-60'
+            : '',
+        ].join(' ')}
+        aria-disabled={disabled}
+      >
+        <div
+          ref={buttonRef}
+          className="flex justify-center"
+        />
+      </div>
+    );
 }
 
 export default function LoginForm({
+  errors = {},
   form,
   googleClientId,
   isSubmitting,
@@ -97,19 +115,13 @@ export default function LoginForm({
         </div>
 
         <div className="mb-5 text-left">
-          <h3 className="font-classic text-2xl font-bold text-[#2C1E15] mb-1">
-            Chào mừng quay về nhà!
-          </h3>
-          <p className="text-xs text-gray-500">
-            Đăng nhập để tiếp tục lên lịch cho những chuyến đi ấm áp.
-          </p>
+          <h3 className="font-classic text-2xl font-bold text-[#2C1E15] mb-1">Chào mừng quay về nhà!</h3>
+          <p className="text-xs text-gray-500">Đăng nhập để tiếp tục lên lịch cho những chuyến đi ấm áp.</p>
         </div>
 
-        <form className="space-y-4 text-left" onSubmit={onSubmit}>
+        <form className="space-y-4 text-left" onSubmit={onSubmit} noValidate>
           <div className="space-y-1">
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600">
-              Email của bạn
-            </label>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600">Email của bạn</label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-400">
                 <i className="fa-regular fa-envelope text-xs"></i>
@@ -117,18 +129,19 @@ export default function LoginForm({
               <input
                 type="email"
                 required
+                autoComplete="email"
                 value={form.email}
+                aria-invalid={Boolean(errors.email)}
                 onChange={(event) => onUpdateField('email', event.target.value)}
                 placeholder="nhaminh@gmail.com"
-                className="w-full pl-9 pr-4 py-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-[#2C3E2B] focus:ring-1 focus:ring-[#2C3E2B] transition-all text-gray-800"
+                className={`w-full pl-9 pr-4 py-2.5 text-xs bg-white border rounded-xl focus:outline-none focus:ring-1 transition-all text-gray-800 ${errors.email ? 'border-red-300 focus:border-red-500 focus:ring-red-100' : 'border-gray-200 focus:border-[#2C3E2B] focus:ring-[#2C3E2B]'}`}
               />
             </div>
+            <FieldError message={errors.email} />
           </div>
 
           <div className="space-y-1">
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600">
-              Mật khẩu
-            </label>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600">Mật khẩu</label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-400">
                 <i className="fa-solid fa-lock text-xs"></i>
@@ -136,10 +149,13 @@ export default function LoginForm({
               <input
                 type={showPassword ? 'text' : 'password'}
                 required
+                minLength={8}
+                autoComplete="current-password"
                 value={form.password}
+                aria-invalid={Boolean(errors.password)}
                 onChange={(event) => onUpdateField('password', event.target.value)}
                 placeholder="********"
-                className="w-full pl-9 pr-10 py-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-[#2C3E2B] focus:ring-1 focus:ring-[#2C3E2B] transition-all text-gray-800"
+                className={`w-full pl-9 pr-10 py-2.5 text-xs bg-white border rounded-xl focus:outline-none focus:ring-1 transition-all text-gray-800 ${errors.password ? 'border-red-300 focus:border-red-500 focus:ring-red-100' : 'border-gray-200 focus:border-[#2C3E2B] focus:ring-[#2C3E2B]'}`}
               />
               <button
                 type="button"
@@ -150,6 +166,7 @@ export default function LoginForm({
                 <i className={`fa-regular ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
               </button>
             </div>
+            <FieldError message={errors.password} />
           </div>
 
           <div className="flex items-center justify-between text-[11px] pt-1">
@@ -162,48 +179,45 @@ export default function LoginForm({
               />
               Ghi nhớ tôi
             </label>
-           
           </div>
 
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full bg-[#2C3E2B] hover:bg-[#1a291b] disabled:bg-gray-400 disabled:cursor-not-allowed text-[#F4F1EA] font-semibold py-3 rounded-xl shadow-md hover:shadow-lg transform active:scale-[0.98] transition-all duration-200 text-xs mt-2 flex items-center justify-center space-x-2"
+            className="w-full bg-[#2C3E2B] hover:bg-[#1a291b] disabled:bg-gray-400 disabled:cursor-not-allowed text-[#F4F1EA] font-semibold py-3 rounded-4xl shadow-md hover:shadow-lg transform active:scale-[0.98] transition-all duration-200 text-xs mt-2 flex items-center justify-center space-x-2"
           >
             <span>{isSubmitting ? 'ĐANG ĐĂNG NHẬP...' : 'ĐĂNG NHẬP'}</span>
           </button>
 
           {SHOW_GOOGLE_LOGIN && (
             <>
-              <div className="flex items-center gap-3 py-1">
-                <span className="h-px flex-1 bg-gray-200"></span>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">hoặc</span>
-                <span className="h-px flex-1 bg-gray-200"></span>
-              </div>
-
-              <GoogleSignInButton
-                clientId={googleClientId}
-                disabled={isSubmitting}
-                onCredential={onGoogleCredential}
-              />
-            </>
+                <div className="flex items-center gap-3 py-1">
+                  <span className="h-px flex-1 bg-gray-200"></span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">hoặc</span>
+                  <span className="h-px flex-1 bg-gray-200"></span>
+                </div>
+                <GoogleSignInButton
+                  clientId={googleClientId}
+                  disabled={isSubmitting}
+                  onCredential={onGoogleCredential}
+                />           
+             </>
           )}
         </form>
 
         <p className="text-center text-[11px] text-gray-400 mt-5">
           Chưa có tài khoản?{' '}
-          <Link to="/register" className="text-[#6E473B] font-bold cursor-pointer hover:underline">
-            Tạo tài khoản ngay
-          </Link>
+          <Link to="/register" className="text-[#6E473B] font-bold cursor-pointer hover:underline">Tạo tài khoản ngay</Link>
         </p>
       </div>
 
       <AuthToast toast={toast} />
 
       <div className="mt-4 pt-3 border-t border-gray-200/50 text-center flex items-center justify-between text-[11px] text-gray-400 font-medium italic flex-shrink-0">
-        <span>© 2026 Cozygo</span>
+        <span>(c) 2026 Cozygo</span>
         <span className="text-[#6E473B]">Chuyến đi ấm áp bên gia đình</span>
       </div>
     </>
   );
 }
+

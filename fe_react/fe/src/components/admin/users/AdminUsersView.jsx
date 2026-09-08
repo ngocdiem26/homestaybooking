@@ -1,5 +1,8 @@
-import { MdOutlineRemoveRedEye } from 'react-icons/md';
+﻿import { MdOutlineRemoveRedEye } from 'react-icons/md';
 import Pagination from '../../common/Pagination';
+import ManagementBackButton from '../../common/ManagementBackButton';
+import ManagementHeaderRow from '../../common/ManagementHeaderRow';
+import ManagementToolbar from '../../common/ManagementToolbar';
 import AdminUserDetailModal from './AdminUserDetailModal';
 import { getAvatarLabel, getRoleLabel, getStatusLabel } from './adminUserFormatters';
 
@@ -8,6 +11,9 @@ export default function AdminUsersView({
   currentUsers,
   errorMessage,
   filteredUsers,
+  dateFilter,
+  dateFrom,
+  dateTo,
   indexOfFirstUser,
   indexOfLastUser,
   isLoading,
@@ -23,23 +29,17 @@ export default function AdminUsersView({
   searchTerm,
   selectedUser,
   setCurrentPage,
+  setDateFilter,
+  setDateFrom,
+  setDateTo,
   setSelectedUser,
   totalPages,
   users,
 }) {
   return (
     <>
-      <div className="space-y-5 animate-fade-in text-left text-sm -mt-6">
-        <div className="flex justify-start">
-          <button
-            onClick={onBackToDashboard}
-            className="inline-flex items-center justify-center gap-1.5 text-xs bg-white hover:bg-gray-100 text-gray-600 px-3 py-1.5 rounded-xl font-bold transition duration-200 cursor-pointer shadow-sm active:scale-95 border border-gray-200/40 focus:outline-none"
-            type="button"
-          >
-            <span>&lt;</span>
-            <span>Về bảng điều khiển</span>
-          </button>
-        </div>
+      <div className="space-y-4 animate-fade-in text-left text-sm">
+        <ManagementHeaderRow backButton={<ManagementBackButton onClick={onBackToDashboard} />}>
 
         <div className="bg-white p-5 rounded-2xl border border-gray-200/60 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-start space-x-3.5">
@@ -55,46 +55,45 @@ export default function AdminUsersView({
               </p>
             </div>
           </div>
-
-          <div className="flex bg-white p-1.5 rounded-xl font-bold text-[11px] shadow-inner border border-gray-300/30 shrink-0 h-fit self-start lg:self-center">
-            <FilterButton count={users.length} isActive={roleFilter === 'ALL'} label="Tất cả" onClick={() => onRoleFilterChange('ALL')} />
-            <FilterButton isActive={roleFilter === 'CUSTOMER'} label="Khách hàng" onClick={() => onRoleFilterChange('CUSTOMER')} />
-            <FilterButton isActive={roleFilter === 'HOST'} label="Chủ nhà" onClick={() => onRoleFilterChange('HOST')} />
-            <FilterButton isActive={roleFilter === 'ADMIN'} label="Admin" onClick={() => onRoleFilterChange('ADMIN')} />
-          </div>
         </div>
 
-        {errorMessage && (
+                </ManagementHeaderRow>
+
+{errorMessage && (
           <div className="bg-red-50 text-red-600 border border-red-100 px-4 py-3 rounded-xl text-xs font-bold">
             {errorMessage}
           </div>
         )}
 
         <div className="space-y-4">
-          <div className="flex items-center justify-between gap-4 w-full">
-            <div className="bg-white px-4 h-11 rounded-xl border border-gray-200/80 shadow-sm flex items-center flex-grow group focus-within:border-[#2C3E2B]/50 transition">
-              <span className="text-gray-400 mr-2.5">⌕</span>
-              <input
-                type="text"
-                placeholder="Tìm kiếm theo họ tên, email, số điện thoại..."
-                value={searchTerm}
-                onChange={(event) => onSearchChange(event.target.value)}
-                className="w-full bg-transparent border-none text-sm text-gray-800 focus:outline-none placeholder-gray-400 font-medium"
-              />
-            </div>
-
-            <button
-              onClick={() => {
-                onResetFilters();
-                onRefresh();
-              }}
-              className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-[#6E473B] font-bold px-4 h-11 rounded-xl bg-white border border-gray-200/80 shadow-sm hover:shadow transition duration-200 cursor-pointer shrink-0 active:scale-95"
-              type="button"
-            >
-              Làm mới
-            </button>
-          </div>
-
+          <ManagementToolbar
+            filters={[
+              {
+                label: 'Vai trò',
+                value: roleFilter,
+                onChange: onRoleFilterChange,
+                options: [
+                  { value: 'ALL', label: `Tất cả (${users.length})` },
+                  { value: 'CUSTOMER', label: 'Khách hàng' },
+                  { value: 'HOST', label: 'Chủ nhà' },
+                  { value: 'ADMIN', label: 'Admin' },
+                ],
+              },
+            ]}
+            dateFilter={dateFilter}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFilterChange={setDateFilter}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+            onReset={() => {
+              onResetFilters();
+              onRefresh();
+            }}
+            searchPlaceholder="Tìm kiếm theo họ tên, email, số điện thoại..."
+            searchValue={searchTerm}
+            onSearchChange={onSearchChange}
+          />
           <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left text-base">
@@ -220,3 +219,7 @@ function UserRow({ onSelectUser, onToggleStatus, user }) {
     </tr>
   );
 }
+
+
+
+

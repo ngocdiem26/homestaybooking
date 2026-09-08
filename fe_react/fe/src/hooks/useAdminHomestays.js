@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   deleteAdminHomestay,
   getAdminHomestays,
   updateAdminHomestayStatus,
 } from '../services/adminHomestayService';
+import { isWithinDateFilter, pickDateValue } from '../utils/dateFilter';
 
 const HOMESTAYS_PER_PAGE = 4;
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1587061949409-02df41d5e562?q=80&w=600&auto=format&fit=crop';
@@ -61,6 +62,9 @@ export function useAdminHomestays() {
   const [homestays, setHomestays] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [dateFilter, setDateFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [selectedHomestay, setSelectedHomestay] = useState(null);
   const [selectedOwner, setSelectedOwner] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -116,10 +120,16 @@ export function useAdminHomestays() {
         homestay.address?.toLowerCase().includes(keyword) ||
         homestay.province?.toLowerCase().includes(keyword);
       const matchesStatus = statusFilter === 'ALL' || homestay.status === statusFilter;
+      const matchesDate = isWithinDateFilter(
+        pickDateValue(homestay, ['createdAt', 'updatedAt']),
+        dateFilter,
+        dateFrom,
+        dateTo
+      );
 
-      return matchesSearch && matchesStatus;
+      return matchesSearch && matchesStatus && matchesDate;
     });
-  }, [homestays, searchTerm, statusFilter]);
+  }, [dateFilter, dateFrom, dateTo, homestays, searchTerm, statusFilter]);
 
   const totalPages = Math.ceil(filteredHomestays.length / HOMESTAYS_PER_PAGE);
   const indexOfLastHomestay = currentPage * HOMESTAYS_PER_PAGE;
@@ -152,6 +162,9 @@ export function useAdminHomestays() {
   const resetFilters = () => {
     setSearchTerm('');
     setStatusFilter('ALL');
+    setDateFilter('all');
+    setDateFrom('');
+    setDateTo('');
     setCurrentPage(1);
   };
 
@@ -191,6 +204,9 @@ export function useAdminHomestays() {
     currentPage,
     errorMessage,
     filteredHomestays,
+    dateFilter,
+    dateFrom,
+    dateTo,
     homestays,
     indexOfFirstHomestay,
     indexOfLastHomestay,
@@ -206,8 +222,12 @@ export function useAdminHomestays() {
     removeHomestay,
     resetFilters,
     setCurrentPage,
+    setDateFilter,
+    setDateFrom,
+    setDateTo,
     setSelectedHomestay,
     setSelectedOwner,
     updateHomestayStatus,
   };
 }
+

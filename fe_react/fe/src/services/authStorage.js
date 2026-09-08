@@ -1,7 +1,17 @@
 ﻿const AUTH_USER_KEY = 'auth_user';
 const AUTH_TOKEN_KEY = 'auth_token';
 const AUTH_REMEMBER_KEY = 'auth_remember';
+const CUSTOMER_TIER_CACHE_PREFIX = 'cozygo_customer_tier:';
 
+function clearCustomerTierCache(storage) {
+  try {
+    Object.keys(storage)
+      .filter((key) => key.startsWith(CUSTOMER_TIER_CACHE_PREFIX))
+      .forEach((key) => storage.removeItem(key));
+  } catch {
+    // Optional cache cleanup.
+  }
+}
 function clearStorage(storage) {
   storage.removeItem(AUTH_TOKEN_KEY);
   storage.removeItem(AUTH_USER_KEY);
@@ -60,6 +70,8 @@ export function getAuthToken() {
 export function clearAuthSession() {
   clearStorage(sessionStorage);
   clearStorage(localStorage);
+  clearCustomerTierCache(sessionStorage);
+  clearCustomerTierCache(localStorage);
   localStorage.removeItem(AUTH_REMEMBER_KEY);
 }
 
@@ -72,3 +84,5 @@ export function updateAuthUser(partialUser) {
   targetStorage.setItem(AUTH_USER_KEY, JSON.stringify(updatedUser));
   return updatedUser;
 }
+
+

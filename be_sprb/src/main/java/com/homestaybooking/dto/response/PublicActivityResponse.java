@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.LocalTime;
 import java.util.List;
 
 @Getter
@@ -25,6 +26,8 @@ public class PublicActivityResponse {
     private String shortDescription;
     private String description;
     private String hotline;
+    private LocalTime openingTime;
+    private LocalTime closingTime;
     private String thumbnailUrl;
     private String badgeText;
     private String badgeType;

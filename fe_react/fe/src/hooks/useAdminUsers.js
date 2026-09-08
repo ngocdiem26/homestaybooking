@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   getAdminUsers,
   updateAdminUserRole,
   updateAdminUserStatus,
 } from '../services/adminUserService';
+import { isWithinDateFilter, pickDateValue } from '../utils/dateFilter';
 
 const USERS_PER_PAGE = 4;
 
@@ -44,6 +45,9 @@ export function useAdminUsers() {
   const [users, setUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
+  const [dateFilter, setDateFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
@@ -97,10 +101,16 @@ export function useAdminUsers() {
         user.email?.toLowerCase().includes(keyword) ||
         user.phone?.toLowerCase().includes(keyword);
       const matchesRole = roleFilter === 'ALL' || user.role === roleFilter;
+      const matchesDate = isWithinDateFilter(
+        pickDateValue(user, ['createdAt', 'dob']),
+        dateFilter,
+        dateFrom,
+        dateTo
+      );
 
-      return matchesSearch && matchesRole;
+      return matchesSearch && matchesRole && matchesDate;
     });
-  }, [roleFilter, searchTerm, users]);
+  }, [dateFilter, dateFrom, dateTo, roleFilter, searchTerm, users]);
 
   const totalPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE);
   const indexOfLastUser = currentPage * USERS_PER_PAGE;
@@ -131,6 +141,9 @@ export function useAdminUsers() {
   const resetFilters = () => {
     setSearchTerm('');
     setRoleFilter('ALL');
+    setDateFilter('all');
+    setDateFrom('');
+    setDateTo('');
     setCurrentPage(1);
   };
 
@@ -175,6 +188,9 @@ export function useAdminUsers() {
     currentUsers,
     errorMessage,
     filteredUsers,
+    dateFilter,
+    dateFrom,
+    dateTo,
     indexOfFirstUser,
     indexOfLastUser,
     isLoading,
@@ -189,7 +205,11 @@ export function useAdminUsers() {
     loadUsers,
     resetFilters,
     setCurrentPage,
+    setDateFilter,
+    setDateFrom,
+    setDateTo,
     setSelectedUser,
     toggleUserStatus,
   };
 }
+

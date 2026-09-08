@@ -8,6 +8,8 @@ import java.util.List;
 
 public interface ChatbotDocumentRepository extends JpaRepository<ChatbotDocument, Integer> {
 
+    List<ChatbotDocument> findByStatusIgnoreCase(String status);
+
     @Query(value = """
         SELECT *
         FROM chatbot_documents

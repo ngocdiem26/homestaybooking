@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HiPencilSquare, HiStar, HiXMark } from 'react-icons/hi2';
 import ModalPortal from '../common/ModalPortal';
@@ -9,14 +9,14 @@ const TEXT = {
   confirmed: 'Đã xác nhận',
   cancelled: 'Đã hủy',
   completed: 'Đã hoàn thành',
-  managerTitle: 'Quản lý đơn đặt phòng',
+  managerTitle: 'Đơn đặt phòng của tôi',
   managerDesc: 'Theo dõi trạng thái xử lý, thanh toán và đánh giá các đơn đã hoàn thành.',
   paidPending: 'Chờ thanh toán',
   detail: 'Xem chi tiết',
   cancel: 'Hủy đặt phòng',
   review: 'Đánh giá',
   noBooking: 'Không có đơn đặt phòng phù hợp.',
-  region: 'Vùng miền',
+  region: 'Khu vực',
   time: 'Thời gian',
   modalTitle: 'Đánh giá trải nghiệm',
   score: 'Chấm điểm',
@@ -206,24 +206,24 @@ export default function BookingManager({ bookings, bookingFilter, setBookingFilt
         <p className="text-xs text-gray-400 font-medium">{TEXT.managerDesc}</p>
       </div>
 
-      <div className="flex bg-[#23150d]/5 p-1 rounded-xl text-xs font-bold border w-full overflow-x-auto">
+      <div className="flex w-full gap-1 overflow-x-auto rounded-2xl bg-white p-1.5 text-xs font-bold shadow-sm shadow-[#2C1E15]/5 ring-1 ring-gray-200">
         {FILTERS.map((filter) => (
           <button
             key={filter.key}
             onClick={() => setBookingFilter(filter.key)}
-            className={'px-4 py-2 rounded-lg transition whitespace-nowrap cursor-pointer ' + (bookingFilter === filter.key ? 'bg-[#2C3E2B] text-white shadow' : 'text-gray-500')}
+            className={'rounded-xl px-5 py-2.5 transition whitespace-nowrap cursor-pointer ' + (bookingFilter === filter.key ? 'bg-[#2C3E2B] text-white shadow-md shadow-[#2C3E2B]/20' : 'text-gray-500 hover:bg-[#F8F6F0] hover:text-[#2C3E2B]')}
           >
             {filter.label}
           </button>
         ))}
       </div>
 
-      <div className="space-y-4 max-h-[540px] overflow-y-auto pr-2 custom-scrollbar">
+      <div className="space-y-4 max-h-[540px] overflow-y-auto px-1 pt-3 pr-3 custom-scrollbar">
         {filteredBookings.map((book) => {
           const canReview = book.status === 'completed' && !book.reviewed;
           const canBookAgain = book.status === 'completed' && book.reviewed && book.homeId;
           return (
-            <div key={book.id} className="border border-gray-200/80 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white hover:shadow-md transition">
+            <div key={book.id} className="rounded-2xl bg-white p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-gray-200 shadow-sm ring-1 ring-white transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-[#2C1E15]/8">
               <div className="space-y-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-mono font-bold text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{book.id}</span>
@@ -278,3 +278,7 @@ export default function BookingManager({ bookings, bookingFilter, setBookingFilt
     </div>
   );
 }
+
+
+
+

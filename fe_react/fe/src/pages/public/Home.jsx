@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+﻿import { useNavigate } from 'react-router-dom';
 import banner from '../../assets/images/nha5.jpg';
 
 // Import đúng component card dọc đã được chia tách ra thư mục riêng
@@ -63,3 +63,4 @@ export default function Home({ favorites, toggleFavorite }) {
     </UserLayout>
   );
 }
+

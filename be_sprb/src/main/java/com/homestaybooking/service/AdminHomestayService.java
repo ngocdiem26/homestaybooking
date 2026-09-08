@@ -6,10 +6,12 @@ import com.homestaybooking.entity.Homestay;
 import com.homestaybooking.entity.HomestayImage;
 import com.homestaybooking.exception.AppException;
 import com.homestaybooking.repository.HomestayRepository;
+import com.homestaybooking.repository.RevenueJdbcRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -19,6 +21,7 @@ import java.util.List;
 public class AdminHomestayService {
 
     private final HomestayRepository homestayRepository;
+    private final RevenueJdbcRepository revenueJdbcRepository;
 
     @Transactional(readOnly = true)
     public List<AdminHomestayResponse> getHomestays() {
@@ -31,8 +34,14 @@ public class AdminHomestayService {
     @Transactional
     public AdminHomestayResponse updateStatus(Integer homeId, UpdateHomestayStatusRequest request) {
         Homestay homestay = getActiveHomestay(homeId);
-        homestay.setStatus(normalizeStatus(request.getStatus()));
-        return toResponse(homestayRepository.save(homestay));
+        String previousStatus = homestay.getStatus();
+        String nextStatus = normalizeStatus(request.getStatus());
+        homestay.setStatus(nextStatus);
+        Homestay saved = homestayRepository.save(homestay);
+        if ("APPROVED".equals(nextStatus) && !"APPROVED".equalsIgnoreCase(previousStatus == null ? "" : previousStatus)) {
+            revenueJdbcRepository.ensureFirstFreeMaintenanceForHost(saved.getOwner().getUserId(), LocalDate.now());
+        }
+        return toResponse(saved);
     }
 
     @Transactional

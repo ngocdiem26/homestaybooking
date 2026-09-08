@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import ModalPortal from '../../common/ModalPortal';
 import {
   formatNightlyPrice,
@@ -183,3 +183,4 @@ function InfoRow({ label, value }) {
     </p>
   );
 }
+

@@ -1,5 +1,6 @@
-
+﻿
 spring:
+
   config:
     import: optional:file:.env[.properties]
 
@@ -53,6 +54,11 @@ gemini:
       key: ${GEMINI_EMBEDDING_API_KEY:${GEMINI_API_KEY:}}
     model: ${GEMINI_EMBEDDING_MODEL:gemini-embedding-001}
 
+openai:
+  api-key: ${OPENAI_API_KEY:}
+  base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+  moderation-model: ${OPENAI_MODERATION_MODEL:omni-moderation-latest}
+
 google:
   oauth:
     client-id: ${GOOGLE_CLIENT_ID:}
@@ -64,3 +70,5 @@ vnpay:
   return-url: ${VNPAY_RETURN_URL:}
   ipn-url: ${VNPAY_IPN_URL:}
   frontend-result-url: ${FRONTEND_PAYMENT_RESULT_URL:http://localhost:5173/payment/result}
+
+

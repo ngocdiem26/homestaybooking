@@ -1,4 +1,4 @@
-import ModalPortal from '../../common/ModalPortal';
+﻿import ModalPortal from '../../common/ModalPortal';
 
 export default function AdminOwnerModal({ homestay, onClose }) {
   if (!homestay) {
@@ -37,3 +37,4 @@ function InfoRow({ isMono = false, label, value }) {
     </p>
   );
 }
+

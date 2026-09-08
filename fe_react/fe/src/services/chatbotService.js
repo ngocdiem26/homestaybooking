@@ -1,18 +1,3 @@
-// import axios from "axios";
-
-// const API_BASE_URL = "http://localhost:8080/api/public/chatbot";
-
-// export const chatbotService = {
-//   sendMessage: async ({ sessionId, message, currentPage }) => {
-//     const response = await axios.post(`${API_BASE_URL}/message`, {
-//       sessionId,
-//       message,
-//       currentPage,
-//     });
-
-//     return response.data;
-//   },
-// };
 import { apiRequest } from "../api/axiosClient";
 import { CHATBOT_ENDPOINTS } from "../api/endpoints";
 
@@ -28,9 +13,15 @@ export const chatbotService = {
     });
   },
 
-  reindex: async () => {
-    return apiRequest(CHATBOT_ENDPOINTS.REINDEX, {
-      method: "POST",
+  getHistory: async ({ beforeSessionId = null, limit = 5 } = {}) => {
+    const params = new URLSearchParams();
+    params.set("limit", String(limit));
+    if (beforeSessionId) {
+      params.set("beforeSessionId", String(beforeSessionId));
+    }
+
+    return apiRequest(`${CHATBOT_ENDPOINTS.HISTORY}?${params.toString()}`, {
+      method: "GET",
     });
   },
 };

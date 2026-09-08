@@ -6,7 +6,9 @@ import java.util.List;
 public class ChatResponse {
     private Integer sessionId;
     private String answer;
+    private String message;
     private String intent;
+    private Double confidence;
     private String dataType;
     private Object data;
     private List<String> suggestions = new ArrayList<>();
@@ -25,6 +27,20 @@ public class ChatResponse {
 
     public void setAnswer(String answer) {
         this.answer = answer;
+        if (this.message == null) {
+            this.message = answer;
+        }
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
+        if (this.answer == null) {
+            this.answer = message;
+        }
     }
 
     public String getIntent() {
@@ -33,6 +49,14 @@ public class ChatResponse {
 
     public void setIntent(String intent) {
         this.intent = intent;
+    }
+
+    public Double getConfidence() {
+        return confidence;
+    }
+
+    public void setConfidence(Double confidence) {
+        this.confidence = confidence;
     }
 
     public String getDataType() {
@@ -56,6 +80,6 @@ public class ChatResponse {
     }
 
     public void setSuggestions(List<String> suggestions) {
-        this.suggestions = suggestions;
+        this.suggestions = suggestions == null ? new ArrayList<>() : suggestions;
     }
 }

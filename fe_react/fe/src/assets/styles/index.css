@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+﻿@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 body {
@@ -60,6 +60,29 @@ h3,
   background: #9E9484;
 }
 
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #BBAA9C #F8F6F0;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #F8F6F0;
+  border-radius: 999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #BBAA9C;
+  border-radius: 999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #8F7668;
+}
 
 .animate-slide-in-right {
   animation: slideInRight 0.24s ease-out both;
@@ -126,3 +149,5 @@ h3,
     transform: translateX(0);
   }
 }
+
+

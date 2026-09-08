@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   HiOutlineCalendar,
@@ -6,14 +6,16 @@ import {
   HiOutlineClock,
   HiOutlineEye,
   HiOutlineHome,
-  HiOutlineRefresh,
-  HiOutlineSearch,
   HiOutlineUser,
   HiOutlineUsers,
 } from 'react-icons/hi';
 import AdminLayout from '../../layouts/AdminLayout';
 import ModalPortal from '../../components/common/ModalPortal';
 import Pagination from '../../components/common/Pagination';
+import ManagementBackButton from '../../components/common/ManagementBackButton';
+import ManagementHeaderRow from '../../components/common/ManagementHeaderRow';
+import ManagementToolbar from '../../components/common/ManagementToolbar';
+import { isWithinDateFilter, pickDateValue } from '../../utils/dateFilter';
 import { confirmAdminBookingPayment, getAdminBookings, updateAdminBookingStatus } from '../../services/bookingService';
 
 const ITEMS_PER_PAGE = 6;
@@ -267,6 +269,9 @@ export default function AdminBookings() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [paymentFilter, setPaymentFilter] = useState('ALL');
+  const [dateFilter, setDateFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
@@ -296,11 +301,12 @@ export default function AdminBookings() {
     return bookings.filter((booking) => {
       const matchesStatus = statusFilter === 'ALL' || booking.statusKey === statusFilter;
       const matchesPayment = paymentFilter === 'ALL' || booking.paymentKey === paymentFilter;
+      const matchesDate = isWithinDateFilter(pickDateValue(booking, ['createdAt', 'createdAtLabel', 'checkInDate']), dateFilter, dateFrom, dateTo);
       const matchesSearch = !keyword || [booking.id, booking.customerName, booking.customerEmail, booking.customerPhone, booking.hostName, booking.homestayName, booking.homestayCode, booking.province]
         .some((value) => String(value || '').toLowerCase().includes(keyword));
-      return matchesStatus && matchesPayment && matchesSearch;
+      return matchesStatus && matchesPayment && matchesDate && matchesSearch;
     });
-  }, [bookings, paymentFilter, searchTerm, statusFilter]);
+  }, [bookings, dateFilter, dateFrom, dateTo, paymentFilter, searchTerm, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredBookings.length / ITEMS_PER_PAGE));
   const indexOfFirstItem = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -344,6 +350,9 @@ export default function AdminBookings() {
     setSearchTerm('');
     setStatusFilter('ALL');
     setPaymentFilter('ALL');
+    setDateFilter('all');
+    setDateFrom('');
+    setDateTo('');
     setCurrentPage(1);
     loadBookings();
   };
@@ -351,11 +360,8 @@ export default function AdminBookings() {
   return (
     <AdminLayout>
       <div className="space-y-5 text-left text-sm animate-fade-in">
-        <button type="button" onClick={() => navigate('/admin')} className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-gray-200/60 bg-white px-3.5 py-2 text-xs font-bold text-gray-600 shadow-sm transition hover:bg-gray-100">
-          &lt; Về bảng điều khiển
-        </button>
-
-        <section className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
+        <ManagementHeaderRow backButton={<ManagementBackButton onClick={() => navigate('/admin')} />}>
+          <section className="rounded-2xl border border-gray-200/60 bg-white p-5 shadow-sm">
           <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
             <div className="flex items-center gap-3">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#2C3E2B]/5 bg-[#2C3E2B]/10 text-[#2C3E2B] shadow-inner">
@@ -374,29 +380,33 @@ export default function AdminBookings() {
             </div>
           </div>
         </section>
-
-        <section className="rounded-2xl border border-gray-200/70 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex w-full gap-2 overflow-x-auto xl:w-fit">
-              {STATUS_FILTERS.map(([value, label]) => (
-                <button key={value} type="button" onClick={() => { setStatusFilter(value); setCurrentPage(1); }} className={'whitespace-nowrap rounded-xl px-4 py-2 text-xs font-black transition ' + (statusFilter === value ? 'bg-[#2C3E2B] text-white shadow-sm' : 'bg-white text-gray-500 ring-1 ring-gray-200 hover:text-[#2C3E2B]')}>
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex flex-col gap-3 md:flex-row xl:max-w-3xl xl:flex-1">
-              <div className="flex h-11 flex-1 items-center rounded-xl border border-gray-200 bg-white px-4 shadow-sm focus-within:border-[#2C3E2B]/50">
-                <HiOutlineSearch className="mr-2 h-4 w-4 text-gray-400" />
-                <input value={searchTerm} onChange={(event) => { setSearchTerm(event.target.value); setCurrentPage(1); }} placeholder="Tìm mã đơn, khách, chủ nhà, homestay..." className="w-full bg-transparent text-sm font-semibold text-gray-700 outline-none placeholder:text-gray-400" />
-              </div>
-              <select value={paymentFilter} onChange={(event) => { setPaymentFilter(event.target.value); setCurrentPage(1); }} className="h-11 rounded-xl border border-gray-200 bg-white px-4 text-xs font-black text-gray-600 shadow-sm outline-none">
-                {PAYMENT_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-              <button type="button" onClick={resetFilters} className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-4 text-xs font-black text-gray-500 shadow-sm transition hover:text-[#2C3E2B]"><HiOutlineRefresh className="h-4 w-4" /> Làm mới</button>
-            </div>
-          </div>
-        </section>
+        </ManagementHeaderRow>
+        <ManagementToolbar
+          filters={[
+            {
+              label: 'Trạng thái',
+              value: statusFilter,
+              onChange: (value) => { setStatusFilter(value); setCurrentPage(1); },
+              options: STATUS_FILTERS.map(([value, label]) => ({ value, label })),
+            },
+            {
+              label: 'Thanh toán',
+              value: paymentFilter,
+              onChange: (value) => { setPaymentFilter(value); setCurrentPage(1); },
+              options: PAYMENT_FILTERS.map(([value, label]) => ({ value, label })),
+            },
+          ]}
+          dateFilter={dateFilter}
+          onDateFilterChange={(value) => { setDateFilter(value); setCurrentPage(1); }}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateFromChange={(value) => { setDateFrom(value); setCurrentPage(1); }}
+          onDateToChange={(value) => { setDateTo(value); setCurrentPage(1); }}
+          searchValue={searchTerm}
+          onSearchChange={(value) => { setSearchTerm(value); setCurrentPage(1); }}
+          searchPlaceholder="Tìm mã đơn, khách, chủ nhà, homestay..."
+          onReset={resetFilters}
+        />
 
         {errorMessage && <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs font-bold text-red-600">{errorMessage}</div>}
 
@@ -450,3 +460,8 @@ export default function AdminBookings() {
     </AdminLayout>
   );
 }
+
+
+
+
+

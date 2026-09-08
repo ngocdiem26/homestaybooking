@@ -1,3 +1,4 @@
+
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -7,6 +8,7 @@ import {
   FaCamera,
   FaCar,
   FaCheckCircle,
+  FaChevronDown,
   FaCouch,
   FaEye,
   FaFileAlt,
@@ -15,11 +17,8 @@ import {
   FaMapMarkerAlt,
   FaPen,
   FaPlus,
-  FaSearch,
   FaShieldAlt,
-  FaSlidersH,
   FaSoap,
-  FaSyncAlt,
   FaTimes,
   FaToggleOff,
   FaToggleOn,
@@ -33,6 +32,9 @@ import {
 import HostLayout from '../../layouts/HostLayout';
 import ModalPortal from '../../components/common/ModalPortal';
 import Pagination from '../../components/common/Pagination';
+import ManagementBackButton from '../../components/common/ManagementBackButton';
+import ManagementHeaderRow from '../../components/common/ManagementHeaderRow';
+import ManagementToolbar from '../../components/common/ManagementToolbar';
 import { PRESET_AMENITIES, PRESET_RULES, PRESET_SERVICES } from '../../data/hostHomestayData';
 import { VIETNAM_CITIES, getProvinceByCity } from '../../data/vietnamCities';
 import { useHostHomestays } from '../../hooks/useHostHomestays';
@@ -46,7 +48,42 @@ const amenityIcons = {
   TV: FaTv,
 };
 function formatCurrency(value) {
-  return new Intl.NumberFormat('vi-VN').format(Number(value || 0)) + 'd';
+  return new Intl.NumberFormat('vi-VN').format(Number(value || 0)) + 'đ';
+}
+
+const SERVICE_PRICING_UNITS = [
+  { value: 'PER_DAY', label: 'Theo ngày', shortLabel: 'ngày' },
+  { value: 'PER_USE', label: 'Theo lần', shortLabel: 'lần' },
+];
+
+function getDefaultPricingUnitByServiceName(name = '') {
+  const normalizedName = String(name).trim().toLowerCase();
+
+  if (normalizedName.includes('thuê xe máy') || normalizedName.includes('dọn phòng')) {
+    return 'PER_DAY';
+  }
+
+  if (
+    normalizedName.includes('bbq') ||
+    normalizedName.includes('đưa đón') ||
+    normalizedName.includes('giặt sấy')
+  ) {
+    return 'PER_USE';
+  }
+
+  return 'PER_DAY';
+}
+
+function getServicePricingUnit(service = {}) {
+  return (
+    service.pricingUnit ||
+    service.pricing_unit ||
+    getDefaultPricingUnitByServiceName(service.name || service.serviceName)
+  );
+}
+
+function getPricingUnitLabel(unit) {
+  return SERVICE_PRICING_UNITS.find((item) => item.value === unit)?.shortLabel || 'ngày';
 }
 function normalizeMainImages(images = []) {
   if (images.length === 0) return [];
@@ -62,6 +99,8 @@ function normalizeMainImages(images = []) {
 
 export default function HomestayManagement() {
   const navigate = useNavigate();
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const {
     addAmenity,
@@ -79,6 +118,9 @@ export default function HomestayManagement() {
     deleteImage,
     deleteRule,
     deleteService,
+    dateFilter,
+    dateFrom,
+    dateTo,
     detailHomestay,
     editingHomestay,
     filteredHomestays,
@@ -105,6 +147,9 @@ export default function HomestayManagement() {
     setConfigTab,
     setCurrentPage,
     setDetailHomestay,
+    setDateFilter,
+    setDateFrom,
+    setDateTo,
     setFormFields,
     setMainImage,
     setNewAmenityText,
@@ -118,17 +163,23 @@ export default function HomestayManagement() {
     totalPages,
   } = useHostHomestays();
 
+  const confirmDeleteHomestay = async () => {
+    if (!deleteTarget || isDeleting) return;
+
+    setIsDeleting(true);
+    try {
+      await deleteHomestay(deleteTarget.id, { skipConfirm: true });
+      setDeleteTarget(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <HostLayout>
-      <div className="space-y-5 animate-fade-in text-left text-sm -mt-6">
-        <button
-          className="inline-flex h-10 items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-xs font-black text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-[#2C3E2B]"
-          onClick={() => navigate('/host')}
-          type="button"
-        >
-          &lt; Về bảng điều khiển
-        </button>
-        <div className="bg-white p-5 rounded-2xl border border-gray-200/60 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="space-y-4 animate-fade-in text-left text-sm">
+        <ManagementHeaderRow backButton={<ManagementBackButton onClick={() => navigate('/host')} />}>
+          <div className="bg-white p-5 rounded-2xl border border-gray-200/60 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-0.5">
             <p className="text-[11px] font-bold uppercase tracking-widest text-[#6E473B]">Bảng điều khiển</p>
             <h2 className="font-serif text-2xl md:text-3xl font-bold text-[#2C1E15]">Quản lý Homestay</h2>
@@ -146,39 +197,41 @@ export default function HomestayManagement() {
             Thêm Homestay mới
           </button>
         </div>
+        </ManagementHeaderRow>
 
-        <div className="bg-white p-4 rounded-2xl border border-gray-200/60 shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="inline-flex items-center gap-2 text-xs font-bold text-gray-500">
-              <FaSlidersH />
-              Lọc:
-            </span>
-            <FilterSelect label="Thành phố" value={cityFilter} onChange={setCity} options={['All', ...VIETNAM_CITIES]} />
-            <FilterSelect label="Trạng thái" value={statusFilter} onChange={setStatus} options={['All', 'Đang hoạt động', 'Chờ duyệt']} />
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 flex-1 xl:max-w-xl">
-            <div className="bg-white px-4 h-11 rounded-xl border border-gray-200/80 shadow-sm flex items-center flex-1 focus-within:border-[#2C3E2B]/50 transition">
-              <FaSearch className="text-gray-400 mr-2.5" />
-              <input
-                value={searchTerm}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Tìm tên, mã homestay..."
-                className="w-full bg-transparent border-none text-sm text-gray-800 focus:outline-none placeholder-gray-400 font-medium"
-                type="text"
-              />
-            </div>
-            <button
-              onClick={resetFilters}
-              className="inline-flex items-center justify-center gap-2 text-xs text-gray-500 hover:text-[#6E473B] font-bold px-4 h-11 rounded-xl bg-white border border-gray-200/80 shadow-sm hover:shadow transition active:scale-95"
-              type="button"
-            >
-              <FaSyncAlt />
-              Làm mới
-            </button>
-          </div>
-        </div>
-
+        <ManagementToolbar
+          filters={[
+            {
+              label: 'Thành phố',
+              value: cityFilter,
+              onChange: setCity,
+              options: [
+                { value: 'All', label: 'Tất cả thành phố' },
+                ...VIETNAM_CITIES.map((city) => ({ value: city, label: city })),
+              ],
+            },
+            {
+              label: 'Trạng thái',
+              value: statusFilter,
+              onChange: setStatus,
+              options: [
+                { value: 'All', label: `Tất cả (${homestays.length})` },
+                { value: 'Đang hoạt động', label: 'Đang hoạt động' },
+                { value: 'Chờ duyệt', label: 'Chờ duyệt' },
+              ],
+            },
+          ]}
+          dateFilter={dateFilter}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateFilterChange={setDateFilter}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
+          onReset={resetFilters}
+          searchPlaceholder="Tìm tên, mã homestay, địa chỉ..."
+          searchValue={searchTerm}
+          onSearchChange={setSearch}
+        />
         {(loading || error) && (
           <div className={
             'rounded-xl border px-4 py-3 text-sm font-semibold ' +
@@ -190,12 +243,13 @@ export default function HomestayManagement() {
           </div>
         )}
 
-        <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1080px] border-collapse text-left text-base">
+            <table className="w-full min-w-[1160px] border-collapse text-left text-base">
               <thead>
                 <tr className="bg-gray-50/70 border-b border-gray-200/60 text-gray-500 font-bold text-xs uppercase tracking-wider">
-                  <th className="px-2 py-2.5">Tên & mã</th>
+                  <th className="px-2 py-2.5 text-center w-[90px]">Mã Homestay</th>
+                  <th className="px-2 py-2.5">Tên Homestay</th>
                   <th className="px-2 py-2.5">Địa điểm</th>
                   <th className="px-2 py-2.5">Giá / đêm</th>
                   <th className="px-2 py-2.5 text-center">Khách</th>
@@ -217,13 +271,13 @@ export default function HomestayManagement() {
                       key={homestay.id}
                       onOpenConfig={(tab) => openConfig(homestay, tab)}
                       onView={() => setDetailHomestay(homestay)}
-                      onDelete={() => deleteHomestay(homestay.id)}
+                      onDelete={() => setDeleteTarget(homestay)}
                       onEdit={() => openEdit(homestay)}
                     />
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="12" className="p-8 text-center text-gray-400 italic">
+                    <td colSpan="13" className="p-8 text-center text-gray-400 italic">
                       Không tìm thấy homestay nào.
                     </td>
                   </tr>
@@ -286,17 +340,127 @@ export default function HomestayManagement() {
           toggleService={toggleService}
         />
       )}
+
+      {deleteTarget && (
+        <DeleteHomestayModal
+          homestay={deleteTarget}
+          isDeleting={isDeleting}
+          onCancel={() => !isDeleting && setDeleteTarget(null)}
+          onConfirm={confirmDeleteHomestay}
+        />
+      )}
     </HostLayout>
+  );
+}
+
+function DeleteHomestayModal({ homestay, isDeleting, onCancel, onConfirm }) {
+  return (
+    <ModalPortal>
+      <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" onMouseDown={onCancel}>
+        <div
+          className="w-full max-w-lg overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)]"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <div className="flex items-start gap-4 border-b border-rose-100 bg-gradient-to-r from-rose-50 to-white px-6 py-5">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-rose-100 bg-rose-100 text-xl text-rose-600 shadow-sm">
+              <FaTrashAlt />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-rose-500">Xác nhận thao tác</p>
+              <h3 className="mt-1 font-classic text-2xl font-black text-[#2C1E15]">Xóa homestay?</h3>
+              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">Hành động này sẽ xóa homestay khỏi danh sách quản lý. Vui lòng kiểm tra kỹ trước khi tiếp tục.</p>
+            </div>
+            <button
+              aria-label="Đóng"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50"
+              disabled={isDeleting}
+              onClick={onCancel}
+              type="button"
+            >
+              <FaTimes />
+            </button>
+          </div>
+
+          <div className="space-y-4 px-6 py-5">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.07)]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-base font-black text-[#2C1E15]">{homestay.name}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">{homestay.address || homestay.city}</p>
+                </div>
+                <span className="shrink-0 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 font-mono text-xs font-black text-blue-600">{homestay.id}</span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold leading-6 text-rose-700">
+              <span className="font-black">Lưu ý:</span> chỉ xác nhận xóa khi bạn chắc chắn không còn cần homestay này trong khu vực quản lý.
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
+            <button
+              className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-black text-slate-600 shadow-sm transition hover:bg-slate-50"
+              disabled={isDeleting}
+              onClick={onCancel}
+              type="button"
+            >
+              Hủy
+            </button>
+            <button
+              className="inline-flex h-11 min-w-36 items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 text-sm font-black text-white shadow-md shadow-rose-600/20 transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isDeleting}
+              onClick={onConfirm}
+              type="button"
+            >
+              <FaTrashAlt />
+              {isDeleting ? 'Đang xóa...' : 'Xóa homestay'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </ModalPortal>
   );
 }
 
 function HomestayRow({ homestay, onDelete, onEdit, onOpenConfig, onView }) {
   return (
     <tr className="hover:bg-gray-50/40 transition">
+      <td className="px-2 py-3 text-center">
+        <span
+          className="
+            inline-flex
+            min-w-[50px]
+            items-center
+            justify-center
+            rounded-full
+            border
+            border-blue-200
+            bg-blue-50
+            px-3
+            py-1.5
+            font-mono
+            text-xs
+            font-black
+            tracking-wide
+            text-blue-600
+            shadow-sm
+            transition-all
+            duration-200
+            hover:border-blue-300
+            hover:bg-blue-100
+            hover:text-blue-700
+          "
+        >
+          {String(
+            homestay.id ??
+              homestay.homeId ??
+              '',
+          ).padStart(3, '0')}
+        </span>
+      </td>
       <td className="px-2 py-3">
         <div>
           <p className="text-gray-900 font-bold text-base leading-tight max-w-[180px]">{homestay.name}</p>
-          <p className="text-xs text-[#6E473B] font-mono mt-1">{homestay.id}</p>
         </div>
       </td>
       <td className="px-2 py-3 text-gray-500 max-w-[120px] truncate font-medium">
@@ -376,54 +540,55 @@ function SmallIconButton({ children, color, label, onClick, text }) {
   );
 }
 
-function FilterSelect({ label, onChange, options, value }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const displayValue = value === 'All' ? 'Tất cả' : value;
+// function FilterSelect({ label, onChange, options, value }) {
+//   const [isOpen, setIsOpen] = useState(false);
+//   const displayValue = value === 'All' ? 'Tất cả' : value;
 
-  const chooseOption = (option) => {
-    onChange(option);
-    setIsOpen(false);
-  };
+//   const chooseOption = (option) => {
+//     onChange(option);
+//     setIsOpen(false);
+//   };
 
-  return (
-    <div className="relative inline-flex h-10 items-center gap-2 rounded-xl bg-[#F4F1EA] border border-gray-200 px-3 text-xs font-bold text-gray-400">
-      <span>{label}:</span>
-      <button
-        className="inline-flex min-w-28 items-center justify-between gap-2 text-[#2C3E2B] font-black outline-none"
-        onClick={() => setIsOpen((current) => !current)}
-        type="button"
-      >
-        <span className="truncate">{displayValue}</span>
-        <span className={(isOpen ? 'rotate-180 ' : '') + 'text-[10px] transition'}>?</span>
-      </button>
+//   return (
+//     <div className="relative inline-flex h-10 items-center gap-2 rounded-xl bg-[#F4F1EA] border border-gray-200 px-3 text-xs font-bold text-gray-400">
+//       <span>{label}:</span>
+//       <button
+//         className="inline-flex min-w-28 items-center justify-between gap-2 text-[#2C3E2B] font-black outline-none"
+//         onClick={() => setIsOpen((current) => !current)}
+//         type="button"
+//       >
+//         <span className="truncate">{displayValue}</span>
+//         <FaChevronDown className={(isOpen ? 'rotate-180 ' : '') + 'text-[10px] transition'} />
+//       </button>
 
-      {isOpen && (
-        <div className="absolute left-0 top-12 z-40 w-64 max-h-72 overflow-y-auto rounded-2xl border border-gray-200 bg-white p-1.5 shadow-2xl">
-          {options.map((option) => {
-            const optionLabel = option === 'All' ? 'Tất cả' : option;
-            const isSelected = option === value;
+//       {isOpen && (
+//         <div className="absolute left-0 top-12 z-40 w-64 max-h-72 overflow-y-auto rounded-2xl border border-gray-200 bg-white p-1.5 shadow-2xl">
+//           {options.map((option) => {
+//             const optionLabel = option === 'All' ? 'Tất cả' : option;
+//             const isSelected = option === value;
 
-            return (
-              <button
-                className={(isSelected ? 'bg-[#2C3E2B] text-white' : 'text-gray-600 hover:bg-[#F4F1EA]') + ' w-full rounded-xl px-3 py-2 text-left text-xs font-bold transition'}
-                key={option}
-                onClick={() => chooseOption(option)}
-                type="button"
-              >
-                {optionLabel}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
+//             return (
+//               <button
+//                 className={(isSelected ? 'bg-[#2C3E2B] text-white' : 'text-gray-600 hover:bg-[#F4F1EA]') + ' w-full rounded-xl px-3 py-2 text-left text-xs font-bold transition'}
+//                 key={option}
+//                 onClick={() => chooseOption(option)}
+//                 type="button"
+//               >
+//                 {optionLabel}
+//               </button>
+//             );
+//           })}
+//         </div>
+//       )}
+//     </div>
+//   );
+// }
 
 function HomestayDetailModal({ homestay, onClose }) {
-  const images = homestay.imagesẽ.length ? homestay.images : [];
+  const images = homestay.images?.length ? homestay.images : [];
   const firstMainIndex = Math.max(0, images.findIndex((image) => image.isMain));
   const [activeIndex, setActiveIndex] = useState(firstMainIndex);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const activeImage = images[activeIndex] || images[0];
   const hasMultipleImages = images.length > 1;
 
@@ -434,109 +599,213 @@ function HomestayDetailModal({ homestay, onClose }) {
 
   return (
     <ModalPortal>
-      <div className="fixed inset-0 z-[100] bg-black/55 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
-        <div className="w-full max-w-4xl max-h-[92vh] bg-white rounded-3xl shadow-2xl border border-white/70 overflow-hidden flex flex-col">
-          <div className="px-5 sm:px-6 py-4 bg-[#202c3c] text-white flex items-start justify-between gap-4 shrink-0">
+      <div
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/65 p-3 backdrop-blur-sm sm:p-5"
+        onMouseDown={onClose}
+      >
+        <div
+          className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)]"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <div className="flex shrink-0 items-start justify-between gap-4 bg-[#202c3c] px-6 py-5 text-white sm:px-7">
             <div className="min-w-0">
-              <p className="text-[11px] font-mono text-gray-300">{homestay.id}</p>
-              <h3 className="font-serif text-xl sm:text-2xl font-bold truncate">{homestay.name}</h3>
+              <div className="mb-1.5 flex items-center gap-2">
+                <span className="rounded-full border border-white/15 bg-white/10 px-2.5 py-1 font-mono text-[11px] font-black tracking-wide text-white/80">
+                  {homestay.id}
+                </span>
+                <span className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-200">Chi tiết homestay</span>
+              </div>
+              <h3 className="font-classic truncate text-2xl font-black leading-tight sm:text-3xl">{homestay.name}</h3>
+              <p className="mt-1.5 text-sm font-semibold text-white/65">Xem thông tin, hình ảnh và cấu trúc lưu trú.</p>
             </div>
-            <button className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center shrink-0 transition" onClick={onClose} type="button">
+            <button
+              aria-label="Đóng"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/10 text-lg text-white shadow-sm transition hover:bg-white/20"
+              onClick={onClose}
+              type="button"
+            >
               <FaTimes />
             </button>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5">
-            <div className="space-y-3">
-              {activeImage ? (
-                <div className="relative h-44 sm:h-56 md:h-64 w-full rounded-2xl overflow-hidden border border-gray-100 shadow-sm bg-gray-100">
-                  <img alt={homestay.name} className="w-full h-full object-cover" src={activeImage.url} />
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto bg-slate-50/70 p-4 sm:p-6">
+            <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
+              <div className="border-b border-slate-100 px-5 py-4">
+                <h4 className="font-classic text-xl font-black text-[#2C1E15]">Hình ảnh homestay</h4>
+                <p className="mt-1 text-xs font-semibold text-slate-500">Bấm vào ảnh lớn để xem toàn màn hình.</p>
+              </div>
 
-                  {hasMultipleImages && (
-                    <>
+              <div className="space-y-4 p-4 sm:p-5">
+                {activeImage ? (
+                  <button
+                    aria-label="Xem ảnh lớn"
+                    className="group relative flex h-[300px] w-full items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-inner sm:h-[380px]"
+                    onClick={() => setIsLightboxOpen(true)}
+                    type="button"
+                  >
+                    <img
+                      alt={homestay.name}
+                      className="h-full w-full object-contain transition duration-300 group-hover:scale-[1.01]"
+                      src={activeImage.url}
+                    />
+
+                    <div className="absolute left-3 top-3 rounded-full bg-black/65 px-3 py-1.5 text-xs font-black text-white shadow-lg">
+                      {activeIndex + 1}/{images.length}
+                    </div>
+                    {activeImage.isMain && (
+                      <div className="absolute right-3 top-3 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-black text-white shadow-lg">
+                        Ảnh chính
+                      </div>
+                    )}
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/65 px-4 py-2 text-xs font-black text-white opacity-0 shadow-xl transition group-hover:opacity-100">
+                      <i className="fa-solid fa-expand mr-2"></i>
+                      Bấm để xem ảnh lớn
+                    </div>
+                    <div className="absolute bottom-3 right-3 rounded-xl bg-[#2C1E15]/90 px-3 py-1.5 text-xs font-black text-white shadow-lg">
+                      {formatCurrency(homestay.price)}/đêm
+                    </div>
+
+                    {hasMultipleImages && (
+                      <>
+                        <span
+                          aria-hidden="true"
+                          className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/55 text-white shadow-lg"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            changeImage(activeIndex - 1);
+                          }}
+                        >
+                          <i className="fa-solid fa-chevron-left text-sm"></i>
+                        </span>
+                        <span
+                          aria-hidden="true"
+                          className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/55 text-white shadow-lg"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            changeImage(activeIndex + 1);
+                          }}
+                        >
+                          <i className="fa-solid fa-chevron-right text-sm"></i>
+                        </span>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-sm font-bold text-slate-400">
+                    Chưa có ảnh homestay
+                  </div>
+                )}
+
+                {images.length > 0 && (
+                  <div className="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:thin]">
+                    {images.map((image, index) => (
                       <button
-                        aria-label="ảnh tru?c"
-                        className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/55 hover:bg-black/75 text-white border border-white/20 shadow-lg flex items-center justify-center transition"
-                        onClick={() => changeImage(activeIndex - 1)}
+                        aria-label={'Xem ảnh ' + (index + 1)}
+                        className={
+                          'relative h-20 w-28 shrink-0 overflow-hidden rounded-xl border-2 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ' +
+                          (index === activeIndex
+                            ? 'border-[#2C3E2B] ring-2 ring-[#2C3E2B]/10'
+                            : 'border-slate-200 hover:border-slate-300')
+                        }
+                        key={(image.url || 'image') + '-' + index}
+                        onClick={() => setActiveIndex(index)}
                         type="button"
                       >
-                        <i className="fa-solid fa-chevron-left text-sm"></i>
+                        <img alt={homestay.name + ' ' + (index + 1)} className="h-full w-full object-cover" src={image.url} />
+                        {image.isMain && <span className="absolute bottom-1 left-1 rounded-md bg-emerald-600 px-1.5 py-0.5 text-[9px] font-black text-white">Chính</span>}
                       </button>
-                      <button
-                        aria-label="ảnh sau"
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/55 hover:bg-black/75 text-white border border-white/20 shadow-lg flex items-center justify-center transition"
-                        onClick={() => changeImage(activeIndex + 1)}
-                        type="button"
-                      >
-                        <i className="fa-solid fa-chevron-right text-sm"></i>
-                      </button>
-                    </>
-                  )}
-
-                  <div className="absolute top-3 left-3 bg-black/60 text-white px-3 py-1 rounded-full text-xs font-bold">
-                    {activeIndex + 1}/{images.length}
+                    ))}
                   </div>
-                  <div className="absolute bottom-3 right-3 bg-[#2C1E15]/85 text-white px-3 py-1 rounded-lg text-xs font-bold">
-                    {formatCurrency(homestay.price)}/đêm
-                  </div>
-                </div>
-              ) : (
-                <div className="h-44 sm:h-56 rounded-2xl bg-[#F4F1EA] border border-dashed border-gray-300 flex items-center justify-center text-sm font-bold text-gray-400">
-                  Chưa có ảnh homestay
-                </div>
-              )}
+                )}
+              </div>
+            </section>
 
-              {hasMultipleImages && (
-                <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
-                  {images.map((image, index) => (
-                    <button
-                      aria-label={'Xem ảnh ' + (index + 1)}
-                      className={
-                        'w-20 h-14 rounded-xl overflow-hidden border-2 shrink-0 transition bg-gray-100 ' +
-                        (index === activeIndex
-                          ? 'border-[#2C3E2B] shadow-md opacity-100'
-                          : 'border-transparent opacity-70 hover:opacity-100')
-                      }
-                      key={(image.url || 'image') + '-' + index}
-                      onClick={() => changeImage(index)}
-                      type="button"
-                    >
-                      <img alt={homestay.name + ' ' + (index + 1)} className="w-full h-full object-cover" src={image.url} />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-              <DetailItem label="Địa chỉ" value={homestay.address} />
-              <DetailItem label="Thành phố" value={homestay.city} />
-              <DetailItem label="Giá mỗi đêm" value={formatCurrency(homestay.price)} />
-              <DetailItem label="Trạng thái" value={homestay.status} />
-              <DetailItem label="Sức chứa" value={homestay.guests + ' khách'} />
-              <DetailItem label="Phòng ngủ" value={homestay.bedrooms + ' phòng'} />
-              <DetailItem label="WC" value={homestay.bathrooms + ' phòng'} />
-              <DetailItem label="Bếp" value={homestay.kitchen + ' bếp'} />
-              <DetailItem label="Phòng khách" value={homestay.livingRoom + ' phòng'} />
-              <DetailItem label="Giường" value={homestay.beds + ' giường'} />
-              <DetailItem label="Check-in" value={homestay.checkinTime || '14:00'} />
-              <DetailItem label="Check-out" value={homestay.checkoutTime || '12:00'} />
-            </div>
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
+              <div className="mb-4">
+                <h4 className="font-classic text-xl font-black text-[#2C1E15]">Thông tin lưu trú</h4>
+                {/* <p className="mt-1 text-xs font-semibold text-slate-500">Các thông tin chính của homestay đang được lưu trên hệ thống.</p> */}
+              </div>
+              <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+                <DetailItem label="Địa chỉ" value={homestay.address} />
+                <DetailItem label="Thành phố" value={homestay.city} />
+                <DetailItem label="Giá mỗi đêm" value={formatCurrency(homestay.price)} />
+                <DetailItem label="Trạng thái" value={homestay.status} />
+                <DetailItem label="Sức chứa" value={homestay.guests + ' khách'} />
+                <DetailItem label="Phòng ngủ" value={homestay.bedrooms + ' phòng'} />
+                <DetailItem label="WC" value={homestay.bathrooms + ' phòng'} />
+                <DetailItem label="Bếp" value={homestay.kitchen + ' bếp'} />
+                <DetailItem label="Phòng khách" value={homestay.livingRoom + ' phòng'} />
+                <DetailItem label="Giường" value={homestay.beds + ' giường'} />
+                <DetailItem
+                  label="Thời gian nhận phòng"
+                  value={`${homestay.checkinTime || '14:00'} - ${homestay.checkinEndTime || '20:00'}`}
+                />
+                <DetailItem
+                  label="Thời gian trả phòng"
+                  value={`${homestay.checkoutStartTime || '08:00'} - ${homestay.checkoutTime || '12:00'}`}
+                />
+              </div>
+            </section>
 
             {homestay.description && (
-              <div className="rounded-2xl bg-white border border-gray-200 px-4 py-3 shadow-sm">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Mô tả</p>
-                <p className="mt-2 text-sm font-semibold text-[#2C1E15] leading-relaxed">{homestay.description}</p>
-              </div>
+              <section className="rounded-3xl border border-slate-200 bg-white px-5 py-4 shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
+                <p className=" font-classic text-xl font-black text-[#2C1E15]">Mô tả</p>
+                <p className="mt-2 text-sm font-semibold leading-7 text-[#2C1E15]">{homestay.description}</p>
+              </section>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-bold">
-              <SummaryBox label="Ảnh" value={homestay.images.length} />
-              <SummaryBox label="Tiện nghi" value={homestay.amenities.length} />
-              <SummaryBox label="Dịch vụ" value={homestay.services.length} />
+            <div className="grid grid-cols-1 gap-3 text-xs font-bold sm:grid-cols-3">
+              <SummaryBox label="Ảnh" value={homestay.images?.length || 0} />
+              <SummaryBox label="Tiện nghi" value={homestay.amenities?.length || 0} />
+              <SummaryBox label="Dịch vụ" value={homestay.services?.length || 0} />
             </div>
           </div>
         </div>
+
+        {isLightboxOpen && activeImage && (
+          <div
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 p-4"
+            onMouseDown={(event) => {
+              event.stopPropagation();
+              setIsLightboxOpen(false);
+            }}
+          >
+            <div className="relative flex h-full w-full max-w-7xl items-center justify-center" onMouseDown={(event) => event.stopPropagation()}>
+              <img alt={homestay.name} className="max-h-[90vh] max-w-full rounded-2xl object-contain shadow-2xl" src={activeImage.url} />
+              <button
+                aria-label="Đóng ảnh lớn"
+                className="absolute right-2 top-2 flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-black/60 text-xl text-white shadow-xl transition hover:bg-black/80"
+                onClick={() => setIsLightboxOpen(false)}
+                type="button"
+              >
+                <FaTimes />
+              </button>
+              {hasMultipleImages && (
+                <>
+                  <button
+                    aria-label="Ảnh trước"
+                    className="absolute left-2 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white shadow-xl transition hover:bg-black/80"
+                    onClick={() => changeImage(activeIndex - 1)}
+                    type="button"
+                  >
+                    <i className="fa-solid fa-chevron-left"></i>
+                  </button>
+                  <button
+                    aria-label="Ảnh sau"
+                    className="absolute right-2 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white shadow-xl transition hover:bg-black/80"
+                    onClick={() => changeImage(activeIndex + 1)}
+                    type="button"
+                  >
+                    <i className="fa-solid fa-chevron-right"></i>
+                  </button>
+                </>
+              )}
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/65 px-4 py-2 text-xs font-black text-white">
+                {activeIndex + 1}/{images.length}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </ModalPortal>
   );
@@ -544,18 +813,18 @@ function HomestayDetailModal({ homestay, onClose }) {
 
 function DetailItem({ label, value }) {
   return (
-    <div className="rounded-2xl bg-[#F4F1EA] border border-gray-200 px-4 py-3 min-w-0">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400">{label}</p>
-      <p className="mt-1 font-bold text-[#2C1E15] break-words">{value}</p>
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 shadow-[0_5px_18px_rgba(15,23,42,0.06)]">
+      <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">{label}</p>
+      <p className="mt-1.5 break-words text-sm font-black leading-6 text-[#2C1E15]">{value}</p>
     </div>
   );
 }
 
 function SummaryBox({ label, value }) {
   return (
-    <div className="rounded-xl bg-white border border-gray-200 px-4 py-3 text-center shadow-sm">
-      <p className="text-gray-400 uppercase tracking-wide">{label}</p>
-      <p className="mt-1 text-lg text-[#2C3E2B]">{value}</p>
+    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-center shadow-[0_8px_24px_rgba(15,23,42,0.07)]">
+      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
+      <p className="mt-1.5 text-xl font-black text-[#2C3E2B]">{value}</p>
     </div>
   );
 }
@@ -564,41 +833,41 @@ function SummaryBox({ label, value }) {
 
 //   return (
 //     <ModalPortal>
-//       <div className="fixed inset-0 z-[100] bg-black/55 backdrop-blur-sm flex items-center justify-center p-4">
+//       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
 //         <form className="w-full max-w-5xl max-h-[92vh] bg-[#F7F3EC] rounded-3xl shadow-2xl border border-white/70 overflow-hidden flex flex-col" onSubmit={onSubmit}>
 //           <div className="px-6 py-5 bg-[#202c3c] text-white flex items-start justify-between gap-4">
 //             <div>
-//               <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#d9b18f]">{editingHomestay ? 'Cập nhật lưu trú' : 'Tạo lưu trú mới'}</p>
-//               <h3 className="font-serif text-2xl font-bold mt-1">{editingHomestay ? 'Sửa thông tin homestay' : 'Thêm homestay mới'}</h3>
-//               <p className="text-xs text-gray-300 mt-1">�i?n thông tin theo b?ng homestays: d?a chỗ, giá, sẽc chỗa, c?u trõc phòng và th?i gian nh?n/tr? phòng.</p>
+//               <p className="text-[11px] font-black uppercase tracking-[0.28em] text-amber-200">{editingHomestay ? 'Cập nhật lưu trú' : 'Tạo lưu trú mới'}</p>
+//               <h3 className="mt-1 font-serif text-3xl font-bold leading-tight">{editingHomestay ? 'Sửa thông tin homestay' : 'Thêm homestay mới'}</h3>
+//               <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-white/75">�i?n thông tin theo b?ng homestays: d?a chỗ, giá, sẽc chỗa, c?u trõc phòng và th?i gian nh?n/tr? phòng.</p>
 //             </div>
-//             <button className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center shrink-0 transition" onClick={onClose} type="button">
+//             <button className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-lg text-white transition hover:bg-white/20" onClick={onClose} type="button">
 //               <FaTimes />
 //             </button>
 //           </div>
 
 //           <div className="overflow-y-auto p-5 space-y-4">
-//             <section className="bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden">
+//             <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
 //               <SectionHeader title="Thông tin cơ bản" description="Tên, vị trí và mô tả ngắn để khách hiểu nhanh về homestay." />
 //               <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
 //                 <TextField label="Tên homestay" value={fields.name} onChange={(value) => updateField('name', value)} placeholder="VD: Nhà Gỗ Ven Hồ Tuyền Lâm" required />
 //                 <SelectField label="Tảnh / Thành phố" value={fields.city} onChange={(value) => updateField('city', value)} options={cities} required />
-//                 <TextField className="md:col-span-2" label="Địa chỉ chi ti?t" value={fields.address} onChange={(value) => updateField('address', value)} placeholder="Số nhà, đường, phường/xã, quận/huyện, thành phố, tỉnh..." required />
+//                 <TextField className="md:col-span-2" label="Địa chỉ chi tiết" value={fields.address} onChange={(value) => updateField('address', value)} placeholder="Số nhà, đường, phường/xã, quận/huyện, thành phố, tỉnh..." required />
 //                 <TextAreaField className="md:col-span-2" label="Mô tả homestay" value={fields.description} onChange={(value) => updateField('description', value)} placeholder="Không gian, phong cách, điểm nổi bật, phù hợp với nhóm khách nào..." />
 //               </div>
 //             </section>
 
-//             <section className="bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden">
+//             <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
 //               <SectionHeader title="Giá, khuyến mãi và thời gian" description="Các trường tương ứng price_per_night, discount_percent, checkin_time và checkout_time." />
 //               <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-//                 <TextField label="Giá / đêm" type="number" min="0" step="10000" value={fields.price} onChange={(value) => updateField('price', value)} suffix="d" required />
+//                 <TextField label="Giá / đêm" type="number" min="0" step="10000" value={fields.price} onChange={(value) => updateField('price', value)} suffix="đ" required />
 //                 <TextField label="Giảm giá" type="number" min="0" max="100" step="1" value={fields.discount} onChange={(value) => updateField('discount', value)} suffix="%" />
 //                 <TextField label="Check-in" type="time" value={fields.checkinTime} onChange={(value) => updateField('checkinTime', value)} required />
 //                 <TextField label="Check-out" type="time" value={fields.checkoutTime} onChange={(value) => updateField('checkoutTime', value)} required />
 //               </div>
 //             </section>
 
-//             <section className="bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden">
+//             <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
 //               <SectionHeader title="Sức chứa và cấu trúc phòng" description="Các chỉ số khách, phòng ngủ, WC, bếp, phòng khách và số giường của homestay." />
 //               <div className="p-5 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
 //                 <TextField label="Số khách" type="number" min="1" value={fields.guests} onChange={(value) => updateField('guests', value)} required />
@@ -616,8 +885,8 @@ function SummaryBox({ label, value }) {
 //           </div>
 
 //           <div className="px-6 py-4 bg-white flex justify-end gap-3 border-t border-gray-200">
-//             <button className="px-5 h-11 rounded-xl bg-white border border-gray-200 text-gray-500 text-xs font-bold shadow-sm hover:bg-gray-50 transition" onClick={onClose} type="button">H?y</button>
-//             <button className="px-6 h-11 rounded-xl bg-[#2C3E2B] hover:bg-[#223123] text-white text-xs font-bold shadow transition" type="submit">
+//             <button className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-black text-[#6C483A] shadow-sm transition hover:bg-slate-50" onClick={onClose} type="button">Hủy</button>
+//             <button className="h-11 rounded-xl bg-[#2C3E2B] px-6 text-sm font-black text-white shadow-md shadow-[#2C3E2B]/20 transition hover:bg-[#223123]" type="submit">
 //               {editingHomestay ? 'Lưu thay đổi' : 'Tạo homestay'}
 //             </button>
 //           </div>
@@ -650,6 +919,7 @@ const steps = isEditing ? editSteps : createSteps;
   const [amenityText, setAmenityText] = useState('');
   const [serviceName, setServiceName] = useState('');
   const [servicePrice, setServicePrice] = useState('');
+  const [servicePricingUnit, setServicePricingUnit] = useState('PER_DAY');
   const [serviceDescription, setServiceDescription] = useState('');
   const [ruleText, setRuleText] = useState('');
   
@@ -680,7 +950,11 @@ const steps = isEditing ? editSteps : createSteps;
       Number(fields.guests) > 0 &&
       Number(fields.beds) > 0 &&
       fields.checkinTime &&
-      fields.checkoutTime
+      fields.checkinEndTime &&
+      fields.checkoutStartTime &&
+      fields.checkoutTime &&
+      fields.checkinEndTime > fields.checkinTime &&
+      fields.checkoutTime > fields.checkoutStartTime
     );
   };
 
@@ -688,6 +962,14 @@ const steps = isEditing ? editSteps : createSteps;
     event?.preventDefault();
 
     if (stepIndex === 0 && !isBasicInfoValid()) {
+      if (fields.checkinTime && fields.checkinEndTime && fields.checkinEndTime <= fields.checkinTime) {
+        window.alert('Giờ kết thúc nhận phòng phải sau giờ bắt đầu nhận phòng.');
+        return;
+      }
+      if (fields.checkoutStartTime && fields.checkoutTime && fields.checkoutTime <= fields.checkoutStartTime) {
+        window.alert('Giờ kết thúc trả phòng phải sau giờ bắt đầu trả phòng.');
+        return;
+      }
       window.alert('Vui lòng nhập đầy đủ thông tin cơ bản trước khi tiếp tục.');
       return;
     }
@@ -708,6 +990,21 @@ const steps = isEditing ? editSteps : createSteps;
   };
 
   const handleFinalSubmit = (event) => {
+    event.preventDefault();
+
+    if (!isBasicInfoValid()) {
+      if (fields.checkinTime && fields.checkinEndTime && fields.checkinEndTime <= fields.checkinTime) {
+        window.alert('Giờ kết thúc nhận phòng phải sau giờ bắt đầu nhận phòng.');
+        return;
+      }
+      if (fields.checkoutStartTime && fields.checkoutTime && fields.checkoutTime <= fields.checkoutStartTime) {
+        window.alert('Giờ kết thúc trả phòng phải sau giờ bắt đầu trả phòng.');
+        return;
+      }
+      window.alert('Vui lòng nhập đầy đủ thông tin cơ bản trước khi lưu homestay.');
+      return;
+    }
+
     onSubmit(event, {
       images: draftImages,
       amenities: draftAmenities,
@@ -778,6 +1075,7 @@ const steps = isEditing ? editSteps : createSteps;
         name: serviceName.trim(),
         price: Number(servicePrice),
         pricePerDay: Number(servicePrice),
+        pricingUnit: servicePricingUnit,
         description: serviceDescription.trim(),
         status: 'Đang hoạt động',
       },
@@ -785,6 +1083,7 @@ const steps = isEditing ? editSteps : createSteps;
 
     setServiceName('');
     setServicePrice('');
+    setServicePricingUnit('PER_DAY');
     setServiceDescription('');
   };
 
@@ -801,8 +1100,9 @@ const steps = isEditing ? editSteps : createSteps;
       {
         id: Date.now() + Math.random(),
         name: presetService.name,
-        price: presetService.pricePerDay,
-        pricePerDay: presetService.pricePerDay,
+        price: presetService.price ?? presetService.pricePerDay,
+        pricePerDay: presetService.pricePerDay ?? presetService.price,
+          pricingUnit: getServicePricingUnit(presetService),
         description: presetService.description,
         status: 'Đang hoạt động',
         isPreset: true,
@@ -864,26 +1164,26 @@ const steps = isEditing ? editSteps : createSteps;
 
   return (
     <ModalPortal>
-      <div className="fixed inset-0 z-[100] bg-black/55 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
        <form
-          className="w-full max-w-5xl h-[90vh] bg-[#fefefd] rounded-3xl shadow-2xl border border-white/70 overflow-hidden flex flex-col"
+          className="flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)]"
           onSubmit={handleFinalSubmit}
         >
-          <div className="px-6 py-5 bg-[#58677a] text-white flex items-start justify-between gap-4 shrink-0">
+          <div className="flex shrink-0 items-start justify-between gap-4 bg-[#202c3c] px-7 py-5 text-white">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#d9b18f]">
+              <p className="text-[11px] font-black uppercase tracking-[0.28em] text-amber-200">
                 {isEditing ? 'Cập nhật lưu trú' : 'Tạo lưu trú mới'}
               </p>
-              <h3 className="font-serif text-2xl font-bold mt-1">
+              <h3 className="mt-1 font-serif text-3xl font-bold leading-tight">
                 {isEditing ? 'Sửa thông tin homestay' : 'Thêm homestay mới'}
               </h3>
-              <p className="text-xs text-gray-300 mt-1">
+              <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-white/75">
                 {isEditing ? 'Chỉ sửa thông tin cơ bản. Ảnh, tiện nghi, dịch vụ và nội quy nằm ở nhóm Cập nhật Homestay.' : 'Hoàn tất từng bước: thông tin cơ bản, ảnh, tiện nghi, dịch vụ và nội quy trước khi gửi duyệt.'}
               </p>
             </div>
 
             <button
-              className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center shrink-0 transition"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-lg text-white transition hover:bg-white/20"
               onClick={onClose}
               type="button"
             >
@@ -893,10 +1193,10 @@ const steps = isEditing ? editSteps : createSteps;
 
           {!isEditing && <WizardStepper steps={steps} currentIndex={stepIndex} />}
 
-          <div ref={bodyRef} className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
+          <div ref={bodyRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto bg-slate-50/70 p-5 sm:p-6 custom-scrollbar">
             {currentStep.key === 'basic' && (
               <>
-                <section className="bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden">
+                <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
                   <SectionHeader
                     title="Thông tin cơ bản"
                     description="Tên, vị trí và mô tả ngắn để khách hiểu nhanh về homestay."
@@ -921,7 +1221,7 @@ const steps = isEditing ? editSteps : createSteps;
 
                     <TextField
                       className="md:col-span-2"
-                      label="Địa chỉ chi ti?t"
+                      label="Địa chỉ chi tiết"
                       value={fields.address}
                       onChange={(value) => updateField('address', value)}
                       placeholder="Số nhà, đường, phường/xã, quận/huyện, thành phố, tỉnh..."
@@ -944,10 +1244,10 @@ const steps = isEditing ? editSteps : createSteps;
                   </div>
                 </section>
 
-                <section className="bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden">
+                <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
                   <SectionHeader
                     title="Giá, khuyến mãi và thời gian"
-                    description="Các trường tương ứng price_per_night, discount_percent, checkin_time và checkout_time."
+                    // description="Các trường tương ứng price_per_night, discount_percent, checkin_time và checkout_time."
                   />
 
                   <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -958,7 +1258,7 @@ const steps = isEditing ? editSteps : createSteps;
                       step="10000"
                       value={fields.price}
                       onChange={(value) => updateField('price', value)}
-                      suffix="d"
+                      suffix="đ"
                       required
                     />
 
@@ -974,31 +1274,49 @@ const steps = isEditing ? editSteps : createSteps;
                     />
 
                     <TextField
-                      label="Check-in"
+                      label="Nhận phòng từ"
                       type="time"
-                      value={fields.checkinTime}
+                      value={fields.checkinTime || '14:00'}
                       onChange={(value) => updateField('checkinTime', value)}
                       required
                     />
 
                     <TextField
-                      label="Check-out"
+                      label="Nhận phòng đến"
                       type="time"
-                      value={fields.checkoutTime}
+                      min={fields.checkinTime || undefined}
+                      value={fields.checkinEndTime || '20:00'}
+                      onChange={(value) => updateField('checkinEndTime', value)}
+                      required
+                    />
+
+                    <TextField
+                      label="Trả phòng từ"
+                      type="time"
+                      value={fields.checkoutStartTime || '08:00'}
+                      onChange={(value) => updateField('checkoutStartTime', value)}
+                      required
+                    />
+
+                    <TextField
+                      label="Trả phòng đến"
+                      type="time"
+                      min={fields.checkoutStartTime || undefined}
+                      value={fields.checkoutTime || '12:00'}
                       onChange={(value) => updateField('checkoutTime', value)}
                       required
                     />
                   </div>
                 </section>
 
-                <section className="bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden">
+                <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
                   <SectionHeader
                     title="Sức chứa và cấu trúc phòng"
-                    description="Các chỉ số khách, phòng ngủ, WC, bếp, phòng khách và số giường của homestay."
+                    // description="Các chỉ số khách, phòng ngủ, WC, bếp, phòng khách và số giường của homestay."
                   />
 
                   <div className="p-5 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                    <TextField label="Số khách" type="number" min="1" value={fields.guests} onChange={(value) => updateField('guests', value)} required />
+                    <TextField label="Số khách tối đa" type="number" min="1" value={fields.guests} onChange={(value) => updateField('guests', value)} required />
                     <TextField label="Số giường" type="number" min="1" value={fields.beds} onChange={(value) => updateField('beds', value)} required />
                     <TextField label="Phòng ngủ" type="number" min="0" value={fields.bedrooms} onChange={(value) => updateField('bedrooms', value)} required />
                     <TextField label="WC" type="number" min="0" value={fields.bathrooms} onChange={(value) => updateField('bathrooms', value)} required />
@@ -1034,9 +1352,11 @@ const steps = isEditing ? editSteps : createSteps;
                 services={draftServices}
                 serviceName={serviceName}
                 servicePrice={servicePrice}
+                servicePricingUnit={servicePricingUnit}
                 serviceDescription={serviceDescription}
                 setServiceName={setServiceName}
                 setServicePrice={setServicePrice}
+                setServicePricingUnit={setServicePricingUnit}
                 setServiceDescription={setServiceDescription}
                 addService={addDraftService}
                 togglePresetService={togglePresetService}
@@ -1068,19 +1388,19 @@ const steps = isEditing ? editSteps : createSteps;
             )}
           </div>
 
-          <div className="px-6 py-4 bg-white flex justify-between gap-3 border-t border-gray-200 shrink-0 mt-auto">
+          <div className="mt-auto flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-white px-7 py-4">
               <button
-              className="px-5 h-11 rounded-xl bg-white border border-gray-200 text-gray-500 text-xs font-bold shadow-sm hover:bg-gray-50 transition"
+              className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-black text-[#6C483A] shadow-sm transition hover:bg-slate-50"
               onClick={onClose}
               type="button"
             >
-              H?y
+              Hủy
             </button>
 
             <div className="flex gap-3">
               {stepIndex > 0 && (
                 <button
-                  className="px-5 h-11 rounded-xl bg-white border border-gray-200 text-gray-500 text-xs font-bold shadow-sm hover:bg-gray-50 transition"
+                  className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-black text-[#6C483A] shadow-sm transition hover:bg-slate-50"
                   onClick={goBack}
                   type="button"
                 >
@@ -1090,7 +1410,7 @@ const steps = isEditing ? editSteps : createSteps;
 
               {stepIndex < steps.length - 1 ? (
                 <button
-                className="px-6 h-11 rounded-xl bg-[#2C3E2B] hover:bg-[#223123] text-white text-xs font-bold shadow transition"
+                className="h-11 rounded-xl bg-[#2C3E2B] px-6 text-sm font-black text-white shadow-md shadow-[#2C3E2B]/20 transition hover:bg-[#223123]"
                 onClick={goNext}
                 type="button"
               >
@@ -1098,7 +1418,7 @@ const steps = isEditing ? editSteps : createSteps;
               </button>
               ) : (
                 <button
-                  className="px-6 h-11 rounded-xl bg-[#2C3E2B] hover:bg-[#223123] text-white text-xs font-bold shadow transition"
+                  className="h-11 rounded-xl bg-[#2C3E2B] px-6 text-sm font-black text-white shadow-md shadow-[#2C3E2B]/20 transition hover:bg-[#223123]"
                   type="submit"
                 >
                   {isEditing ? 'Lưu thay đổi' : 'Xác nhận đăng ký'}
@@ -1114,16 +1434,16 @@ const steps = isEditing ? editSteps : createSteps;
 
 function SectionHeader({ description, title }) {
   return (
-    <div className="px-5 py-4 bg-gray-50/70 border-b border-gray-100">
-      <h4 className="font-serif text-xl font-bold text-[#2C1E15]">{title}</h4>
-      <p className="mt-1 text-xs font-semibold text-gray-400 leading-relaxed">{description}</p>
+    <div className="border-b border-slate-100 bg-white px-5 py-4">
+      <h4 className="font-classic text-2xl font-black leading-tight text-[#2C1E15]">{title}</h4>
+      <p className="mt-1 text-sm font-semibold leading-6 text-gray-500">{description}</p>
     </div>
   );
 }
 
 function CoordinateFields({ latitude, longitude, onChange }) {
   return (
-    <div className="md:col-span-2 rounded-2xl border border-gray-200 bg-[#F9F8F6] p-4 space-y-3">
+    <div className="md:col-span-2 space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_6px_20px_rgba(15,23,42,0.06)]">
       <div>
         <p className="text-[11px] font-black uppercase tracking-wide text-gray-500">Tọa độ homestay</p>
         <p className="mt-1 text-xs font-semibold text-gray-400">
@@ -1132,7 +1452,7 @@ function CoordinateFields({ latitude, longitude, onChange }) {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <TextField
-          label="Vi d? (latitude)"
+          label="Vĩ độ (latitude)"
           type="number"
           step="0.0000001"
           value={latitude ?? ''}
@@ -1140,7 +1460,7 @@ function CoordinateFields({ latitude, longitude, onChange }) {
           placeholder="10.0452000"
         />
         <TextField
-          label="Kinh d? (longitude)"
+          label="Kinh độ (longitude)"
           type="number"
           step="0.0000001"
           value={longitude ?? ''}
@@ -1158,7 +1478,7 @@ function TextField({ className = '', label, onChange, suffix, type = 'text', val
       <span className="text-[11px] font-black text-gray-500 uppercase tracking-wide">{label}</span>
       <div className="relative">
         <input
-          className={`w-full h-11 rounded-xl border border-gray-200 bg-white px-4 ${suffix ? 'pr-10' : ''} text-sm font-bold text-gray-700 outline-none transition focus:border-[#2C3E2B] focus:ring-4 focus:ring-[#2C3E2B]/10`}
+          className={`h-12 w-full rounded-xl border border-gray-200 bg-white px-4 ${suffix ? 'pr-10' : ''} text-sm font-bold text-gray-800 shadow-sm outline-none transition placeholder:text-gray-400 focus:border-[#6C483A] focus:ring-4 focus:ring-[#6C483A]/10`}
           onChange={(event) => onChange(event.target.value)}
           type={type}
           value={value}
@@ -1188,19 +1508,19 @@ function SelectField({ className = '', label, onChange, options, value }) {
     <div className={['relative space-y-2', className].filter(Boolean).join(' ')}>
       <span className="text-[11px] font-black text-gray-500 uppercase tracking-wide">{label}</span>
       <button
-        className="w-full h-11 rounded-xl border border-gray-200 bg-white px-4 text-left text-sm font-bold text-gray-700 outline-none transition hover:border-[#2C3E2B]/40 focus:border-[#2C3E2B] focus:ring-4 focus:ring-[#2C3E2B]/10 flex items-center justify-between gap-3"
+        className="flex h-12 w-full items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 text-left text-sm font-bold text-gray-800 shadow-sm outline-none transition hover:border-[#6C483A]/40 focus:border-[#6C483A] focus:ring-4 focus:ring-[#6C483A]/10"
         onClick={() => setIsOpen((current) => !current)}
         type="button"
       >
         <span className="truncate">{value || 'Chọn thành phố'}</span>
-        <span className={(isOpen ? 'rotate-180 ' : '') + 'text-xs text-gray-400 transition'}>?</span>
+        <FaChevronDown className={(isOpen ? 'rotate-180 ' : '') + 'text-xs text-gray-400 transition'} />
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 right-0 top-[74px] z-50 rounded-2xl border border-gray-200 bg-white p-2 shadow-2xl">
+        <div className="absolute left-0 right-0 top-[78px] z-50 rounded-2xl border border-gray-200 bg-white p-2 shadow-2xl shadow-black/15">
           <input
             autoFocus
-            className="mb-2 h-10 w-full rounded-xl border border-gray-200 px-3 text-sm font-semibold outline-none focus:border-[#2C3E2B]"
+            className="mb-2 h-10 w-full rounded-xl border border-gray-200 px-3 text-sm font-semibold outline-none focus:border-[#6C483A] focus:ring-2 focus:ring-[#6C483A]/10"
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Tìm thành phố..."
             type="text"
@@ -1232,7 +1552,7 @@ function TextAreaField({ className = '', label, onChange, value, ...props }) {
     <label className={`space-y-2 ${className}`}>
       <span className="text-[11px] font-black text-gray-500 uppercase tracking-wide">{label}</span>
       <textarea
-        className="w-full min-h-24 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 outline-none transition resize-none focus:border-[#2C3E2B] focus:ring-4 focus:ring-[#2C3E2B]/10"
+        className="min-h-24 w-full resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 shadow-sm outline-none transition placeholder:text-gray-400 focus:border-[#6C483A] focus:ring-4 focus:ring-[#6C483A]/10"
         onChange={(event) => onChange(event.target.value)}
         value={value}
         {...props}
@@ -1255,6 +1575,7 @@ function ConfigModal(props) {
   const [amenityText, setAmenityText] = useState('');
   const [serviceName, setServiceName] = useState('');
   const [servicePrice, setServicePrice] = useState('');
+  const [servicePricingUnit, setServicePricingUnit] = useState('PER_DAY');
   const [serviceDescription, setServiceDescription] = useState('');
   const [ruleText, setRuleText] = useState('');
   const activeTab = props.activeTab || 'images';
@@ -1313,12 +1634,14 @@ function ConfigModal(props) {
         name: serviceName.trim(),
         price: Number(servicePrice),
         pricePerDay: Number(servicePrice),
+        pricingUnit: servicePricingUnit,
         description: serviceDescription.trim(),
         status: 'Đang hoạt động',
       },
     ]);
     setServiceName('');
     setServicePrice('');
+    setServicePricingUnit('PER_DAY');
     setServiceDescription('');
   };
 
@@ -1331,8 +1654,9 @@ function ConfigModal(props) {
         {
           id: Date.now() + Math.random(),
           name: presetService.name,
-          price: presetService.pricePerDay,
-          pricePerDay: presetService.pricePerDay,
+          price: presetService.price ?? presetService.pricePerDay,
+          pricePerDay: presetService.pricePerDay ?? presetService.price,
+        pricingUnit: getServicePricingUnit(presetService),
           description: presetService.description,
           status: 'Đang hoạt động',
           isPreset: true,
@@ -1383,20 +1707,20 @@ function ConfigModal(props) {
 
   return (
     <ModalPortal>
-      <div className="fixed inset-0 z-[100] bg-black/55 backdrop-blur-sm flex items-center justify-center p-4">
-        <div className="w-full max-w-6xl h-[90vh] overflow-hidden bg-[#fefefd] rounded-3xl shadow-2xl border border-white/70 flex flex-col">
-          <div className="px-6 py-5 bg-[#58677a] text-white flex items-start justify-between gap-4 shrink-0">
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+        <div className="flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)]">
+          <div className="flex shrink-0 items-start justify-between gap-4 bg-[#202c3c] px-7 py-5 text-white">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#d9b18f]">Cập nhật homestay</p>
-              <h3 className="font-serif text-2xl font-bold mt-1">{props.homestay.name}</h3>
-              <p className="text-xs text-gray-300 mt-1">Chỉnh ảnh, tiện nghi, dịch vụ và nội quy rồi bấm lưu để cập nhật vào database.</p>
+              <p className="text-[11px] font-black uppercase tracking-[0.28em] text-amber-200">Cập nhật homestay</p>
+              <h3 className="mt-1 font-serif text-3xl font-bold leading-tight">{props.homestay.name}</h3>
+              <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-white/75">Chỉnh ảnh, tiện nghi, dịch vụ và nội quy rồi bấm lưu để cập nhật vào database.</p>
             </div>
-            <button className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center shrink-0 transition" onClick={props.onClose} type="button">
+            <button className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-lg text-white transition hover:bg-white/20" onClick={props.onClose} type="button">
               <FaTimes />
             </button>
           </div>
 
-          <div className="px-5 py-4 bg-white border-b border-gray-200 flex gap-2 overflow-x-auto shrink-0">
+          <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-slate-200 bg-white px-5 py-4">
             {tabs.map((tab) => (
               <button
                 className={
@@ -1415,7 +1739,7 @@ function ConfigModal(props) {
             ))}
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto bg-slate-50/70 p-5 sm:p-6 custom-scrollbar">
             {activeTab === 'images' && (
               <ImageWizardStep images={draftImages} addImage={addDraftImage} deleteImage={deleteDraftImage} setMainImage={setMainDraftImage} />
             )}
@@ -1434,9 +1758,11 @@ function ConfigModal(props) {
                 services={draftServices}
                 serviceName={serviceName}
                 servicePrice={servicePrice}
+                servicePricingUnit={servicePricingUnit}
                 serviceDescription={serviceDescription}
                 setServiceName={setServiceName}
                 setServicePrice={setServicePrice}
+                setServicePricingUnit={setServicePricingUnit}
                 setServiceDescription={setServiceDescription}
                 addService={addDraftService}
                 togglePresetService={togglePresetService}
@@ -1456,11 +1782,11 @@ function ConfigModal(props) {
             )}
           </div>
 
-          <div className="px-6 py-4 bg-white flex justify-end gap-3 border-t border-gray-200 shrink-0">
-            <button className="px-5 h-11 rounded-xl bg-white border border-gray-200 text-gray-500 text-xs font-bold shadow-sm hover:bg-gray-50 transition" onClick={props.onClose} type="button">
-              H?y
+          <div className="flex shrink-0 justify-end gap-3 border-t border-slate-200 bg-white px-7 py-4">
+            <button className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-black text-[#6C483A] shadow-sm transition hover:bg-slate-50" onClick={props.onClose} type="button">
+              Hủy
             </button>
-            <button className="px-6 h-11 rounded-xl bg-[#2C3E2B] hover:bg-[#223123] text-white text-xs font-bold shadow transition" onClick={handleSave} type="button">
+            <button className="h-11 rounded-xl bg-[#2C3E2B] px-6 text-sm font-black text-white shadow-md shadow-[#2C3E2B]/20 transition hover:bg-[#223123]" onClick={handleSave} type="button">
               Lưu cập nhật
             </button>
           </div>
@@ -1561,116 +1887,167 @@ function WizardStepper({ currentIndex, steps }) {
 }
 function ImageWizardStep({ addImage, deleteImage, images, setMainImage }) {
   const [isDragging, setIsDragging] = useState(false);
+  const [previewIndex, setPreviewIndex] = useState(null);
+  const previewImage = previewIndex === null ? null : images[previewIndex];
 
   const handleFiles = (files) => {
     addImage(files);
   };
 
   return (
-    <section className="bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden">
-      <SectionHeader
-        title="Hình ảnh homestay"
-        description="Tải ảnh đại diện và các ảnh mô tả không gian homestay. Cần có ít nhất một ảnh trước khi tiếp tục."
-      />
+    <>
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
+        <SectionHeader
+          title="Hình ảnh homestay"
+          description="Tải ảnh rõ nét, chọn ảnh chính và bấm vào từng ảnh để xem kích thước lớn trước khi lưu."
+        />
 
-      <div className="p-5 space-y-4">
-        <label
-          className={`flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-10 text-center cursor-pointer transition ${
-            isDragging
-              ? 'border-[#2C3E2B] bg-emerald-50'
-              : 'border-gray-300 bg-gray-50 hover:bg-white'
-          }`}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setIsDragging(true);
-          }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={(event) => {
-            event.preventDefault();
-            setIsDragging(false);
-            handleFiles(event.dataTransfer.files);
-          }}
-        >
-          <div className="w-14 h-14 rounded-2xl bg-[#F4F1EA] text-[#2C3E2B] flex items-center justify-center text-xl">
-            <FaCamera />
-          </div>
-
-          <div>
-            <p className="text-sm font-black text-[#2C1E15]">
-              Tải ảnh homestay lên
-            </p>
-            <p className="text-xs font-semibold text-gray-400 mt-1">
-              Chọn ảnh từ máy hoặc kéo thả ảnh vào khu vực này
-            </p>
-          </div>
-
-          <span className="inline-flex items-center justify-center h-10 px-5 rounded-xl bg-[#2C3E2B] text-white text-xs font-bold shadow">
-            Chọn ảnh từ máy
-          </span>
-
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(event) => {
-              handleFiles(event.target.files);
-              event.target.value = '';
+        <div className="space-y-5 p-5">
+          <label
+            className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed bg-white px-6 py-8 text-center shadow-sm transition ${
+              isDragging
+                ? 'border-[#2C3E2B] ring-4 ring-[#2C3E2B]/10'
+                : 'border-slate-300 hover:border-[#2C3E2B]/50 hover:shadow-md'
+            }`}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setIsDragging(true);
             }}
-          />
-        </label>
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setIsDragging(false);
+              handleFiles(event.dataTransfer.files);
+            }}
+          >
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 text-xl text-[#2C3E2B] shadow-sm">
+              <FaCamera />
+            </div>
 
-        {images.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-5 py-8 text-center">
-            <p className="text-sm font-semibold text-gray-400">
-              Chưa có ảnh nào. Hãy tải lên ít nhất một ảnh để admin có thể duyệt homestay.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {images.map((image, index) => (
-              <div
-                className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
-                key={`${image.url}-${index}`}
-              >
-                <img
-                  alt={`ảnh homestay ${index + 1}`}
-                  className="h-40 w-full object-cover"
-                  src={image.url}
-                />
+            <div>
+              <p className="text-sm font-black text-[#2C1E15]">Tải ảnh homestay lên</p>
+              <p className="mt-1 text-xs font-semibold text-slate-500">Chọn nhiều ảnh từ máy hoặc kéo thả vào khu vực này.</p>
+            </div>
 
-                <div className="p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <button
-                      className="text-xs font-bold text-[#2C3E2B] disabled:text-gray-400"
-                      disabled={image.isMain}
-                      onClick={() => setMainImage(index)}
-                      type="button"
-                    >
-                      {image.isMain ? 'Ảnh chính' : 'Đặt làm chính'}
-                    </button>
+            <span className="inline-flex h-10 items-center justify-center rounded-xl bg-[#2C3E2B] px-5 text-xs font-black text-white shadow-md shadow-[#2C3E2B]/15">
+              Chọn ảnh từ máy
+            </span>
 
-                    <button
-                      className="w-8 h-8 rounded-lg bg-red-50 text-red-500 flex items-center justify-center"
-                      onClick={() => deleteImage(index)}
-                      type="button"
-                    >
-                      <FaTrashAlt />
-                    </button>
+            <input
+              accept="image/*"
+              className="hidden"
+              multiple
+              onChange={(event) => {
+                handleFiles(event.target.files);
+                event.target.value = '';
+              }}
+              type="file"
+            />
+          </label>
+
+          {images.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-8 text-center shadow-sm">
+              <p className="text-sm font-semibold text-slate-400">Chưa có ảnh nào. Hãy tải lên ít nhất một ảnh để admin có thể duyệt homestay.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+              {images.map((image, index) => (
+                <article
+                  className={`group overflow-hidden rounded-2xl border bg-white shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(15,23,42,0.12)] ${
+                    image.isMain ? 'border-emerald-300 ring-2 ring-emerald-100' : 'border-slate-200'
+                  }`}
+                  key={`${image.url}-${index}`}
+                >
+                  <button
+                    aria-label={`Xem lớn ảnh ${index + 1}`}
+                    className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden bg-slate-100"
+                    onClick={() => setPreviewIndex(index)}
+                    type="button"
+                  >
+                    <img alt={`Ảnh homestay ${index + 1}`} className="h-full w-full object-cover" src={image.url} />
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition group-hover:bg-black/30 group-hover:opacity-100">
+                      <span className="rounded-full bg-black/55 px-3 py-2 text-xs font-black shadow-lg"><i className="fa-solid fa-expand mr-1.5"></i>Xem lớn</span>
+                    </span>
+                    {image.isMain && (
+                      <span className="absolute left-2 top-2 rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-black text-white shadow-lg">Ảnh chính</span>
+                    )}
+                  </button>
+
+                  <div className="space-y-2 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        className={`rounded-lg px-2.5 py-1.5 text-xs font-black transition ${
+                          image.isMain
+                            ? 'cursor-default bg-emerald-50 text-emerald-700'
+                            : 'bg-slate-50 text-[#2C3E2B] hover:bg-emerald-50'
+                        }`}
+                        disabled={image.isMain}
+                        onClick={() => setMainImage(index)}
+                        type="button"
+                      >
+                        {image.isMain ? 'Đang là ảnh chính' : 'Đặt làm ảnh chính'}
+                      </button>
+
+                      <button
+                        aria-label="Xóa ảnh"
+                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-500 transition hover:bg-rose-100"
+                        onClick={() => deleteImage(index)}
+                        type="button"
+                      >
+                        <FaTrashAlt />
+                      </button>
+                    </div>
+
+                    <p className="truncate text-[11px] font-semibold text-slate-400">{image.fileName || `Ảnh ${index + 1}`}</p>
                   </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
 
-                  {image.fileName && (
-                    <p className="text-[11px] text-gray-400 font-semibold truncate">
-                      {image.fileName}
-                    </p>
-                  )}
-                </div>
+      {previewImage && (
+        <ModalPortal>
+          <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/90 p-4" onMouseDown={() => setPreviewIndex(null)}>
+            <div className="relative flex h-full w-full max-w-7xl items-center justify-center" onMouseDown={(event) => event.stopPropagation()}>
+              <img alt={`Xem lớn ảnh ${previewIndex + 1}`} className="max-h-[90vh] max-w-full rounded-2xl object-contain shadow-2xl" src={previewImage.url} />
+              <button
+                aria-label="Đóng xem ảnh"
+                className="absolute right-2 top-2 flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-black/60 text-xl text-white shadow-xl hover:bg-black/80"
+                onClick={() => setPreviewIndex(null)}
+                type="button"
+              >
+                <FaTimes />
+              </button>
+              {images.length > 1 && (
+                <>
+                  <button
+                    aria-label="Ảnh trước"
+                    className="absolute left-2 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white shadow-xl hover:bg-black/80"
+                    onClick={() => setPreviewIndex((previewIndex - 1 + images.length) % images.length)}
+                    type="button"
+                  >
+                    <i className="fa-solid fa-chevron-left"></i>
+                  </button>
+                  <button
+                    aria-label="Ảnh sau"
+                    className="absolute right-2 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white shadow-xl hover:bg-black/80"
+                    onClick={() => setPreviewIndex((previewIndex + 1) % images.length)}
+                    type="button"
+                  >
+                    <i className="fa-solid fa-chevron-right"></i>
+                  </button>
+                </>
+              )}
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/65 px-4 py-2 text-xs font-black text-white">
+                {previewIndex + 1}/{images.length}
               </div>
-            ))}
+            </div>
           </div>
-        )}
-      </div>
-    </section>
+        </ModalPortal>
+      )}
+    </>
   );
 }
 
@@ -1683,7 +2060,7 @@ function AmenityWizardStep({
   toggleAmenity,
 }) {
   return (
-    <section className="bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden">
+    <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
       <SectionHeader
         title="Tiện nghi homestay"
         description="Chọn nhanh từ danh mục có sẵn hoặc thêm tiện nghi riêng của homestay."
@@ -1781,19 +2158,21 @@ function ServiceWizardStep({
   deleteService,
   serviceName,
   servicePrice,
+  servicePricingUnit,
   serviceDescription,
   services,
   setServiceName,
   setServicePrice,
+  setServicePricingUnit,
   setServiceDescription,
   togglePresetService,
   toggleService,
 }) {
   return (
-    <section className="bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden">
+    <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
       <SectionHeader
         title="Dịch vụ bổ sung"
-        description="Chọn dịch vụ có sẵn hoặc thêm dịch vụ riêng với giá theo ngày và mô tả chi tiết."
+        description="Chọn dịch vụ có sẵn hoặc thêm dịch vụ riêng với giá theo ngày hoặc theo lần."
       />
 
       <div className="p-5 grid grid-cols-1 xl:grid-cols-[1fr_0.95fr] gap-5">
@@ -1822,7 +2201,7 @@ function ServiceWizardStep({
                         {service.name}
                       </p>
                       <p className="mt-1 text-xs font-black text-[#6E473B]">
-                        {formatCurrency(service.pricePerDay)} / ngày
+                        {formatCurrency(service.price ?? service.pricePerDay)} / {getPricingUnitLabel(getServicePricingUnit(service))}
                       </p>
                     </div>
 
@@ -1848,7 +2227,7 @@ function ServiceWizardStep({
 
         <FloatingPanel
           title="Thêm dịch vụ mới"
-          description="Nhập đầy đủ tên dịch vụ, giá/ngày và mô tả để khách hiểu rõ."
+          description="Nhập tên dịch vụ, giá, đơn vị tính và mô tả để khách hiểu rõ."
         >
           <div className="space-y-3">
             <input
@@ -1858,19 +2237,33 @@ function ServiceWizardStep({
               value={serviceName}
             />
 
-            <input
-              className="w-full h-11 rounded-xl border border-gray-200 px-4 text-sm font-semibold outline-none focus:border-[#2C3E2B] focus:ring-4 focus:ring-[#2C3E2B]/10"
-              onChange={(event) => setServicePrice(event.target.value)}
-              placeholder="Giá / ngày"
-              type="number"
-              min="0"
-              value={servicePrice}
-            />
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_170px] gap-3">
+              <input
+                className="w-full h-11 rounded-xl border border-gray-200 px-4 text-sm font-semibold outline-none focus:border-[#2C3E2B] focus:ring-4 focus:ring-[#2C3E2B]/10"
+                onChange={(event) => setServicePrice(event.target.value)}
+                placeholder="Giá dịch vụ"
+                type="number"
+                min="0"
+                value={servicePrice}
+              />
+
+              <select
+                className="w-full h-11 rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-700 outline-none focus:border-[#2C3E2B] focus:ring-4 focus:ring-[#2C3E2B]/10"
+                onChange={(event) => setServicePricingUnit(event.target.value)}
+                value={servicePricingUnit}
+              >
+                {SERVICE_PRICING_UNITS.map((unit) => (
+                  <option key={unit.value} value={unit.value}>
+                    {unit.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             <textarea
               className="w-full min-h-24 rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold outline-none resize-none focus:border-[#2C3E2B] focus:ring-4 focus:ring-[#2C3E2B]/10"
               onChange={(event) => setServiceDescription(event.target.value)}
-              placeholder="Mô tả dịch vụ, di?u ki?n sẽ dụng, ph?m vi h? tr?..."
+              placeholder="Mô tả dịch vụ, điều kiện áp dụng, lưu ý cho khách..."
               value={serviceDescription}
             />
 
@@ -1905,7 +2298,7 @@ function ServiceWizardStep({
                         </p>
 
                         <p className="mt-1 text-xs text-[#6E473B] font-black">
-                          {formatCurrency(service.pricePerDay ?? service.price)} / ngày
+                          {formatCurrency(service.price ?? service.pricePerDay)} / {getPricingUnitLabel(getServicePricingUnit(service))}
                         </p>
                       </div>
 
@@ -1956,7 +2349,7 @@ function RuleWizardStep({
   toggleRule,
 }) {
   return (
-    <section className="bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden">
+    <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
       <SectionHeader
         title="Nội quy homestay"
         description="Chọn nội quy có sẵn hoặc thêm quy định riêng cho homestay."
@@ -2050,13 +2443,13 @@ function RuleWizardStep({
 
 function FloatingPanel({ children, description, title }) {
   return (
-    <div className="rounded-3xl border border-gray-200 bg-white/90 shadow-sm overflow-hidden">
-      <div className="px-5 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
-        <h5 className="font-serif text-xl font-bold text-[#2C1E15]">
+    <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+      <div className="border-b border-slate-100 bg-white px-5 py-4">
+        <h5 className="font-serif text-2xl font-bold leading-tight text-[#2C1E15]">
           {title}
         </h5>
         {description && (
-          <p className="mt-1 text-xs font-semibold text-gray-400 leading-relaxed">
+          <p className="mt-1 text-sm font-semibold leading-6 text-gray-500">
             {description}
           </p>
         )}
@@ -2077,7 +2470,7 @@ function SelectedPillList({
   title,
 }) {
   return (
-    <div className="rounded-2xl bg-[#F7F3EC] border border-gray-200 p-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_6px_20px_rgba(15,23,42,0.06)]">
       <p className="text-xs font-black uppercase tracking-wide text-gray-500">
         {title}
       </p>
@@ -2127,7 +2520,7 @@ function ConfirmWizardStep({
   const mainImage = images.find((image) => image.isMain) || images[0];
 
   return (
-    <section className="bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden">
+    <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
       <SectionHeader
         title="Xác nhận thông tin đăng ký homestay"
         description="Kiểm tra toàn bộ thông tin trước khi gửi yêu cầu cho admin duyệt."
@@ -2151,7 +2544,7 @@ function ConfirmWizardStep({
             />
             <div className="px-4 py-3 bg-white">
               <p className="text-xs font-black text-[#2C3E2B]">
-                ảnh d?i di?n homestay
+                Ảnh chính của homestay
               </p>
               {mainImage.fileName && (
                 <p className="text-[11px] text-gray-400 font-semibold mt-1 truncate">
@@ -2173,11 +2566,17 @@ function ConfirmWizardStep({
           <DetailItem label="Sức chứa" value={`${fields.guests} khách`} />
           <DetailItem label="Số giường" value={`${fields.beds} giường`} />
           <DetailItem label="Cấu trúc phòng" value={`${fields.bedrooms} phòng ngủ • ${fields.bathrooms} WC • ${fields.livingRoom} phòng khách • ${fields.kitchen} bếp`} />
-          <DetailItem label="Check-in" value={fields.checkinTime} />
-          <DetailItem label="Check-out" value={fields.checkoutTime} />
+          <DetailItem
+            label="Thời gian nhận phòng"
+            value={`${fields.checkinTime || '14:00'} - ${fields.checkinEndTime || '20:00'}`}
+          />
+          <DetailItem
+            label="Thời gian trả phòng"
+            value={`${fields.checkoutStartTime || '08:00'} - ${fields.checkoutTime || '12:00'}`}
+          />
         </div>
 
-        <div className="rounded-2xl bg-[#F4F1EA] border border-gray-200 px-4 py-3">
+        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-[0_6px_20px_rgba(15,23,42,0.06)]">
           <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400">
             Mô tả homestay
           </p>
@@ -2211,9 +2610,10 @@ function ConfirmWizardStep({
           title="Dịch vụ bổ sung"
           emptyText="Chưa thêm dịch vụ."
           items={services.map((service) => {
-            const price = service.pricePerDay ?? service.price;
+            const price = service.price ?? service.pricePerDay;
+            const pricingUnit = getServicePricingUnit(service);
 
-            return `${service.name} - ${formatCurrency(price)} / ngày${
+            return `${service.name} - ${formatCurrency(price)} / ${getPricingUnitLabel(pricingUnit)}${
               service.description ? ` - ${service.description}` : ''
             }`;
           })}
@@ -2266,9 +2666,4 @@ function EmptyWizardState({ text }) {
     </div>
   );
 }
-
-
-
-
-
 

@@ -7,6 +7,7 @@ import com.homestaybooking.dto.response.BookingListItemResponse;
 import com.homestaybooking.dto.response.BookingPaymentStatusResponse;
 import com.homestaybooking.dto.response.BookingPriceQuoteResponse;
 import com.homestaybooking.dto.response.BookingResponse;
+import com.homestaybooking.dto.response.PaymentTransactionResponse;
 import com.homestaybooking.dto.response.BookingServiceLineResponse;
 import com.homestaybooking.entity.User;
 import com.homestaybooking.exception.AppException;
@@ -16,6 +17,7 @@ import com.homestaybooking.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 import com.homestaybooking.service.VnpayService;
 
 import java.math.BigDecimal;
@@ -23,6 +25,8 @@ import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Period;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
@@ -36,14 +40,22 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class BookingService {
 
+    private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+
+
     private static final String PAYMENT_METHOD_VNPAY = "VNPAY";
     private static final String PAYMENT_METHOD_PAY_AT_PROPERTY = "PAY_AT_PROPERTY";
 
     private final BookingJdbcRepository bookingRepository;
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
-    private final VnpayService vnpayService;    
-    @Transactional(readOnly = true)
+    private final VnpayService vnpayService;
+    private final BookingCommissionService bookingCommissionService;
+    private final BookingConfirmationMailService bookingConfirmationMailService;
+    private final CustomerTierService customerTierService;
+    private final com.homestaybooking.repository.RevenueJdbcRepository revenueRepository;
+
+    @Transactional
     public BookingPriceQuoteResponse quote(BookingQuoteRequest request, String authorizationHeader) {
         User user = resolveUser(authorizationHeader);
         return buildQuote(request, user, true);
@@ -55,6 +67,11 @@ public class BookingService {
         return bookingRepository.findUserBookings(user.getUserId());
     }
 
+    @Transactional(readOnly = true)
+    public List<PaymentTransactionResponse> getMyPaymentTransactions(String authorizationHeader) {
+        User user = resolveUser(authorizationHeader);
+        return bookingRepository.findUserPaymentTransactions(user.getUserId());
+    }
     @Transactional(readOnly = true)
     public List<BookingListItemResponse> getHostBookings(String authorizationHeader) {
         User host = resolveUser(authorizationHeader);
@@ -71,17 +88,21 @@ public class BookingService {
     public BookingListItemResponse cancelMyBooking(Integer bookingId, String authorizationHeader) {
         User user = resolveUser(authorizationHeader);
         if (!bookingRepository.isBookingOwnedByUser(bookingId, user.getUserId())) {
-            throw new AppException("Báº¡n khĂ´ng cĂ³ quyá»n há»§y booking nĂ y");
+            throw new AppException("Bạn không có quyền hủy booking này");
         }
-        String status = nullToEmpty(bookingRepository.findBookingStatus(bookingId));
+        BookingListItemResponse currentBooking = bookingRepository.findBookingById(bookingId);
+        String status = nullToEmpty(currentBooking.getBookingStatus());
         if (Set.of("CANCELLED", "EXPIRED", "COMPLETED", "NO_SHOW").contains(status.toUpperCase(Locale.ROOT))) {
-            throw new AppException("Booking nĂ y khĂ´ng thá»ƒ há»§y á»Ÿ tráº¡ng thĂ¡i hiá»‡n táº¡i");
+            throw new AppException("Booking này không thể hủy ở trạng thái hiện tại");
         }
+        validateCancellationDeadline(currentBooking);
         bookingRepository.updateBookingStatus(bookingId, "CANCELLED");
+        refundPaidVnpayPaymentIfNeeded(bookingId);
+        bookingCommissionService.cancelCommissionWithFullRefund(bookingId, "FREE_CANCELLATION");
         return bookingRepository.findUserBookings(user.getUserId()).stream()
                 .filter(item -> item.getBookingId().equals(bookingId))
                 .findFirst()
-                .orElseThrow(() -> new AppException("KhĂ´ng tĂ¬m tháº¥y booking sau khi há»§y"));
+                .orElseThrow(() -> new AppException("Không tìm thấy booking sau khi hủy"));
     }
 
     @Transactional
@@ -90,23 +111,41 @@ public class BookingService {
         if (!bookingRepository.isBookingOwnedByHost(bookingId, host.getUserId())) {
             throw new AppException("Báº¡n khĂ´ng cĂ³ quyá»n cáº­p nháº­t booking nĂ y");
         }
+        String beforeStatus = nullToEmpty(bookingRepository.findBookingStatus(bookingId)).toUpperCase(Locale.ROOT);
         String normalizedStatus = normalizeHostStatus(nextStatus);
         bookingRepository.updateBookingStatus(bookingId, normalizedStatus);
-        return bookingRepository.findHostBookings(host.getUserId()).stream()
+        if ("CANCELLED".equals(normalizedStatus)) {
+            refundPaidVnpayPaymentIfNeeded(bookingId);
+            bookingCommissionService.cancelCommissionWithFullRefund(bookingId, "HOST_CANCELLATION");
+        } else if ("COMPLETED".equals(normalizedStatus) || "NO_SHOW".equals(normalizedStatus)) {
+            bookingCommissionService.recognizeCommission(bookingId);
+        }
+        BookingListItemResponse updatedBooking = bookingRepository.findHostBookings(host.getUserId()).stream()
                 .filter(item -> item.getBookingId().equals(bookingId))
                 .findFirst()
                 .orElseThrow(() -> new AppException("KhĂ´ng tĂ¬m tháº¥y booking sau khi cáº­p nháº­t"));
+        sendConfirmationMailIfNewlyConfirmed(updatedBooking, beforeStatus, normalizedStatus, "HOST_CONFIRMED");
+        return updatedBooking;
     }
 
     @Transactional
     public BookingListItemResponse updateAdminBookingStatus(Integer bookingId, String nextStatus, String authorizationHeader) {
         requireAdmin(authorizationHeader);
+        String beforeStatus = nullToEmpty(bookingRepository.findBookingStatus(bookingId)).toUpperCase(Locale.ROOT);
         String normalizedStatus = normalizeHostStatus(nextStatus);
         bookingRepository.updateBookingStatus(bookingId, normalizedStatus);
-        return bookingRepository.findAllBookings().stream()
+        if ("CANCELLED".equals(normalizedStatus)) {
+            refundPaidVnpayPaymentIfNeeded(bookingId);
+            bookingCommissionService.cancelCommissionWithFullRefund(bookingId, "FREE_CANCELLATION");
+        } else if ("COMPLETED".equals(normalizedStatus) || "NO_SHOW".equals(normalizedStatus)) {
+            bookingCommissionService.recognizeCommission(bookingId);
+        }
+        BookingListItemResponse updatedBooking = bookingRepository.findAllBookings().stream()
                 .filter(item -> item.getBookingId().equals(bookingId))
                 .findFirst()
                 .orElseThrow(() -> new AppException("KhĂ´ng tĂ¬m tháº¥y booking sau khi cáº­p nháº­t"));
+        sendConfirmationMailIfNewlyConfirmed(updatedBooking, beforeStatus, normalizedStatus, "HOST_CONFIRMED");
+        return updatedBooking;
     }
 
     @Transactional
@@ -115,13 +154,19 @@ public class BookingService {
         BookingListItemResponse currentBooking = bookingRepository.findAllBookings().stream()
                 .filter(item -> item.getBookingId().equals(bookingId))
                 .findFirst()
-                .orElseThrow(() -> new AppException("KhĂ´ng tĂ¬m tháº¥y booking"));
+                .orElseThrow(() -> new AppException("Không tìm thấy booking"));
         validateManualPaymentConfirmation(currentBooking);
+        if ("PAID".equals(nullToEmpty(currentBooking.getPaymentStatus()).toUpperCase(Locale.ROOT))) {
+            return currentBooking;
+        }
         bookingRepository.confirmPayAtPropertyPayment(bookingId);
-        return bookingRepository.findAllBookings().stream()
+        bookingCommissionService.createOrUpdatePendingCommission(bookingId);
+        BookingListItemResponse updatedBooking = bookingRepository.findAllBookings().stream()
                 .filter(item -> item.getBookingId().equals(bookingId))
                 .findFirst()
-                .orElseThrow(() -> new AppException("KhĂ´ng tĂ¬m tháº¥y booking sau khi xĂ¡c nháº­n thanh toĂ¡n"));
+                .orElseThrow(() -> new AppException("Không tìm thấy booking sau khi xác nhận thanh toán"));
+        bookingConfirmationMailService.sendConfirmationMail(updatedBooking, "PAYMENT_SUCCESS");
+        return updatedBooking;
     }
 
     @Transactional
@@ -151,15 +196,19 @@ public class BookingService {
         }
 
         bookingRepository.confirmPayAtPropertyPayment(bookingId);
-        return bookingRepository.findHostBookings(host.getUserId()).stream()
+        bookingCommissionService.createOrUpdatePendingCommission(bookingId);
+        BookingListItemResponse updatedBooking = bookingRepository.findHostBookings(host.getUserId()).stream()
                 .filter(item -> item.getBookingId().equals(bookingId))
                 .findFirst()
                 .orElseThrow(() -> new AppException("KhĂ´ng tĂ¬m tháº¥y booking sau khi xĂ¡c nháº­n thanh toĂ¡n"));
+        bookingConfirmationMailService.sendConfirmationMail(updatedBooking, "PAYMENT_SUCCESS");
+        return updatedBooking;
     }
 
     @Transactional
     public BookingResponse createBooking(BookingCreateRequest request, String authorizationHeader, String clientIp) {
         User user = resolveUser(authorizationHeader);
+        validateBookerAge(user);
         validateGuestInfo(request);
         bookingRepository.expireOverduePaymentBookings();
 
@@ -168,7 +217,7 @@ public class BookingService {
         boolean isVnpay = PAYMENT_METHOD_VNPAY.equals(paymentMethod);
         String bookingStatus = "PAYMENT_PENDING";
         String paymentStatus = "PENDING";
-        LocalDateTime expiresAt = isVnpay ? LocalDateTime.now().plusMinutes(15) : null;
+        LocalDateTime expiresAt = isVnpay ? nowInVietnam().plusMinutes(15) : null;
         String bookingCode = generateBookingCode();
         String transactionCode = null;
 
@@ -248,7 +297,7 @@ public class BookingService {
         BookingJdbcRepository.PaymentStatusInfo status = bookingRepository.findPaymentStatus(bookingId);
         if ("PAYMENT_PENDING".equals(status.getBookingStatus())
                 && status.getExpiresAt() != null
-                && status.getExpiresAt().isBefore(LocalDateTime.now())
+                && status.getExpiresAt().isBefore(nowInVietnam())
                 && !"PAID".equals(status.getPaymentStatus())) {
             bookingRepository.expirePaymentBooking(bookingId);
             status = bookingRepository.findPaymentStatus(bookingId);
@@ -256,6 +305,7 @@ public class BookingService {
 
         return BookingPaymentStatusResponse.builder()
                 .bookingId(status.getBookingId())
+                .homeId(status.getHomeId())
                 .bookingCode(status.getBookingCode())
                 .bookingStatus(status.getBookingStatus())
                 .paymentStatus(status.getPaymentStatus())
@@ -264,12 +314,12 @@ public class BookingService {
                 .build();
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public BookingPaymentStatusResponse handleVnpayReturn(Map<String, String> params) {
         return processVnpayCallback(params, true);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public BookingPaymentStatusResponse handleVnpayIpn(Map<String, String> params) {
         return processVnpayCallback(params, true);
     }
@@ -292,40 +342,61 @@ public class BookingService {
 
         String currentPaymentStatus = nullToEmpty(payment.getPaymentStatus()).toUpperCase(Locale.ROOT);
         if ("PAID".equals(currentPaymentStatus)) {
+            bookingCommissionService.createOrUpdatePendingCommission(payment.getBookingId());
             return getPaymentStatus(payment.getBookingId());
-        }
-
-        if (payment.getExpiresAt() != null && payment.getExpiresAt().isBefore(LocalDateTime.now())) {
-            bookingRepository.expirePaymentBooking(payment.getBookingId());
-            throw new AppException("Giao dịch đã quá hạn thanh toán");
         }
 
         String responseCode = params.get("vnp_ResponseCode");
         String transactionStatus = params.get("vnp_TransactionStatus");
-        if ("00".equals(responseCode) && "00".equals(transactionStatus)) {
-            bookingRepository.markPaymentPaid(payment.getBookingId(), payment.getPaymentId(), parseVnpayPayDate(params.get("vnp_PayDate")));
-        } else if (markFailed) {
+        boolean vnpaySuccess = "00".equals(responseCode) && "00".equals(transactionStatus);
+
+        // VNPAY đã ký hợp lệ và xác nhận thành công thì ưu tiên kết quả từ cổng.
+        // Không từ chối một giao dịch thành công chỉ vì đồng hồ local/DB lệch múi giờ.
+        if (vnpaySuccess) {
+            int paymentChanged = bookingRepository.markPaymentPaid(
+                    payment.getBookingId(),
+                    payment.getPaymentId(),
+                    parseVnpayPayDate(params.get("vnp_PayDate"))
+            );
+            bookingCommissionService.createOrUpdatePendingCommission(payment.getBookingId());
+            if (paymentChanged > 0) {
+                bookingConfirmationMailService.sendConfirmationMail(
+                        bookingRepository.findBookingById(payment.getBookingId()),
+                        "PAYMENT_SUCCESS"
+                );
+            }
+            return getPaymentStatus(payment.getBookingId());
+        }
+
+        if (payment.getExpiresAt() != null && payment.getExpiresAt().isBefore(nowInVietnam())) {
+            bookingRepository.expirePaymentBooking(payment.getBookingId());
+            throw new AppException("Giao dịch đã quá hạn thanh toán");
+        }
+
+        if (markFailed) {
             bookingRepository.markPaymentFailed(payment.getBookingId(), payment.getPaymentId());
         }
         return getPaymentStatus(payment.getBookingId());
     }
 
     private BookingPriceQuoteResponse buildQuote(BookingQuoteRequest request, User user, boolean validateOverlap) {
-        if (request.getHomeId() == null) throw new AppException("Thiáº¿u homestay cáº§n Ä‘áº·t");
-        if (request.getCheckInDate() == null) throw new AppException("Vui lĂ²ng chá»n ngĂ y nháº­n phĂ²ng");
-        if (request.getCheckOutDate() == null) throw new AppException("Vui lĂ²ng chá»n ngĂ y tráº£ phĂ²ng");
-        if (request.getCheckInDate().isBefore(LocalDate.now())) throw new AppException("NgĂ y nháº­n phĂ²ng khĂ´ng Ä‘Æ°á»£c nhá» hÆ¡n hĂ´m nay");
-        if (!request.getCheckOutDate().isAfter(request.getCheckInDate())) throw new AppException("NgĂ y tráº£ phĂ²ng pháº£i sau ngĂ y nháº­n phĂ²ng");
+        if (request.getHomeId() == null) throw new AppException("Thiếu homestay cần đặt");
+        if (request.getCheckInDate() == null) throw new AppException("Vui lòng chọn ngày nhận phòng");
+        if (request.getCheckOutDate() == null) throw new AppException("Vui lòng chọn ngày trả phòng");
+        if (request.getCheckInDate().isBefore(LocalDate.now(VIETNAM_ZONE))) throw new AppException("Ngày nhận phòng không được nhỏ hơn hôm nay");
+        if (!request.getCheckOutDate().isAfter(request.getCheckInDate())) throw new AppException("Ngày trả phòng phải sau ngày nhận phòng");
 
         BookingJdbcRepository.HomestayBookingInfo homestay = bookingRepository.findHomestay(request.getHomeId());
-        if (homestay.getDeletedAt() != null) throw new AppException("Homestay Ä‘Ă£ bá»‹ xĂ³a");
-        if (!"APPROVED".equalsIgnoreCase(nullToEmpty(homestay.getStatus()))) throw new AppException("Homestay chÆ°a Ä‘Æ°á»£c duyá»‡t Ä‘á»ƒ Ä‘áº·t phĂ²ng");
-        if (Objects.equals(homestay.getOwnerId(), user.getUserId())) throw new AppException("Chá»§ homestay khĂ´ng thá»ƒ tá»± Ä‘áº·t homestay cá»§a mĂ¬nh");
+        if (!revenueRepository.canHostReceiveBooking(request.getHomeId())) throw new AppException("Homestay hiện đang tạm ngưng nhận đặt phòng");
+        if (homestay.getDeletedAt() != null) throw new AppException("Homestay đã bị xóa");
+        if (!"APPROVED".equalsIgnoreCase(nullToEmpty(homestay.getStatus()))) throw new AppException("Homestay chưa được duyệt để đặt phòng");
+        if (Objects.equals(homestay.getOwnerId(), user.getUserId())) throw new AppException("Chủ homestay không thể tự đặt homestay của mình");
 
-        int guests = Math.max(1, request.getNumberOfGuest() == null ? 1 : request.getNumberOfGuest());
-        if (guests > homestay.getMaxGuest()) throw new AppException("Sá»‘ khĂ¡ch vÆ°á»£t quĂ¡ sá»©c chá»©a homestay");
-        if (validateOverlap && bookingRepository.hasOverlap(request.getHomeId(), request.getCheckInDate(), request.getCheckOutDate())) {
-            throw new AppException("Khoáº£ng ngĂ y nĂ y Ä‘Ă£ cĂ³ booking khĂ¡c. Vui lĂ²ng chá»n ngĂ y khĂ¡c");
+        int guests = request.getNumberOfGuest() == null ? 1 : request.getNumberOfGuest();
+        if (guests < 1) throw new AppException("Booking phải có ít nhất 1 người lớn");
+        if (guests > homestay.getMaxGuest()) throw new AppException("Số lượng khách vượt quá sức chứa tối đa của homestay");
+        if (validateOverlap && bookingRepository.isUnavailableForBooking(request.getHomeId(), request.getCheckInDate(), request.getCheckOutDate())) {
+            throw new AppException("Khoảng thời gian này đã có booking khác, vui lòng chọn khoảng thời gian khác");
         }
 
         int nights = Math.toIntExact(Duration.between(request.getCheckInDate().atStartOfDay(), request.getCheckOutDate().atStartOfDay()).toDays());
@@ -336,6 +407,7 @@ public class BookingService {
                 .map(BookingServiceLineResponse::getTotalPrice)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal beforeDiscount = roomTotal.add(serviceTotal);
+        customerTierService.ensureTierPromotionGrants(user.getUserId());
         AppliedPromotion appliedPromotion = applyPromotion(request.getPromotionCode(), beforeDiscount, user.getUserId(), homestay.getHomeId());
         BigDecimal finalAmount = beforeDiscount.subtract(appliedPromotion.discountAmount()).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
 
@@ -370,11 +442,11 @@ public class BookingService {
         if (quantities.isEmpty()) return List.of();
 
         List<BookingJdbcRepository.ServiceInfo> services = bookingRepository.findServices(homeId, quantities.keySet().stream().toList());
-        if (services.size() != quantities.size()) throw new AppException("CĂ³ dá»‹ch vá»¥ khĂ´ng thuá»™c homestay nĂ y");
+        if (services.size() != quantities.size()) throw new AppException("Có dịch vụ không thuộc homestay này");
 
         return services.stream().map(service -> {
             if (!"APPROVED".equalsIgnoreCase(nullToEmpty(service.getStatus()))) {
-                throw new AppException("Dá»‹ch vá»¥ " + service.getServiceName() + " chÆ°a Ä‘Æ°á»£c phĂ©p Ä‘áº·t");
+                throw new AppException("Dịch vụ " + service.getServiceName() + " chưa được phép đặt");
             }
             int quantity = quantities.get(service.getHomestayServiceId());
             BigDecimal unitPrice = defaultMoney(service.getPrice());
@@ -396,8 +468,8 @@ public class BookingService {
         if (!bookingRepository.promotionAllowedForBooking(promotion.getPromotionId(), userId, homeId)) {
             throw new AppException("Mã khuyến mãi này không áp dụng cho hạng thành viên hiện tại của bạn");
         }
-        LocalDate today = LocalDate.now();
-        if (today.isBefore(promotion.getStartDate()) || today.isAfter(promotion.getEndDate())) throw new AppException("Mã khuyến mãi đã hết hạn hoặc chưa bắt đầu");
+        LocalDate today = LocalDate.now(VIETNAM_ZONE);
+        if ((promotion.getStartDate() != null && today.isBefore(promotion.getStartDate())) || (promotion.getEndDate() != null && today.isAfter(promotion.getEndDate()))) throw new AppException("Mã khuyến mãi đã hết hạn hoặc chưa bắt đầu");
         if (promotion.getMinOrderAmount() != null && beforeDiscount.compareTo(promotion.getMinOrderAmount()) < 0) throw new AppException("Đơn đặt chưa đủ điều kiện dùng mã");
         if (promotion.getUsageLimitTotal() != null && bookingRepository.countPromotionUsageTotal(promotion.getPromotionId()) >= promotion.getUsageLimitTotal()) throw new AppException("Mã khuyến mãi đã hết lượt sử dụng");
         if (promotion.getUsageLimitPerUser() != null && bookingRepository.countPromotionUsage(promotion.getPromotionId(), userId) >= promotion.getUsageLimitPerUser()) throw new AppException("Bạn đã sử dụng hết lượt cho mã này");
@@ -421,22 +493,35 @@ public class BookingService {
     }
 
     private void validateGuestInfo(BookingCreateRequest request) {
-        if (isBlank(request.getCustomerName())) throw new AppException("Vui lĂ²ng nháº­p há» tĂªn khĂ¡ch Ä‘áº·t");
-        if (isBlank(request.getCustomerEmail())) throw new AppException("Vui lĂ²ng nháº­p email khĂ¡ch Ä‘áº·t");
-        if (isBlank(request.getCustomerPhone())) throw new AppException("Vui lĂ²ng nháº­p sá»‘ Ä‘iá»‡n thoáº¡i khĂ¡ch Ä‘áº·t");
+        if (isBlank(request.getCustomerName())) throw new AppException("Vui lòng nhập họ tên khách đặt");
+        if (isBlank(request.getCustomerEmail())) throw new AppException("Vui lòng nhập email khách đặt");
+        if (isBlank(request.getCustomerPhone())) throw new AppException("Vui lòng nhập số điện thoại khách đặt");
+    }
+
+    private void validateBookerAge(User user) {
+        if (user.getBirthday() == null) {
+            throw new AppException("Vui long cap nhat ngay sinh trong ho so truoc khi dat phong");
+        }
+        LocalDate today = LocalDate.now(VIETNAM_ZONE);
+        if (user.getBirthday().isAfter(today)) {
+            throw new AppException("Ngay sinh trong ho so khong hop le");
+        }
+        if (Period.between(user.getBirthday(), today).getYears() < 18) {
+            throw new AppException("Nguoi dung ten dat phong phai tu du 18 tuoi");
+        }
     }
 
     private User resolveUser(String authorizationHeader) {
         String email = jwtUtil.extractEmailFromAuthorizationHeader(authorizationHeader);
-        if (email == null) throw new AppException("Vui lĂ²ng Ä‘Äƒng nháº­p Ä‘á»ƒ Ä‘áº·t homestay");
-        return userRepository.findByEmail(email).orElseThrow(() -> new AppException("KhĂ´ng tĂ¬m tháº¥y tĂ i khoáº£n Ä‘ang Ä‘Äƒng nháº­p"));
+        if (email == null) throw new AppException("Vui lòng đăng nhập để đặt homestay");
+        return userRepository.findByEmail(email).orElseThrow(() -> new AppException("Người dùng không tồn tại"));
     }
 
     private User requireAdmin(String authorizationHeader) {
         User user = resolveUser(authorizationHeader);
         String roleName = user.getRole() == null ? "" : nullToEmpty(user.getRole().getRoleName()).toUpperCase(Locale.ROOT);
         if (!"ADMIN".equals(roleName)) {
-            throw new AppException("Báº¡n khĂ´ng cĂ³ quyá»n quáº£n lĂ½ Ä‘Æ¡n Ä‘áº·t phĂ²ng cá»§a há»‡ thá»‘ng");
+            throw new AppException("Người dùng không có quyền truy cập");
         }
         return user;
     }
@@ -444,16 +529,62 @@ public class BookingService {
     private void validateManualPaymentConfirmation(BookingListItemResponse currentBooking) {
         String bookingStatus = nullToEmpty(currentBooking.getBookingStatus()).toUpperCase(Locale.ROOT);
         if (Set.of("CANCELLED", "EXPIRED", "NO_SHOW").contains(bookingStatus)) {
-            throw new AppException("KhĂ´ng thá»ƒ xĂ¡c nháº­n thanh toĂ¡n cho Ä‘Æ¡n Ä‘Ă£ há»§y hoáº·c quĂ¡ háº¡n");
+            throw new AppException("Không thể xác nhận thanh toán cho đơn đã hủy hoặc quá hạn");
         }
         if (!Set.of("CONFIRMED", "COMPLETED").contains(bookingStatus)) {
-            throw new AppException("Chá»‰ xĂ¡c nháº­n thanh toĂ¡n sau khi Ä‘Æ¡n Ä‘Ă£ Ä‘Æ°á»£c duyá»‡t");
+            throw new AppException("Chỉ xác nhận thanh toán sau khi đơn đã được duyệt");
         }
         if (!PAYMENT_METHOD_PAY_AT_PROPERTY.equals(nullToEmpty(currentBooking.getPaymentMethod()).toUpperCase(Locale.ROOT))) {
-            throw new AppException("Chá»‰ xĂ¡c nháº­n thá»§ cĂ´ng cho Ä‘Æ¡n thanh toĂ¡n táº¡i chá»—");
+            throw new AppException("Chỉ xác nhận thủ công cho đơn thanh toán tại chỗ");
         }
     }
 
+    private void sendConfirmationMailIfNewlyConfirmed(BookingListItemResponse booking, String beforeStatus, String afterStatus, String trigger) {
+        if (!"CONFIRMED".equals(afterStatus)) {
+            return;
+        }
+        if ("CONFIRMED".equals(beforeStatus)) {
+            return;
+        }
+        bookingConfirmationMailService.sendConfirmationMail(booking, trigger);
+    }
+
+    private void validateCancellationDeadline(BookingListItemResponse booking) {
+        if (booking.getCheckInDate() == null) {
+            return;
+        }
+        LocalDate latestCancellationDate = booking.getCheckInDate().minusDays(1);
+        if (LocalDate.now(VIETNAM_ZONE).isAfter(latestCancellationDate)) {
+            throw new AppException("Đơn đặt phòng chỉ được hủy trước ngày nhận phòng ít nhất 1 ngày");
+        }
+    }
+
+    private void refundPaidVnpayPaymentIfNeeded(Integer bookingId) {
+        BookingJdbcRepository.PaymentRefundInfo payment = bookingRepository.findLatestPaymentForRefund(bookingId);
+        if (payment == null) {
+            return;
+        }
+
+        String method = nullToEmpty(payment.getPaymentMethod()).toUpperCase(Locale.ROOT);
+        String status = nullToEmpty(payment.getPaymentStatus()).toUpperCase(Locale.ROOT);
+        if (!PAYMENT_METHOD_VNPAY.equals(method) || !"PAID".equals(status)) {
+            return;
+        }
+
+        BigDecimal refundAmount = defaultMoney(payment.getAmount()).setScale(2, RoundingMode.HALF_UP);
+        if (refundAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        String refundCode = "RF" + payment.getPaymentId() + nowInVietnam().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        bookingRepository.markVnpayPaymentRefunded(
+                bookingId,
+                payment.getPaymentId(),
+                refundAmount,
+                refundCode,
+                "AUTO_REFUND_ON_BOOKING_CANCEL"
+        );
+    }
     private String normalizeHostStatus(String status) {
         String normalized = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
         if (Set.of("CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW").contains(normalized)) {
@@ -465,11 +596,11 @@ public class BookingService {
     private String normalizePaymentMethod(String method) {
         String normalized = method == null ? "" : method.trim().toUpperCase(Locale.ROOT);
         if (PAYMENT_METHOD_VNPAY.equals(normalized) || PAYMENT_METHOD_PAY_AT_PROPERTY.equals(normalized)) return normalized;
-        throw new AppException("PhÆ°Æ¡ng thá»©c thanh toĂ¡n khĂ´ng há»£p lá»‡");
+        throw new AppException("Phương thức thanh toán không hợp lệ");
     }
 
     private String generateBookingCode() {
-        return "BK" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")) + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT);
+        return "BK" + nowInVietnam().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")) + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT);
     }
 
     private String buildVnpayPaymentUrl(Integer paymentId, BigDecimal amount, String clientIp) {
@@ -485,7 +616,7 @@ public class BookingService {
         if (!"PENDING".equals(currentPaymentStatus) || !"PAYMENT_PENDING".equals(currentBookingStatus)) {
             throw new AppException("Giao dịch không còn ở trạng thái chờ thanh toán");
         }
-        if (payment.getExpiresAt() != null && payment.getExpiresAt().isBefore(LocalDateTime.now())) {
+        if (payment.getExpiresAt() != null && payment.getExpiresAt().isBefore(nowInVietnam())) {
             bookingRepository.expirePaymentBooking(payment.getBookingId());
             throw new AppException("Giao dịch đã quá hạn thanh toán");
         }
@@ -503,12 +634,12 @@ public class BookingService {
 
     private LocalDateTime parseVnpayPayDate(String value) {
         if (value == null || value.isBlank()) {
-            return LocalDateTime.now();
+            return nowInVietnam();
         }
         try {
             return LocalDateTime.parse(value, DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
         } catch (Exception exception) {
-            return LocalDateTime.now();
+            return nowInVietnam();
         }
     }
 
@@ -527,6 +658,10 @@ public class BookingService {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private LocalDateTime nowInVietnam() {
+        return LocalDateTime.now(VIETNAM_ZONE);
     }
 
     private record AppliedPromotion(Integer promotionId, String code, BigDecimal discountAmount) {}

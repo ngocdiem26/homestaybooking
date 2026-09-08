@@ -84,6 +84,12 @@ public class Homestay {
     @Column(name = "checkin_time", nullable = false)
     private LocalTime checkinTime;
 
+    @Column(name = "checkin_end_time")
+    private LocalTime checkinEndTime;
+
+    @Column(name = "checkout_start_time")
+    private LocalTime checkoutStartTime;
+
     @Column(name = "checkout_time", nullable = false)
     private LocalTime checkoutTime;
 
@@ -105,6 +111,18 @@ public class Homestay {
     public void prePersist() {
         if (status == null) {
             status = "PENDING";
+        }
+        if (checkinTime == null) {
+            checkinTime = LocalTime.of(14, 0);
+        }
+        if (checkinEndTime == null) {
+            checkinEndTime = LocalTime.of(20, 0);
+        }
+        if (checkoutStartTime == null) {
+            checkoutStartTime = LocalTime.of(8, 0);
+        }
+        if (checkoutTime == null) {
+            checkoutTime = LocalTime.of(12, 0);
         }
         if (createdAt == null) {
             createdAt = LocalDateTime.now();

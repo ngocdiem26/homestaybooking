@@ -9,6 +9,7 @@ import AdminRevenue from '../pages/admin/AdminRevenue';
 import AdminReviews from '../pages/admin/AdminReviews';
 import AdminUsers from '../pages/admin/AdminUsers';
 import HomestayManagement from '../pages/host/HomestayManagement';
+import HostAvailability from '../pages/host/HostAvailability';
 import HostDashboard from '../pages/host/HostDashboard';
 import HostRevenue from '../pages/host/Revenue';
 import HostReviews from '../pages/host/HostReviews';
@@ -18,6 +19,7 @@ import Home from '../pages/public/Home';
 import HomestayDetail from '../pages/public/HomestayDetail';
 import Login from '../pages/public/Login';
 import Partners from '../pages/public/Partners';
+import Promotions from '../pages/public/Promotions';
 import Register from '../pages/public/Register';
 import Search from '../pages/public/SearchContent';
 import VnpayResult from '../pages/public/VnpayResult';
@@ -102,6 +104,7 @@ export default function AppRoutes() {
         <Route path="/search" element={<Search favorites={favorites} toggleFavorite={toggleFavorite} />} />
         <Route path="/favorites" element={<Favorite favorites={favorites} toggleFavorite={toggleFavorite} />} />
         <Route path="/activities" element={<Activities />} />
+        <Route path="/promotions" element={<Promotions />} />
         <Route path="/about" element={<About />} />
         <Route path="/partners" element={<Partners />} />
         <Route path="/profile" element={<Profile />} />
@@ -124,6 +127,7 @@ export default function AppRoutes() {
         <Route path="/host">
           <Route index element={<HostDashboard />} />
           <Route path="homestays" element={<HomestayManagement />} />
+          <Route path="availability" element={<HostAvailability />} />
           <Route path="revenue" element={<HostRevenue />} />
           <Route path="bookings" element={<HostBooking />} />
           <Route path="reviews" element={<HostReviews />} />

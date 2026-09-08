@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HiCreditCard, HiXMark } from 'react-icons/hi2';
 import ModalPortal from '../common/ModalPortal';
@@ -8,8 +8,10 @@ import BookingConfirmStep from './BookingConfirmStep';
 import PaymentMethodStep from './PaymentMethodStep';
 import BookingResultStep from './BookingResultStep';
 import { createBooking, createBookingQuote } from '../../services/bookingService';
+import { getMyProfile } from '../../services/profileService';
 import { checkPublicHomestayAvailability } from '../../services/homestayService';
 import { calculateNights } from '../../services/searchState';
+import { isDateRangeValid, isEmail, isTodayOrFuture, isVietnamPhone } from '../../utils/validate';
 
 function toDateString(value) {
   return value || '';
@@ -32,24 +34,88 @@ function toGuestInfo(user = {}) {
   };
 }
 
-export default function BookingCheckoutModal({ homestay, user, bookingDefaults, onClose }) {
+function getUserBirthday(user) {
+  return user?.birthday || user?.birthDay || user?.dateOfBirth || user?.birthdate || user?.dob || '';
+}
+
+function getAgeFromBirthday(value) {
+  if (!value) return null;
+  const birthday = new Date(String(value).slice(0, 10) + 'T00:00:00');
+  if (Number.isNaN(birthday.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birthday.getFullYear();
+  const monthDiff = today.getMonth() - birthday.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthday.getDate())) age -= 1;
+  return age;
+}
+
+function validateBookerAge(user) {
+  if (!user) return 'Vui lòng đăng nhập để đặt phòng.';
+  const birthday = getUserBirthday(user);
+  if (!birthday) return 'Vui lòng cập nhật ngày sinh trong hồ sơ trước khi đặt phòng.';
+  const age = getAgeFromBirthday(birthday);
+  if (age === null || age < 0) return 'Ngày sinh trong hồ sơ không hợp lệ.';
+  if (age < 18) return 'Người đứng tên đặt phòng phải từ đủ 18 tuổi.';
+  return '';
+}
+
+export default function BookingCheckoutModal({ homestay, user, bookingDefaults, initialResult = null, onClose }) {
   const navigate = useNavigate();
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(() => initialResult ? 4 : 1);
+  const [profileUser, setProfileUser] = useState(user || null);
   const [guestInfo, setGuestInfo] = useState(() => toGuestInfo(user));
   const [bookingDraft, setBookingDraft] = useState(() => toBookingDraft(bookingDefaults));
   const [selectedServices, setSelectedServices] = useState([]);
-  const [promotionCode, setPromotionCode] = useState('');
+  const [promotionCode, setPromotionCode] = useState(() => String(bookingDefaults?.promotionCode || '').toUpperCase());
   const [acceptedPolicy, setAcceptedPolicy] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('PAY_AT_PROPERTY');
   const [quote, setQuote] = useState(null);
   const errorMessageRef = useRef(null);
-  const [result, setResult] = useState(null);
+  const [result, setResult] = useState(() => initialResult);
   const [errorMessage, setErrorMessage] = useState('');
   const [availabilityWarning, setAvailabilityWarning] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadLatestProfile() {
+      if (getUserBirthday(user)) {
+        setProfileUser(user || null);
+        return;
+      }
+
+      try {
+        const profile = await getMyProfile();
+        if (!isMounted) return;
+        const mergedUser = { ...(user || {}), ...profile };
+        setProfileUser(mergedUser);
+        setGuestInfo((current) => ({
+          ...current,
+          customerName: current.customerName || mergedUser.fullName || '',
+          customerEmail: current.customerEmail || mergedUser.email || '',
+          customerPhone: current.customerPhone || mergedUser.phoneNumber || '',
+        }));
+      } catch (_) {
+        if (isMounted) setProfileUser(user || null);
+      }
+    }
+
+    loadLatestProfile();
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!initialResult) return;
+    setResult(initialResult);
+    setStep(4);
+    setErrorMessage('');
+  }, [initialResult]);
   const booking = useMemo(() => ({
-    homeId: homestay.homeId || homestay.id,
+    homeId: homestay?.homeId || homestay?.id,
     checkInDate: bookingDraft.checkInDate,
     checkOutDate: bookingDraft.checkOutDate,
     numberOfGuest: Number(bookingDraft.numberOfGuest) || 1,
@@ -124,11 +190,20 @@ export default function BookingCheckoutModal({ homestay, user, bookingDefaults, 
   };
 
   const validateGuestInfo = () => {
-    if (!guestInfo.customerName.trim()) return 'Vui lòng nhập họ tên khách đặt';
-    if (!guestInfo.customerEmail.trim()) return 'Vui lòng nhập email khách đặt';
-    if (!guestInfo.customerPhone.trim()) return 'Vui lòng nhập số điện thoại khách đặt';
-    if (!booking.checkInDate || !booking.checkOutDate) return 'Vui lòng chọn ngày nhận và trả phòng';
-    if (booking.nights <= 0) return 'Ngày trả phòng phải sau ngày nhận phòng';
+    const ageMessage = validateBookerAge(profileUser || user);
+    if (ageMessage) return ageMessage;
+    const maxGuests = Number(homestay.maxGuest || homestay.maxGuests || 1);
+    if (!guestInfo.customerName.trim()) return 'Vui lòng nhập họ tên khách đặt.';
+    if (guestInfo.customerName.trim().length < 2) return 'Họ tên khách đặt phải có ít nhất 2 ký tự.';
+    if (!guestInfo.customerEmail.trim()) return 'Vui lòng nhập email khách đặt.';
+    if (!isEmail(guestInfo.customerEmail)) return 'Email khách đặt không đúng định dạng.';
+    if (!guestInfo.customerPhone.trim()) return 'Vui lòng nhập số điện thoại khách đặt.';
+    if (!isVietnamPhone(guestInfo.customerPhone)) return 'Số điện thoại khách đặt không hợp lệ.';
+    if (!booking.checkInDate || !booking.checkOutDate) return 'Vui lòng chọn ngày nhận và trả phòng.';
+    if (!isTodayOrFuture(booking.checkInDate)) return 'Ngày nhận phòng không được trước ngày hiện tại.';
+    if (!isDateRangeValid(booking.checkInDate, booking.checkOutDate)) return 'Ngày trả phòng phải sau ngày nhận phòng.';
+    if (booking.numberOfGuest < 1) return 'Booking phải có ít nhất 1 người lớn.';
+    if (booking.numberOfGuest > maxGuests) return 'Số khách vượt quá sức chứa của homestay.';
     if (availabilityWarning) return availabilityWarning;
     return '';
   };
@@ -258,7 +333,7 @@ export default function BookingCheckoutModal({ homestay, user, bookingDefaults, 
               <HiCreditCard className="h-5 w-5" />
               <h2 className="text-base font-black">Thanh toán đặt phòng</h2>
             </div>
-            <p className="mt-1 truncate text-xs font-semibold text-gray-400">{homestay.name}</p>
+            <p className="mt-1 truncate text-xs font-semibold text-gray-400">{homestay?.name || 'Homestay'}</p>
           </div>
           <button type="button" onClick={onClose} className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-gray-500 transition hover:bg-gray-100 hover:text-[#2C1E15]" aria-label="Đóng checkout">
             <HiXMark className="h-6 w-6" />
@@ -274,14 +349,15 @@ export default function BookingCheckoutModal({ homestay, user, bookingDefaults, 
         <main className="min-h-0 flex-1 overflow-y-auto bg-white p-5 pt-0 md:p-7 md:pt-0">
           {step === 1 && <GuestInfoStep homestay={homestay} form={guestInfo} booking={booking} maxGuests={homestay.maxGuest || 1} availabilityWarning={availabilityWarning} onChange={updateGuestInfo} onBookingChange={updateBookingDraft} />}
           {step === 2 && <BookingConfirmStep homestay={homestay} quote={quote} booking={booking} guestInfo={guestInfo} selectedServices={selectedServices} promotionCode={promotionCode} acceptedPolicy={acceptedPolicy} onToggleService={toggleService} onChangeServiceQty={changeServiceQty} onPromotionChange={setPromotionCode} onApplyPromotion={applyPromotion} onAcceptPolicy={setAcceptedPolicy} onPromotionNotice={setErrorMessage} />}
-          {step === 3 && <PaymentMethodStep quote={quote} paymentMethod={paymentMethod} onSelectPaymentMethod={setPaymentMethod} onCreateBooking={submitBooking} isSubmitting={isSubmitting} />}
-          {step === 4 && <BookingResultStep result={result} onHome={() => navigate('/')} onMyBookings={() => navigate('/profile')} onRetry={() => { setStep(1); setResult(null); }} />}
+          {step === 3 && <PaymentMethodStep quote={quote} paymentMethod={paymentMethod} onSelectPaymentMethod={setPaymentMethod} />}
+          {step === 4 && <BookingResultStep result={result} onHome={() => navigate('/')} onMyBookings={() => navigate('/profile?view=' + encodeURIComponent(result?.profileTarget || 'bookings'))} onRetry={() => { setStep(1); setResult(null); }} /> }
         </main>
 
         {step < 4 && (
           <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-gray-100 bg-white px-5 py-4 md:px-7">
             <button type="button" onClick={step === 1 ? onClose : () => setStep(step - 1)} className="h-11 rounded-2xl bg-[#F4F1EA] px-5 text-sm font-black text-[#2C1E15]">{step === 1 ? 'Hủy' : 'Quay lại'}</button>
             {step < 3 && <button type="button" onClick={goNext} disabled={isSubmitting} className="h-11 rounded-2xl bg-[#2C3E2B] px-6 text-sm font-black text-white shadow-lg disabled:opacity-60">{isSubmitting ? 'Đang xử lý...' : 'Tiếp tục'}</button>}
+            {step === 3 && <button type="button" onClick={submitBooking} disabled={isSubmitting} className="h-11 rounded-2xl bg-[#2C3E2B] px-6 text-sm font-black text-white shadow-lg transition hover:bg-[#223322] disabled:opacity-60">{isSubmitting ? 'Đang xử lý...' : 'Đặt phòng'}</button>}
           </footer>
         )}
       </div>

@@ -3,6 +3,7 @@ package com.homestaybooking.controller;
 import com.homestaybooking.dto.request.PromotionRequest;
 import com.homestaybooking.dto.request.UpdatePromotionStatusRequest;
 import com.homestaybooking.dto.response.AdminPromotionResponse;
+import com.homestaybooking.dto.response.PromotionTargetOptionsResponse;
 import com.homestaybooking.service.AdminPromotionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +21,11 @@ public class AdminPromotionController {
     @GetMapping
     public List<AdminPromotionResponse> getPromotions() {
         return adminPromotionService.getPromotions();
+    }
+
+    @GetMapping("/targets")
+    public PromotionTargetOptionsResponse getTargetOptions() {
+        return adminPromotionService.getTargetOptions();
     }
 
     @PostMapping

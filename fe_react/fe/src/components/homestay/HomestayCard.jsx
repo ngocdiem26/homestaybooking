@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+﻿import { useNavigate } from 'react-router-dom';
 import { HiStar, HiMapPin } from 'react-icons/hi2';
 import { calculateNights, getStoredSearchState } from '../../services/searchState';
 
@@ -81,3 +81,4 @@ export default function HomestayCard({ item, isFav, onFavToggle }) {
     </div>
   );
 }
+

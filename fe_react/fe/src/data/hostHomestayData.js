@@ -1,4 +1,4 @@
-export const initialHostHomestays = [
+﻿export const initialHostHomestays = [
   {
     id: 'HMS-001',
     name: 'Bungalow Rừng Thông Đà Lạt',
@@ -122,3 +122,4 @@ export const PRESET_SERVICES = [
     description: 'Vệ sinh phòng, thay khăn và thu gom rác trong thời gian lưu trú.',
   },
 ];
+

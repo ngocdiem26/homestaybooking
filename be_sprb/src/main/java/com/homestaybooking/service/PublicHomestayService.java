@@ -1,3 +1,4 @@
+
 package com.homestaybooking.service;
 
 import com.homestaybooking.dto.response.PublicActivityImageResponse;
@@ -33,8 +34,8 @@ import java.util.stream.Collectors;
 public class PublicHomestayService {
 
     private static final List<String> HIDDEN_STATUSES = List.of("REJECTED", "BLOCKED", "DELETED");
-    private static final String DATE_RANGE_BOOKED_MESSAGE = "Kho\u1ea3ng th\u1eddi gian n\u00e0y \u0111\u00e3 c\u00f3 ng\u01b0\u1eddi \u0111\u1eb7t";
-    private static final String DATE_RANGE_AVAILABLE_MESSAGE = "Kho\u1ea3ng th\u1eddi gian n\u00e0y c\u00f2n tr\u1ed1ng";
+    private static final String DATE_RANGE_BOOKED_MESSAGE = "Khoảng thời gian này đã được đặt trước";
+    private static final String DATE_RANGE_AVAILABLE_MESSAGE = "Khoảng thời gian này có sẵn để đặt phòng";
 
     private final HomestayRepository homestayRepository;
     private final BookingJdbcRepository bookingRepository;
@@ -66,13 +67,13 @@ public class PublicHomestayService {
                 .filter(this::isVisiblePublicly)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy homestay"));
 
-        boolean booked = bookingRepository.hasOverlap(homestay.getHomeId(), checkInDate, checkOutDate);
-        String message = booked ? DATE_RANGE_BOOKED_MESSAGE : DATE_RANGE_AVAILABLE_MESSAGE;
+        boolean unavailable = bookingRepository.isUnavailableForBooking(homestay.getHomeId(), checkInDate, checkOutDate);
+        String message = unavailable ? DATE_RANGE_BOOKED_MESSAGE : DATE_RANGE_AVAILABLE_MESSAGE;
         return Map.of(
                 "homeId", homeId,
-                "available", !booked,
-                "unavailable", booked,
-                "dateRangeBooked", booked,
+                "available", !unavailable,
+                "unavailable", unavailable,
+                "dateRangeBooked", unavailable,
                 "message", message
         );
     }
@@ -101,6 +102,8 @@ public class PublicHomestayService {
                     a.short_description,
                     a.description,
                     a.hotline,
+                    a.opening_time,
+                    a.closing_time,
                     a.thumbnail_url,
                     a.badge_text,
                     a.badge_type,
@@ -139,6 +142,8 @@ public class PublicHomestayService {
                         .shortDescription(rs.getString("short_description"))
                         .description(rs.getString("description"))
                         .hotline(rs.getString("hotline"))
+                        .openingTime(rs.getTime("opening_time") == null ? null : rs.getTime("opening_time").toLocalTime())
+                        .closingTime(rs.getTime("closing_time") == null ? null : rs.getTime("closing_time").toLocalTime())
                         .thumbnailUrl(rs.getString("thumbnail_url"))
                         .badgeText(rs.getString("badge_text"))
                         .badgeType(rs.getString("badge_type"))
@@ -249,11 +254,11 @@ public class PublicHomestayService {
         if (!shouldCheckAvailability || item.getHomeId() == null) {
             return item;
         }
-        boolean booked = bookingRepository.hasOverlap(item.getHomeId(), checkInDate, checkOutDate);
-        item.setUnavailable(booked);
-        item.setDateRangeBooked(booked);
-        item.setAvailabilityMessage(booked ? DATE_RANGE_BOOKED_MESSAGE : DATE_RANGE_AVAILABLE_MESSAGE);
-        if (booked) {
+        boolean unavailable = bookingRepository.isUnavailableForBooking(item.getHomeId(), checkInDate, checkOutDate);
+        item.setUnavailable(unavailable);
+        item.setDateRangeBooked(unavailable);
+        item.setAvailabilityMessage(unavailable ? DATE_RANGE_BOOKED_MESSAGE : DATE_RANGE_AVAILABLE_MESSAGE);
+        if (unavailable) {
             item.setAlert(DATE_RANGE_BOOKED_MESSAGE);
         }
         return item;
@@ -396,6 +401,8 @@ public class PublicHomestayService {
                 .livingRoomCount(defaultInt(homestay.getLivingRoomCount()))
                 .bedCount(defaultInt(homestay.getBedCount()))
                 .checkinTime(homestay.getCheckinTime())
+                .checkinEndTime(homestay.getCheckinEndTime())
+                .checkoutStartTime(homestay.getCheckoutStartTime())
                 .checkoutTime(homestay.getCheckoutTime())
                 .roomType("Homestay riêng tư tại " + city)
                 .details(defaultInt(homestay.getBedroomCount()) + " phòng ngủ • "
@@ -449,7 +456,8 @@ public class PublicHomestayService {
     private List<PublicHomestayServiceResponse> getServiceResponses(Integer homeId) {
         try {
             return jdbcTemplate.query(
-                    "select hs.homestay_service_id, s.service_id, s.service_name, s.description, hs.price, hs.status "
+                    "select hs.homestay_service_id, s.service_id, s.service_name, s.description, "
+                            + "hs.price, hs.pricing_unit, hs.status "
                             + "from homestay_services hs join services s on s.service_id = hs.service_id "
                             + "where hs.home_id = ? order by s.service_name",
                     (rs, rowNum) -> PublicHomestayServiceResponse.builder()
@@ -459,6 +467,7 @@ public class PublicHomestayService {
                             .name(rs.getString("service_name"))
                             .description(rs.getString("description"))
                             .price(rs.getBigDecimal("price"))
+                            .pricingUnit(rs.getString("pricing_unit"))
                             .status(rs.getString("status"))
                             .build(),
                     homeId
@@ -606,6 +615,11 @@ public class PublicHomestayService {
         return "Má»›i trĂªn Cozygo";
     }
 }
+
+
+
+
+
 
 
 

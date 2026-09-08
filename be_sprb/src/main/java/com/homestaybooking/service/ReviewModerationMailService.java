@@ -35,72 +35,58 @@ public class ReviewModerationMailService {
             message.setText(content(review));
             mailSender.send(message);
         } catch (Exception exception) {
-            log.error("Cannot send review moderation mail for review {}: {}", review.getReviewId(), exception.getMessage(), exception);
+            log.error("Cannot send review moderation mail for review {}: {}", review.getReviewId(), exception.getMessage());
         }
     }
 
     private String subject(ReviewResponse review) {
         if ("HIDDEN".equalsIgnoreCase(review.getReviewStatus())) {
-            return "[Cozygo][Cần xem xét] Đánh giá đã được ẩn tạm thời";
+            return "[Cozygo][Khẩn cấp] Đánh giá bị ẩn do nội dung nguy hiểm";
         }
-        if ("AI_ERROR".equalsIgnoreCase(review.getModerationStatus())) {
-            return "[Cozygo] Đánh giá dùng rule-based fallback cần kiểm tra";
-        }
-        return "[Cozygo] Có đánh giá cần admin xem xét";
+        return "[Cozygo] Có đánh giá cần xem xét";
     }
 
     private String content(ReviewResponse review) {
         String nl = System.lineSeparator();
-        return "Cozygo phát hiện một đánh giá cần admin xem xét." + nl + nl
-                + "- Review ID: " + review.getReviewId() + nl
-                + "- Homestay: " + review.getHomestayName() + nl
-                + "- Host: " + review.getHostName() + nl
-                + "- Khách hàng: " + review.getCustomerName() + " <" + review.getCustomerEmail() + ">" + nl
-                + "- Rating: " + review.getRating() + nl
-                + "- Comment: " + review.getComment() + nl
-                + "- Review status: " + review.getReviewStatus() + nl
-                + "- Admin status: " + review.getAdminReviewStatus() + nl
-                + "- Action: " + review.getModerationAction() + nl
-                + "- Reason: " + friendlyReason(review) + nl
-                + "- AI status: " + safe(review.getModerationStatus()) + nl
-                + aiNote(review, nl)
-                + "- finalScore: " + review.getFinalScore() + nl
-                + "- toxicityScore: " + review.getToxicityScore() + nl
-                + "- profanityScore: " + review.getProfanityScore() + nl
-                + "- insultScore: " + review.getInsultScore() + nl
-                + "- threatScore: " + review.getThreatScore() + nl
-                + "- deathRelatedScore: " + review.getDeathRelatedScore() + nl + nl
-                + "Link xử lý: http://localhost:5173/admin/reviews?reviewId=" + review.getReviewId();
+        return "Cozygo ghi nhận một đánh giá cần admin xem xét." + nl + nl
+                + "- Review ID: " + safe(review.getReviewId()) + nl
+                + "- Homestay: " + safe(review.getHomestayName()) + nl
+                + "- Host: " + safe(review.getHostName()) + nl
+                + "- Khách hàng: " + safe(review.getCustomerName()) + " <" + safe(review.getCustomerEmail()) + ">" + nl
+                + "- Rating: " + safe(review.getRating()) + nl
+                + "- Nội dung: " + safe(review.getComment()) + nl
+                + "- Review status: " + safe(review.getReviewStatus()) + nl
+                + "- Admin status: " + safe(review.getAdminReviewStatus()) + nl
+                + "- Action: " + safe(review.getModerationAction()) + nl
+                + "- Lý do: " + friendlyReason(review) + nl
+                + "- Final score: " + safe(review.getFinalScore()) + nl
+                + "- Threat score: " + safe(review.getThreatScore()) + nl
+                + "- Hate score: " + safe(review.getHateScore()) + nl
+                + "- Privacy score: " + safe(review.getPrivacyScore()) + nl
+                + "- Spam score: " + safe(review.getSpamScore()) + nl + nl
+                + "Link xử lý: http://localhost:5173/admin/reviews?reviewId=" + safe(review.getReviewId()) + nl + nl
+                + "Vui lòng kiểm tra nội dung và đưa ra quyết định cuối cùng trên trang quản trị Cozygo.";
     }
 
     private String friendlyReason(ReviewResponse review) {
-        if ("AI_ERROR".equalsIgnoreCase(review.getModerationStatus())) {
-            if ("HIDDEN".equalsIgnoreCase(review.getReviewStatus())) {
-                return "Rule-based phát hiện nội dung nguy hiểm nên đánh giá đã bị ẩn tạm thời để admin xem xét.";
-            }
-            return "AI không đọc được kết quả hợp lệ nên hệ thống đã dùng rule-based fallback để xử lý đánh giá.";
-        }
         String reason = review.getModerationReason();
-        if (reason == null || reason.isBlank()) return "Đánh giá cần admin xem xét.";
-        if (looksTechnical(reason)) return "AI không đọc được kết quả hợp lệ nên hệ thống đã dùng rule-based fallback để xử lý đánh giá.";
+        if (reason == null || reason.isBlank() || looksTechnical(reason)) {
+            return "Đánh giá cần admin xem xét theo chính sách nội dung của Cozygo.";
+        }
         return reason;
-    }
-
-    private String aiNote(ReviewResponse review, String nl) {
-        if (!"AI_ERROR".equalsIgnoreCase(review.getModerationStatus())) return "";
-        return "- AI note: Không đọc được kết quả AI, hệ thống đã dùng rule-based fallback." + nl;
     }
 
     private boolean looksTechnical(String value) {
         String lower = value.toLowerCase();
-        return lower.contains("cannot parse")
-                || lower.contains("exception")
-                || lower.contains("unexpected")
+        return lower.contains("exception")
+                || lower.contains("stacktrace")
                 || lower.contains("json")
-                || lower.contains("stack trace");
+                || lower.contains("sql")
+                || lower.contains("openai_api_key")
+                || lower.contains("authorization");
     }
 
-    private String safe(String value) {
-        return value == null || value.isBlank() ? "NONE" : value;
+    private String safe(Object value) {
+        return value == null ? "N/A" : String.valueOf(value);
     }
 }

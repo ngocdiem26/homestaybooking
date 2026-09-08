@@ -1,5 +1,5 @@
-import { useNavigate } from 'react-router-dom';
-import { HiStar } from 'react-icons/hi2';
+﻿import { useNavigate } from 'react-router-dom';
+import { HiMapPin, HiStar } from 'react-icons/hi2';
 import { calculateNights, getStoredSearchState } from '../../services/searchState';
 
 function toNumber(value) {
@@ -52,7 +52,7 @@ function getDiscountAlert(item) {
   return 'Đang có ưu đãi ' + discountPercent + '%';
 }
 
-export default function HorizontalHomestayCard({ item, isFav, onFavToggle }) {
+export default function HorizontalHomestayCard({ item, isFav, onFavToggle, onViewMap }) {
   const navigate = useNavigate();
   const openDetail = () => navigate('/homestay/' + (item.homeId || item.id));
   const displayCity = item.city || item.province || 'Chưa cập nhật';
@@ -72,14 +72,44 @@ export default function HorizontalHomestayCard({ item, isFav, onFavToggle }) {
       <div className="w-full md:w-[220px] h-[160px] rounded-lg overflow-hidden shrink-0 relative bg-gray-100">
         <img src={item.img} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
         <button
+          type="button"
           onClick={(event) => {
             event.stopPropagation();
             onFavToggle(item.id);
           }}
-          className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center text-gray-400 hover:text-red-500 shadow-sm transition"
-          aria-label={isFav ? 'Bỏ yêu thích' : 'Thêm yêu thích'}
+          className="
+            group/heart
+            absolute right-2.5 top-2.5
+            flex h-8 w-8 items-center justify-center
+            rounded-full
+            bg-white/90
+            shadow-sm
+            backdrop-blur-sm
+            transition-all duration-200
+            hover:scale-110
+            hover:bg-red-50
+          "
+          aria-label={
+            isFav
+              ? 'Bỏ yêu thích'
+              : 'Thêm yêu thích'
+          }
         >
-          <span className="text-xs">{isFav ? '❤️' : '🤍'}</span>
+          {isFav ? (
+            <span className="text-base transition-transform duration-200 group-hover/heart:scale-110">
+              ❤️
+            </span>
+          ) : (
+            <>
+              <span className="text-base group-hover/heart:hidden">
+                🤍
+              </span>
+
+              <span className="hidden text-base group-hover/heart:inline">
+                ❤️
+              </span>
+            </>
+          )}
         </button>
       </div>
 
@@ -106,7 +136,7 @@ export default function HorizontalHomestayCard({ item, isFav, onFavToggle }) {
           </p>
         ) : discountAlert && (
           <p className="text-[10px] text-red-600 font-bold bg-red-50 inline-block px-2 py-0.5 rounded mt-2 w-fit">
-            ⚠ {discountAlert}
+            <span>🏷️</span> {discountAlert}
           </p>
         )}
       </div>
@@ -126,18 +156,32 @@ export default function HorizontalHomestayCard({ item, isFav, onFavToggle }) {
           <span className="text-[10px] text-gray-400 block font-medium">Giá cho {nights} đêm</span>
           <div className="text-sm md:text-base font-black text-[#6E473B] tracking-tight">{formatCurrency(totalPrice)}</div>
           <div className="text-[9px] text-gray-400 font-semibold block">Đã bao gồm thuế và phí dịch vụ cơ bản</div>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              openDetail();
-            }}
-            className="w-full mt-2 bg-[#2C3E2B] hover:bg-[#1f2d20] text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center justify-center shadow-sm"
-          >
-            <span>Xem chi tiết</span>
-          </button>
+          <div className="mt-2 grid gap-2">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onViewMap?.(item);
+              }}
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#6E473B]/15 bg-[#FFF8EF] px-3 py-2 text-xs font-black text-[#6E473B] shadow-sm transition hover:-translate-y-0.5 hover:border-[#D8B48A] hover:bg-[#FFEED7]"
+            >
+              <HiMapPin className="h-4 w-4" />
+              <span>Xem trên bản đồ</span>
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                openDetail();
+              }}
+              className="flex w-full items-center justify-center rounded-lg bg-[#2C3E2B] px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-[#1f2d20]"
+            >
+              <span>Xem chi tiết</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
+

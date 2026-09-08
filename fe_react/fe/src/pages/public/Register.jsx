@@ -4,6 +4,7 @@ import { useRegisterForm } from '../../hooks/useRegisterForm';
 
 export default function Register() {
   const {
+    errors,
     form,
     isSubmitting,
     showConfirmPassword,
@@ -18,6 +19,7 @@ export default function Register() {
   return (
     <AuthShell>
       <RegisterForm
+        errors={errors}
         form={form}
         isSubmitting={isSubmitting}
         showConfirmPassword={showConfirmPassword}

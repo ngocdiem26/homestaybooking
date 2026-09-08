@@ -1,5 +1,5 @@
-﻿import { useEffect, useMemo, useState } from 'react';
-import { getMyTier, getMyTierOverview } from '../../services/customerTierService';
+﻿import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const tierStyles = {
   BRONZE: {
@@ -42,10 +42,36 @@ function getTierName(tier) {
 }
 
 function formatDiscount(promotion) {
-  if (!promotion) return 'Ưu đãi thành viên';
+  if (!promotion) return 'Ưu đãi thành viên Cozygo';
+
   const value = Number(promotion.discountValue || 0).toLocaleString('vi-VN');
   if (promotion.discountType === 'PERCENT') return 'Giảm ' + value + '% khi lưu trú';
   return 'Giảm ' + value + 'đ khi đặt homestay';
+}
+
+function formatDateTime(value) {
+  if (!value) return 'Không giới hạn';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Không giới hạn';
+  return date.toLocaleDateString('vi-VN');
+}
+
+function getPromotionUsageState(promotion) {
+  const status = String(promotion?.userPromotionStatus || '').toUpperCase();
+  const usedCount = Number(promotion?.usedCount || 0);
+  const usageLimit = Number(promotion?.usageLimit || 0);
+  const usedUp = promotion?.usedByCurrentUser === true || status === 'USED_UP' || (usageLimit > 0 && usedCount >= usageLimit);
+
+  if (status === 'EXPIRED') {
+    return { unavailable: true, label: 'Đã hết hạn', tone: 'expired' };
+  }
+  if (status === 'REVOKED') {
+    return { unavailable: true, label: 'Đã thu hồi', tone: 'expired' };
+  }
+  if (usedUp) {
+    return { unavailable: true, label: 'Đã sử dụng', tone: 'used' };
+  }
+  return { unavailable: false, label: 'Sử dụng ngay', tone: 'active' };
 }
 
 function LockStatusIcon({ locked }) {
@@ -61,8 +87,10 @@ function LockStatusIcon({ locked }) {
     </svg>
   );
 }
+
 function TierBadge({ tier }) {
   const style = getTierStyle(tier?.currentTierCode || tier?.tierCode);
+
   return (
     <span className={'inline-flex items-center rounded-full px-3 py-1 text-xs font-black shadow-sm ' + style.chip}>
       Hạng {getTierName(tier)}
@@ -79,9 +107,7 @@ function TierProgressPill({ tier }) {
       <div
         className={[
           'inline-flex min-w-[116px] items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-black shadow-sm',
-          locked
-            ? 'border-gray-200 bg-gray-50 text-gray-500'
-            : 'border-[#E7C9B8] ' + style.softChip,
+          locked ? 'border-gray-200 bg-gray-50 text-gray-500' : 'border-[#E7C9B8] ' + style.softChip,
           tier.current ? 'ring-2 ring-offset-2 ring-offset-white ' + style.ring : '',
         ].join(' ')}
       >
@@ -94,9 +120,14 @@ function TierProgressPill({ tier }) {
   );
 }
 
-function TierRewardCard({ tier, promotion }) {
+function TierRewardCard({ tier, promotion, onUseNow }) {
   const style = getTierStyle(tier.tierCode);
   const locked = !tier.unlocked;
+  const usageState = getPromotionUsageState(promotion);
+  const validUntilText = formatDateTime(promotion?.userValidUntil);
+  const usageText = promotion?.usageLimit
+    ? `${Number(promotion.usedCount || 0)}/${Number(promotion.usageLimit)} lượt`
+    : '';
 
   return (
     <article
@@ -112,7 +143,7 @@ function TierRewardCard({ tier, promotion }) {
         <span className={'rounded-full px-3 py-1 text-xs font-black ' + (locked ? 'bg-gray-200 text-gray-500' : style.softChip)}>
           {getTierName(tier)}
         </span>
-        <span className={'text-lg font-black ' + (locked ? 'text-gray-300' : 'text-[#2C3E2B]')}>›</span>
+        <span className={'text-lg font-black ' + (locked ? 'text-gray-300' : 'text-[#2C3E2B]')}>%</span>
       </div>
 
       <h4 className={'mt-4 min-h-[52px] text-base font-black leading-6 ' + (locked ? 'text-gray-400' : 'text-[#2C1E15]')}>
@@ -120,7 +151,7 @@ function TierRewardCard({ tier, promotion }) {
       </h4>
 
       <p className={'mt-3 line-clamp-2 text-sm font-semibold leading-5 ' + (locked ? 'text-gray-400' : 'text-gray-600')}>
-        {promotion?.promotionName || (locked ? 'Đặt thêm đơn để mở quyền lợi của hạng này.' : 'Cozygo sẽ tự động áp dụng khi có ưu đãi phù hợp.')}
+        {promotion?.promotionName || (locked ? 'Đặt thêm đơn hàng để mở khóa quyền lợi của hạng này.' : 'Cozygo sẽ tự động áp dụng khi có ưu đãi phù hợp.')}
       </p>
 
       {promotion?.promotionCode && (
@@ -128,53 +159,37 @@ function TierRewardCard({ tier, promotion }) {
           {promotion.promotionCode}
         </p>
       )}
+
+      {promotion ? (
+        <div className={'mt-3 space-y-1 rounded-xl px-3 py-2 text-xs font-bold leading-5 ' + (locked ? 'bg-gray-200 text-gray-500' : 'bg-[#F7F4EC] text-gray-600')}>
+          <p>Hạn sử dụng: <span className={locked ? 'text-gray-500' : 'text-[#6c483a]'}>{validUntilText}</span></p>
+          {usageText ? <p>Lượt dùng: <span className={locked ? 'text-gray-500' : 'text-[#6c483a]'}>{usageText}</span></p> : null}
+        </div>
+      ) : null}
+
+      {!locked && promotion ? (
+        <button
+          type="button"
+          disabled={usageState.unavailable}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (usageState.unavailable) return;
+            onUseNow?.();
+          }}
+          className={[
+            'mt-4 inline-flex h-10 w-full items-center justify-center rounded-xl px-4 text-sm font-black shadow transition',
+            usageState.unavailable
+              ? usageState.tone === 'used'
+                ? 'cursor-not-allowed bg-[#EDE5DF] text-[#7A432E]'
+                : 'cursor-not-allowed bg-gray-200 text-gray-500'
+              : 'bg-[#2C3E2B] text-white hover:bg-[#223523]',
+          ].join(' ')}
+        >
+          {usageState.label}
+        </button>
+      ) : null}
     </article>
   );
-}
-
-
-export function useCustomerTierData(enabled = true) {
-  const [tier, setTier] = useState(null);
-  const [tiers, setTiers] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState('');
-
-  useEffect(() => {
-    let mounted = true;
-
-    if (!enabled) {
-      setTier(null);
-      setTiers([]);
-      setErrorMessage('');
-      setIsLoading(false);
-      return () => {
-        mounted = false;
-      };
-    }
-
-    async function loadTierData() {
-      try {
-        setIsLoading(true);
-        setErrorMessage('');
-        const [myTier, overview] = await Promise.all([getMyTier(), getMyTierOverview()]);
-        if (!mounted) return;
-        setTier(myTier);
-        setTiers(Array.isArray(overview) ? overview : []);
-      } catch (error) {
-        if (!mounted) return;
-        setErrorMessage(error.message || 'Không tải được cấp bậc thành viên');
-      } finally {
-        if (mounted) setIsLoading(false);
-      }
-    }
-
-    loadTierData();
-    return () => {
-      mounted = false;
-    };
-  }, [enabled]);
-
-  return { tier, tiers, isLoading, errorMessage };
 }
 
 export function CustomerTierSummary({ tier, userInfo, isLoading, errorMessage }) {
@@ -184,6 +199,7 @@ export function CustomerTierSummary({ tier, userInfo, isLoading, errorMessage })
   const nextText = useMemo(() => {
     if (!tier) return '';
     if (!tier.nextTierName) return 'Bạn đã đạt hạng cao nhất của Cozygo.';
+
     const nextTierName = getTierName({ tierCode: tier.nextTierCode, tierName: tier.nextTierName });
     return 'Còn ' + tier.remainingBookingsToNextTier + ' đơn hoàn thành nữa để lên hạng ' + nextTierName + '.';
   }, [tier]);
@@ -202,7 +218,7 @@ export function CustomerTierSummary({ tier, userInfo, isLoading, errorMessage })
         <p className="text-xs font-black uppercase text-[#F0B77A]">Cozygo Membership</p>
         <h2 className="mt-1 font-serif text-2xl font-black text-white">Hạng {currentTierName}</h2>
         <p className="mt-2 text-sm font-semibold leading-6 text-white/75">
-          {displayName} đã hoàn thành {tier?.completedBookings24m || 0} đơn trong 2 năm gần nhất.
+          {displayName} đã hoàn thành {tier?.completedBookings24m || 0} đơn kể từ khi tạo tài khoản.
         </p>
       </div>
 
@@ -229,7 +245,11 @@ export function CustomerTierSummary({ tier, userInfo, isLoading, errorMessage })
     </div>
   );
 }
+
 function TierRewardsSlider({ tiers }) {
+  const navigate = useNavigate();
+  const handleUseNow = () => navigate('/search');
+
   const rewards = useMemo(
     () =>
       tiers.flatMap((tier) => {
@@ -241,17 +261,15 @@ function TierRewardsSlider({ tiers }) {
     [tiers],
   );
 
-
   return (
     <section className="mt-6 rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-black/5 md:p-7">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h3 className="font-serif text-2xl font-black text-[#2C1E15] md:text-3xl">Quyền lợi theo hạng Cozygo</h3>
           <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-gray-600">
-            Các thẻ màu sáng là quyền lợi bạn đã mở. Các thẻ màu xám là quyền lợi sẽ mở khi bạn đạt hạng tiếp theo.
+            Các thẻ màu sáng là quyền lợi bạn được nhận. Các thẻ màu xám là quyền lợi sẽ được nhận khi bạn đặt hàng tiếp theo.
           </p>
         </div>
-
       </div>
 
       <div className="mt-8 overflow-x-auto pb-2">
@@ -269,13 +287,10 @@ function TierRewardsSlider({ tiers }) {
             key={(promotion?.promotionId || 'tier') + '-' + tier.tierId + '-' + index}
             tier={tier}
             promotion={promotion}
+            onUseNow={handleUseNow}
           />
         ))}
       </div>
-
-      <button type="button" className="mt-2 text-sm font-black text-[#0F5C46] transition hover:text-[#7A432E]">
-        Tìm hiểu thêm về quyền lợi Cozygo
-      </button>
     </section>
   );
 }
@@ -307,5 +322,3 @@ export default function CustomerTierOverview({ tiers = [], isLoading = false, er
     </section>
   );
 }
-
-

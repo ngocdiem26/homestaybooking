@@ -1,15 +1,13 @@
 package com.homestaybooking.service;
 
 import com.homestaybooking.dto.response.ReviewModerationResult;
-import org.springframework.stereotype.Service;
-
 import java.math.BigDecimal;
 import java.text.Normalizer;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
 
-@Service
+// Legacy rule service kept for reference. The active rule-based moderation bean is VietnameseRuleBasedModerationService.
 public class ReviewRuleModerationService {
     public ReviewModerationResult moderate(Integer rating, String comment) {
         String text = normalize(comment);

@@ -3,6 +3,7 @@ package com.homestaybooking.repository;
 import com.homestaybooking.dto.response.BookingListItemResponse;
 import com.homestaybooking.dto.response.BookingPromotionResponse;
 import com.homestaybooking.dto.response.BookingServiceLineResponse;
+import com.homestaybooking.dto.response.PaymentTransactionResponse;
 import com.homestaybooking.exception.AppException;
 import lombok.Builder;
 import lombok.Data;
@@ -12,6 +13,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
+import jakarta.annotation.PostConstruct;
 
 import java.math.BigDecimal;
 import java.sql.Date;
@@ -28,6 +30,31 @@ import java.util.Objects;
 public class BookingJdbcRepository {
 
     private final JdbcTemplate jdbcTemplate;
+
+    @PostConstruct
+    public void ensurePaymentRefundColumns() {
+        try {
+            addColumnIfMissing("payments", "expires_at", "TIMESTAMP NULL DEFAULT NULL");
+            addColumnIfMissing("payments", "refund_amount", "DECIMAL(12,2) NULL");
+            addColumnIfMissing("payments", "refund_status", "VARCHAR(50) NULL");
+            addColumnIfMissing("payments", "refund_transaction_code", "VARCHAR(80) NULL");
+            addColumnIfMissing("payments", "refund_note", "VARCHAR(500) NULL");
+            addColumnIfMissing("payments", "refunded_at", "TIMESTAMP NULL DEFAULT NULL");
+        } catch (Exception ignored) {
+            // Schema can also be updated from database/HomestayBooking.sql in restricted environments.
+        }
+    }
+    private void addColumnIfMissing(String tableName, String columnName, String definition) {
+        Integer count = jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.columns where table_schema = database() and table_name = ? and column_name = ?",
+                Integer.class,
+                tableName,
+                columnName
+        );
+        if (count == null || count == 0) {
+            jdbcTemplate.execute("alter table " + tableName + " add column " + columnName + " " + definition);
+        }
+    }
 
     public HomestayBookingInfo findHomestay(Integer homeId) {
         try {
@@ -72,6 +99,23 @@ public class BookingJdbcRepository {
         return count != null && count > 0;
     }
 
+    public boolean hasHostUnavailableDate(Integer homeId, LocalDate checkIn, LocalDate checkOut) {
+        Integer count = jdbcTemplate.queryForObject(
+                "select count(*) from homestay_availabilities "
+                        + "where home_id = ? and upper(status) in ('BLOCKED','MAINTENANCE') "
+                        + "and available_date >= ? and available_date < ?",
+                Integer.class,
+                homeId,
+                Date.valueOf(checkIn),
+                Date.valueOf(checkOut)
+        );
+        return count != null && count > 0;
+    }
+
+    public boolean isUnavailableForBooking(Integer homeId, LocalDate checkIn, LocalDate checkOut) {
+        return hasOverlap(homeId, checkIn, checkOut) || hasHostUnavailableDate(homeId, checkIn, checkOut);
+    }
+
     public List<ServiceInfo> findServices(Integer homeId, List<Integer> homestayServiceIds) {
         if (homestayServiceIds == null || homestayServiceIds.isEmpty()) return List.of();
         String placeholders = String.join(",", homestayServiceIds.stream().map(id -> "?").toList());
@@ -105,8 +149,8 @@ public class BookingJdbcRepository {
                             .promotionCode(rs.getString("promotion_code"))
                             .discountType(rs.getString("discount_type"))
                             .discountValue(rs.getBigDecimal("discount_value"))
-                            .startDate(rs.getDate("start_date").toLocalDate())
-                            .endDate(rs.getDate("end_date").toLocalDate())
+                            .startDate(toLocalDate(rs.getDate("start_date")))
+                            .endDate(toLocalDate(rs.getDate("end_date")))
                             .maxDiscount(rs.getBigDecimal("max_discount"))
                             .minOrderAmount(rs.getBigDecimal("min_order_amount"))
                             .usageLimitTotal((Integer) rs.getObject("usage_limit_total"))
@@ -131,11 +175,12 @@ public class BookingJdbcRepository {
                        end as estimated_discount
                 from promotions p
                 where upper(coalesce(p.status, '')) = 'ACTIVE'
-                  and current_date between p.start_date and p.end_date
+                  and (p.start_date is null or current_date >= p.start_date)
+                  and (p.end_date is null or current_date <= p.end_date)
                   and (
-                        upper(coalesce(p.promotion_scope, 'GLOBAL')) in ('GLOBAL', 'TIER')
+                        upper(coalesce(p.promotion_scope, 'GLOBAL')) in ('GLOBAL', 'TIER', 'USER')
                         or (
-                            upper(coalesce(p.promotion_scope, 'GLOBAL')) in ('HOMESTAY', 'HOMESTAY_TIER')
+                            upper(coalesce(p.promotion_scope, 'GLOBAL')) in ('HOMESTAY', 'HOMESTAY_TIER', 'HOMESTAY_USER')
                             and exists (
                                 select 1
                                 from promotion_homestays ph
@@ -147,23 +192,28 @@ public class BookingJdbcRepository {
                   and (p.usage_limit_total is null or (
                         select count(*) from promotion_usages pu where pu.promotion_id = p.promotion_id
                   ) < p.usage_limit_total)
-                  and (p.usage_limit_per_user is null or (
-                        select count(*) from promotion_usages pu
-                        where pu.promotion_id = p.promotion_id and pu.user_id = ?
-                  ) < p.usage_limit_per_user)
                   and (
                         (
-                            upper(coalesce(p.promotion_scope, 'GLOBAL')) not in ('TIER', 'HOMESTAY_TIER')
+                            upper(coalesce(p.promotion_scope, 'GLOBAL')) not in ('USER', 'HOMESTAY_USER', 'TIER', 'HOMESTAY_TIER')
                             and not exists (select 1 from promotion_tiers pt where pt.promotion_id = p.promotion_id)
+                            and (p.usage_limit_per_user is null or (
+                                select count(*) from promotion_usages pu
+                                where pu.promotion_id = p.promotion_id and pu.user_id = ?
+                            ) < p.usage_limit_per_user)
                         )
                         or exists (
                             select 1
-                            from promotion_tiers pt
-                            join customer_tier_accounts cta on cta.current_tier_id = pt.tier_id
-                            where pt.promotion_id = p.promotion_id and cta.user_id = ?
+                            from promotion_users pu
+                            where pu.promotion_id = p.promotion_id
+                              and pu.user_id = ?
+                              and upper(coalesce(pu.user_promotion_status, 'ACTIVE')) = 'ACTIVE'
+                              and pu.valid_from <= now()
+                              and (pu.valid_until is null or pu.valid_until >= now())
+                              and coalesce(pu.used_count, 0) < coalesce(pu.usage_limit, 1)
                         )
                   )
-                order by estimated_discount desc, coalesce(p.discount_value, 0) desc, p.end_date asc
+                order by estimated_discount desc, coalesce(p.discount_value, 0) desc,
+                         case when p.end_date is null then 1 else 0 end, p.end_date asc
                 limit 8
                 """;
 
@@ -178,7 +228,7 @@ public class BookingJdbcRepository {
                         .maxDiscount(rs.getBigDecimal("max_discount"))
                         .minOrderAmount(rs.getBigDecimal("min_order_amount"))
                         .estimatedDiscount(rs.getBigDecimal("estimated_discount"))
-                        .endDate(rs.getDate("end_date").toLocalDate())
+                        .endDate(toLocalDate(rs.getDate("end_date")))
                         .build(),
                 safeOrderAmount,
                 safeOrderAmount,
@@ -189,53 +239,57 @@ public class BookingJdbcRepository {
                 userId
         );
     }
-
     public boolean promotionAllowedForBooking(Integer promotionId, Integer userId, Integer homeId) {
         Integer allowed = jdbcTemplate.queryForObject(
                 """
                 select case
-                    when upper(coalesce(p.promotion_scope, 'GLOBAL')) in ('USER', 'HOMESTAY_USER')
-                         and not exists (
-                            select 1
-                            from promotion_users pu
-                            where pu.promotion_id = p.promotion_id and pu.user_id = ?
-                         ) then 0
+                    when upper(coalesce(p.status, '')) <> 'ACTIVE' then 0
+                    when p.start_date is not null and current_date < p.start_date then 0
+                    when p.end_date is not null and current_date > p.end_date then 0
                     when upper(coalesce(p.promotion_scope, 'GLOBAL')) in ('HOMESTAY', 'HOMESTAY_USER', 'HOMESTAY_TIER')
                          and not exists (
                             select 1
                             from promotion_homestays ph
                             where ph.promotion_id = p.promotion_id and ph.home_id = ?
                          ) then 0
-                    when exists (
-                        select 1
-                        from promotion_tiers pt
-                        join customer_tier_accounts cta on cta.current_tier_id = pt.tier_id
-                        where pt.promotion_id = p.promotion_id and cta.user_id = ?
-                    ) then 1
-                    when upper(coalesce(p.promotion_scope, 'GLOBAL')) not in ('TIER', 'HOMESTAY_TIER')
-                         and not exists (select 1 from promotion_tiers pt where pt.promotion_id = p.promotion_id) then 1
-                    else 0
+                    when (
+                            upper(coalesce(p.promotion_scope, 'GLOBAL')) in ('USER', 'HOMESTAY_USER', 'TIER', 'HOMESTAY_TIER')
+                            or exists (select 1 from promotion_tiers pt where pt.promotion_id = p.promotion_id)
+                         )
+                         and not exists (
+                            select 1
+                            from promotion_users pu
+                            where pu.promotion_id = p.promotion_id
+                              and pu.user_id = ?
+                              and upper(coalesce(pu.user_promotion_status, 'ACTIVE')) = 'ACTIVE'
+                              and pu.valid_from <= now()
+                              and (pu.valid_until is null or pu.valid_until >= now())
+                              and coalesce(pu.used_count, 0) < coalesce(pu.usage_limit, 1)
+                         ) then 0
+                    else 1
                 end
                 from promotions p
                 where p.promotion_id = ?
                 """,
                 Integer.class,
-                userId,
                 homeId,
                 userId,
                 promotionId
         );
         return allowed != null && allowed == 1;
-    }    public int countPromotionUsage(Integer promotionId, Integer userId) {
+    }
+    public int countPromotionUsage(Integer promotionId, Integer userId) {
         Integer count = jdbcTemplate.queryForObject(
-                "select count(*) from promotion_usages where promotion_id = ? and user_id = ?",
+                "select coalesce((select max(pu.used_count) from promotion_users pu where pu.promotion_id = ? and pu.user_id = ?), "
+                        + "(select count(*) from promotion_usages where promotion_id = ? and user_id = ?))",
                 Integer.class,
+                promotionId,
+                userId,
                 promotionId,
                 userId
         );
         return count == null ? 0 : count;
     }
-
     public int countPromotionUsageTotal(Integer promotionId) {
         Integer count = jdbcTemplate.queryForObject(
                 "select count(*) from promotion_usages where promotion_id = ?",
@@ -328,15 +382,23 @@ public class BookingJdbcRepository {
                 promotionId,
                 discountAmount
         );
+        jdbcTemplate.update(
+                "update promotion_users set used_count = coalesce(used_count, 0) + 1, "
+                        + "user_promotion_status = case when coalesce(used_count, 0) + 1 >= coalesce(usage_limit, 1) then 'USED_UP' else user_promotion_status end "
+                        + "where promotion_id = ? and user_id = ? and upper(coalesce(user_promotion_status, 'ACTIVE')) = 'ACTIVE'",
+                promotionId,
+                userId
+        );
     }
 
     public PaymentStatusInfo findPaymentStatus(Integer bookingId) {
         try {
             return jdbcTemplate.queryForObject(
-                    "select b.booking_id, b.booking_code, b.booking_status, b.payment_expires_at, p.payment_status, p.paid_at "
+                    "select b.booking_id, b.home_id, b.booking_code, b.booking_status, b.payment_expires_at, p.payment_status, p.paid_at "
                             + "from bookings b left join payments p on p.booking_id = b.booking_id where b.booking_id = ? order by p.payment_id desc limit 1",
                     (rs, rowNum) -> PaymentStatusInfo.builder()
                             .bookingId(rs.getInt("booking_id"))
+                            .homeId(rs.getInt("home_id"))
                             .bookingCode(rs.getString("booking_code"))
                             .bookingStatus(rs.getString("booking_status"))
                             .paymentStatus(rs.getString("payment_status"))
@@ -371,14 +433,22 @@ public class BookingJdbcRepository {
         }
     }
 
-    public void markPaymentPaid(Integer bookingId, Integer paymentId, LocalDateTime paidAt) {
-        jdbcTemplate.update("update payments set payment_status = 'PAID', paid_at = ? where payment_id = ?", Timestamp.valueOf(paidAt), paymentId);
-        jdbcTemplate.update("update bookings set booking_status = 'CONFIRMED', payment_status = 'PAID', updated_at = now() where booking_id = ?", bookingId);
+    public int markPaymentPaid(Integer bookingId, Integer paymentId, LocalDateTime paidAt) {
+        int changed = jdbcTemplate.update("update payments set payment_status = 'PAID', paid_at = ? where payment_id = ? and payment_status <> 'PAID'", Timestamp.valueOf(paidAt), paymentId);
+        jdbcTemplate.update("update bookings set booking_status = 'CONFIRMED', payment_status = 'PAID', updated_at = now() where booking_id = ? and payment_status <> 'PAID'", bookingId);
+        return changed;
     }
 
     public void markPaymentFailed(Integer bookingId, Integer paymentId) {
-        jdbcTemplate.update("update payments set payment_status = 'FAILED' where payment_id = ?", paymentId);
-        jdbcTemplate.update("update bookings set payment_status = 'FAILED', updated_at = now() where booking_id = ? and booking_status = 'PAYMENT_PENDING'", bookingId);
+        jdbcTemplate.update(
+                "update payments set payment_status = 'FAILED' where payment_id = ? and payment_status = 'PENDING'",
+                paymentId
+        );
+        jdbcTemplate.update(
+                "update bookings set payment_status = 'FAILED', updated_at = now() "
+                        + "where booking_id = ? and booking_status = 'PAYMENT_PENDING' and payment_status = 'PENDING'",
+                bookingId
+        );
     }
 
     public void expirePaymentBooking(Integer bookingId) {
@@ -403,6 +473,12 @@ public class BookingJdbcRepository {
 
     public List<BookingListItemResponse> findAllBookings() {
         return findBookings("");
+    }
+
+    public BookingListItemResponse findBookingById(Integer bookingId) {
+        return findBookings("where b.booking_id = ?", bookingId).stream()
+                .findFirst()
+                .orElseThrow(() -> new AppException("Không tìm thấy booking"));
     }
 
     private List<BookingListItemResponse> findBookings(String whereClause, Object... args) {
@@ -537,6 +613,122 @@ public class BookingJdbcRepository {
         jdbcTemplate.update("update bookings set booking_status = 'CONFIRMED', payment_status = 'PAID', updated_at = now() where booking_id = ?", bookingId);
     }
 
+    public PaymentRefundInfo findLatestPaymentForRefund(Integer bookingId) {
+        try {
+            return jdbcTemplate.queryForObject(
+                    "select b.booking_id, b.booking_code, b.booking_status, b.payment_status as booking_payment_status, "
+                            + "p.payment_id, p.amount, p.payment_method, p.payment_status, p.gateway, p.transaction_code, p.paid_at, "
+                            + "p.refund_amount, p.refund_status, p.refund_transaction_code, p.refunded_at "
+                            + "from bookings b join payments p on p.booking_id = b.booking_id "
+                            + "where b.booking_id = ? order by p.payment_id desc limit 1",
+                    (rs, rowNum) -> PaymentRefundInfo.builder()
+                            .bookingId(rs.getInt("booking_id"))
+                            .bookingCode(defaultBookingCode(rs.getString("booking_code"), rs.getInt("booking_id")))
+                            .bookingStatus(rs.getString("booking_status"))
+                            .bookingPaymentStatus(rs.getString("booking_payment_status"))
+                            .paymentId(rs.getInt("payment_id"))
+                            .amount(rs.getBigDecimal("amount"))
+                            .paymentMethod(rs.getString("payment_method"))
+                            .paymentStatus(rs.getString("payment_status"))
+                            .gateway(rs.getString("gateway"))
+                            .transactionCode(rs.getString("transaction_code"))
+                            .paidAt(rs.getTimestamp("paid_at") == null ? null : rs.getTimestamp("paid_at").toLocalDateTime())
+                            .refundAmount(rs.getBigDecimal("refund_amount"))
+                            .refundStatus(rs.getString("refund_status"))
+                            .refundTransactionCode(rs.getString("refund_transaction_code"))
+                            .refundedAt(rs.getTimestamp("refunded_at") == null ? null : rs.getTimestamp("refunded_at").toLocalDateTime())
+                            .build(),
+                    bookingId
+            );
+        } catch (EmptyResultDataAccessException exception) {
+            return null;
+        }
+    }
+
+    public void markVnpayPaymentRefunded(Integer bookingId, Integer paymentId, BigDecimal amount, String refundTransactionCode, String note) {
+        jdbcTemplate.update(
+                "update payments set payment_status = 'REFUNDED', refund_status = 'SUCCESS', refund_amount = ?, "
+                        + "refund_transaction_code = ?, refund_note = ?, refunded_at = now() "
+                        + "where payment_id = ? and booking_id = ?",
+                amount,
+                refundTransactionCode,
+                note,
+                paymentId,
+                bookingId
+        );
+        jdbcTemplate.update("update bookings set payment_status = 'REFUNDED', updated_at = now() where booking_id = ?", bookingId);
+    }
+
+    public List<PaymentTransactionResponse> findUserPaymentTransactions(Integer userId) {
+        String sql = """
+                select concat('PAY-', p.payment_id) as transaction_id,
+                       b.booking_id,
+                       b.booking_code,
+                       h.home_name as homestay_name,
+                       p.amount,
+                       'DEBIT' as direction,
+                       'PAYMENT' as transaction_type,
+                       p.payment_method,
+                       case when upper(coalesce(p.payment_status, '')) = 'REFUNDED' then 'PAID' else p.payment_status end as status,
+                       p.gateway,
+                       p.transaction_code as reference_code,
+                       concat('Thanh toán đơn ', coalesce(b.booking_code, concat('BK', b.booking_id))) as description,
+                       coalesce(p.paid_at, p.created_at) as occurred_at,
+                       0 as sort_rank
+                from payments p
+                join bookings b on b.booking_id = p.booking_id
+                join homestays h on h.home_id = b.home_id
+                where b.user_id = ?
+                  and upper(coalesce(p.payment_status, '')) in ('PAID', 'REFUNDED')
+                union all
+                select concat('REF-', p.payment_id) as transaction_id,
+                       b.booking_id,
+                       b.booking_code,
+                       h.home_name as homestay_name,
+                       coalesce(p.refund_amount, p.amount) as amount,
+                       'CREDIT' as direction,
+                       'REFUND' as transaction_type,
+                       p.payment_method,
+                       coalesce(p.refund_status, 'SUCCESS') as status,
+                       p.gateway,
+                       p.refund_transaction_code as reference_code,
+                       concat('Hoàn tiền đơn ', coalesce(b.booking_code, concat('BK', b.booking_id))) as description,
+                       coalesce(p.refunded_at, p.paid_at, p.created_at) as occurred_at,
+                       1 as sort_rank
+                from payments p
+                join bookings b on b.booking_id = p.booking_id
+                join homestays h on h.home_id = b.home_id
+                where b.user_id = ?
+                  and upper(coalesce(p.payment_status, '')) = 'REFUNDED'
+                  and upper(coalesce(p.refund_status, '')) in ('SUCCESS', 'REFUNDED')
+                order by occurred_at desc, sort_rank desc, transaction_id desc
+                """;
+
+        return jdbcTemplate.query(
+                sql,
+                (rs, rowNum) -> PaymentTransactionResponse.builder()
+                        .transactionId(rs.getString("transaction_id"))
+                        .bookingId(rs.getInt("booking_id"))
+                        .bookingCode(defaultBookingCode(rs.getString("booking_code"), rs.getInt("booking_id")))
+                        .homestayName(rs.getString("homestay_name"))
+                        .amount(rs.getBigDecimal("amount"))
+                        .direction(rs.getString("direction"))
+                        .transactionType(rs.getString("transaction_type"))
+                        .paymentMethod(rs.getString("payment_method"))
+                        .status(rs.getString("status"))
+                        .gateway(rs.getString("gateway"))
+                        .referenceCode(rs.getString("reference_code"))
+                        .description(rs.getString("description"))
+                        .occurredAt(rs.getTimestamp("occurred_at") == null ? null : rs.getTimestamp("occurred_at").toLocalDateTime())
+                        .build(),
+                userId,
+                userId
+        );
+    }
+    private LocalDate toLocalDate(Date date) {
+        return date == null ? null : date.toLocalDate();
+    }
+
     private String defaultBookingCode(String bookingCode, Integer bookingId) {
         return bookingCode == null || bookingCode.isBlank() ? "BK" + String.format("%06d", bookingId) : bookingCode;
     }
@@ -586,8 +778,28 @@ public class BookingJdbcRepository {
 
     @Data
     @Builder
+    public static class PaymentRefundInfo {
+        private Integer bookingId;
+        private String bookingCode;
+        private String bookingStatus;
+        private String bookingPaymentStatus;
+        private Integer paymentId;
+        private BigDecimal amount;
+        private String paymentMethod;
+        private String paymentStatus;
+        private String gateway;
+        private String transactionCode;
+        private LocalDateTime paidAt;
+        private BigDecimal refundAmount;
+        private String refundStatus;
+        private String refundTransactionCode;
+        private LocalDateTime refundedAt;
+    }
+    @Data
+    @Builder
     public static class PaymentStatusInfo {
         private Integer bookingId;
+        private Integer homeId;
         private String bookingCode;
         private String bookingStatus;
         private String paymentStatus;

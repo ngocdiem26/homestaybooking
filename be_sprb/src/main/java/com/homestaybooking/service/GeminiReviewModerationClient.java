@@ -5,12 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.homestaybooking.dto.response.ReviewModerationResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
-@Service
+// Kept only for reference. Review moderation now uses VietnameseRuleBasedModerationService
+// and OpenAiModerationClient, so this class must not be registered as a Spring bean.
 @RequiredArgsConstructor
 public class GeminiReviewModerationClient {
     private static final String AI_ERROR = "__AI_MODERATION_ERROR__";

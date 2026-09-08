@@ -9,6 +9,19 @@ export const DISCOUNT_TYPE_OPTIONS = [
   { value: 'AMOUNT', label: 'Cố định (VNĐ)' },
 ];
 
+
+export const PROMOTION_SCOPE_OPTIONS = [
+  { value: 'GLOBAL', label: 'Toàn sàn' },
+  { value: 'HOMESTAY', label: 'Theo homestay' },
+  { value: 'USER', label: 'Theo khách hàng' },
+  { value: 'TIER', label: 'Theo hạng thành viên' },
+  { value: 'HOMESTAY_USER', label: 'Homestay + khách hàng' },
+  { value: 'HOMESTAY_TIER', label: 'Homestay + hạng thành viên' },
+];
+
+export function getPromotionScopeLabel(scope) {
+  return PROMOTION_SCOPE_OPTIONS.find((option) => option.value === scope)?.label || 'Toàn sàn';
+}
 export function getPromotionStatusLabel(status) {
   return PROMOTION_STATUS_OPTIONS.find((option) => option.value === status)?.label || 'Không rõ';
 }
@@ -46,6 +59,15 @@ export function formatCurrency(value) {
 }
 
 export function formatDateRange(startDate, endDate) {
+  if (!startDate && !endDate) {
+    return 'Không giới hạn';
+  }
+  if (!startDate) {
+    return `Đến ${formatDate(endDate)}`;
+  }
+  if (!endDate) {
+    return `Từ ${formatDate(startDate)}`;
+  }
   return `${formatDate(startDate)} - ${formatDate(endDate)}`;
 }
 
@@ -56,3 +78,5 @@ export function formatDate(date) {
 
   return new Intl.DateTimeFormat('vi-VN').format(new Date(`${date}T00:00:00`));
 }
+
+

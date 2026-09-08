@@ -31,9 +31,38 @@ function formatCurrency(value) {
   return Number(value || 0).toLocaleString('vi-VN') + 'đ';
 }
 
+function getPricingUnitLabel(unit) {
+  const normalized = String(unit || '').trim().toUpperCase();
+
+  if (normalized === 'PER_DAY') return 'ngày';
+  if (normalized === 'PER_USE') return 'lần';
+  if (normalized === 'PER_PERSON') return 'người';
+  if (normalized === 'PER_STAY') return 'lượt ở';
+
+  return '';
+}
+
+function getServicePricingUnit(service = {}) {
+  return (
+    service.pricingUnit ||
+    service.pricing_unit ||
+    service.priceUnit ||
+    service.price_unit ||
+    ''
+  );
+}
+
 function formatTime(value, fallback) {
   if (!value) return fallback;
   return String(value).slice(0, 5);
+}
+
+function todayDateString() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return year + '-' + month + '-' + day;
 }
 
 function DetailStat({ icon: Icon, label, value }) {
@@ -204,11 +233,13 @@ function ReviewReplyCollapse({ review }) {
   );
 }
 
-function ReviewPanel({ reviews, ratingAverage, ratingCount }) {
+function ReviewPanel({ reviews, ratingAverage, ratingCount, highlightReviewId = null }) {
   const [selectedRating, setSelectedRating] = useState('all');
   const [visibleCount, setVisibleCount] = useState(3);
   const [ratingDropdownOpen, setRatingDropdownOpen] = useState(false);
   const ratingDropdownRef = useRef(null);
+
+  const highlightedReviewId = highlightReviewId ? Number(highlightReviewId) : null;
 
   const text = {
     title: 'Đánh giá từ khách đã lưu trú',
@@ -260,7 +291,11 @@ function ReviewPanel({ reviews, ratingAverage, ratingCount }) {
           (review) => Math.round(Number(review.rating || 0)) === Number(selectedRating)
         );
 
-  const displayedReviews = filteredReviews.slice(0, visibleCount);
+  const highlightedIndex = highlightedReviewId
+    ? filteredReviews.findIndex((review) => Number(review.reviewId) === highlightedReviewId)
+    : -1;
+  const displayLimit = highlightedIndex >= visibleCount ? highlightedIndex + 1 : visibleCount;
+  const displayedReviews = filteredReviews.slice(0, displayLimit);
   const hasMoreReviews = filteredReviews.length > displayedReviews.length;
 
   const handleSelectRating = (value) => {
@@ -268,6 +303,15 @@ function ReviewPanel({ reviews, ratingAverage, ratingCount }) {
     setVisibleCount(3);
     setRatingDropdownOpen(false);
   };
+
+  useEffect(() => {
+    if (!highlightedReviewId) return;
+    const timer = window.setTimeout(() => {
+      const target = document.getElementById('review-card-' + highlightedReviewId);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [highlightedReviewId, displayedReviews.length]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -295,7 +339,7 @@ function ReviewPanel({ reviews, ratingAverage, ratingCount }) {
   }, []);
 
   return (
-    <section className="rounded-[28px] border border-[#6E473B]/10 bg-white p-6 shadow-sm md:p-8">
+    <section id="reviews" className="rounded-[28px] border border-[#6E473B]/10 bg-white p-6 shadow-sm md:p-8">
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
         <div>
           <h3 className="font-classic text-2xl font-black">{text.title}</h3>
@@ -411,8 +455,9 @@ function ReviewPanel({ reviews, ratingAverage, ratingCount }) {
         {displayedReviews.length ? (
           displayedReviews.map((review) => (
             <article
+              id={'review-card-' + review.reviewId}
               key={review.reviewId}
-              className="rounded-2xl border border-gray-200/80 bg-white p-5 shadow-sm"
+              className={'rounded-2xl border bg-white p-5 shadow-sm transition ' + (Number(review.reviewId) === highlightedReviewId ? 'border-[#D68A45] ring-4 ring-[#FFE4C7]' : 'border-gray-200/80')}
             >
               <div className="flex items-start gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#2C3E2B] text-sm font-black text-white">
@@ -511,6 +556,45 @@ function getInitial(name) {
   return String(name || 'C').trim().charAt(0).toUpperCase() || 'C';
 }
 
+
+function paymentStatusLabel(status) {
+  const normalized = String(status || '').toUpperCase();
+  if (normalized === 'PAID') return 'Đã thanh toán qua VNPay';
+  if (normalized === 'FAILED') return 'Thanh toán thất bại';
+  if (normalized === 'EXPIRED') return 'Quá hạn thanh toán';
+  if (normalized === 'REFUNDED') return 'Đã hoàn tiền';
+  return 'Chờ thanh toán';
+}
+
+function bookingStatusLabel(status) {
+  const normalized = String(status || '').toUpperCase();
+  if (normalized === 'CONFIRMED') return 'Đã xác nhận';
+  if (normalized === 'PAYMENT_PENDING') return 'Chờ thanh toán';
+  if (normalized === 'CANCELLED') return 'Đã hủy';
+  if (normalized === 'EXPIRED') return 'Đã quá hạn';
+  if (normalized === 'COMPLETED') return 'Hoàn thành';
+  return status || 'Đang xử lý';
+}
+
+function buildVnpayCheckoutResult(search) {
+  const params = new URLSearchParams(search || '');
+  if (params.get('checkout') !== 'vnpay-result') return null;
+
+  const status = params.get('status') || 'failed';
+  const success = status === 'success' && String(params.get('paymentStatus') || '').toUpperCase() === 'PAID';
+  return {
+    status: success ? 'SUCCESS' : 'FAILED',
+    title: success ? 'Thanh toán thành công' : 'Thanh toán chưa hoàn tất',
+    message: params.get('message') || (success
+      ? 'Hệ thống đã ghi nhận thanh toán VNPay và cập nhật đơn đặt homestay của bạn.'
+      : 'Giao dịch VNPay chưa hoàn tất. Bạn có thể thử lại hoặc chọn phương thức thanh toán khác.'),
+    bookingCode: params.get('bookingCode') || params.get('bookingId') || '',
+    bookingStatus: bookingStatusLabel(params.get('bookingStatus')),
+    paymentText: paymentStatusLabel(params.get('paymentStatus')),
+    profileTarget: 'bookings',
+    profileButtonLabel: 'Xem đơn hàng của bạn',
+  };
+}
 export default function HomestayDetail({ favorites = [], toggleFavorite = () => {} }) {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -524,19 +608,29 @@ export default function HomestayDetail({ favorites = [], toggleFavorite = () => 
   const [checkIn, setCheckIn] = useState(initialSearch.checkIn || '');
   const [checkOut, setCheckOut] = useState(initialSearch.checkOut || '');
   const [guests, setGuests] = useState(initialSearch.guests || '1');
+  const [promotionCode, setPromotionCode] = useState(initialSearch.promotionCode || '');
   const [isLoading, setIsLoading] = useState(true);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [reviews, setReviews] = useState([]);
   const [bookingAvailabilityMessage, setBookingAvailabilityMessage] = useState('');
+  const highlightedReviewId = useMemo(() => new URLSearchParams(location.search).get('reviewId'), [location.search]);
+  const vnpayCheckoutResult = useMemo(() => buildVnpayCheckoutResult(location.search), [location.search]);
 
+
+  useEffect(() => {
+    if (!vnpayCheckoutResult || !isAuthenticated || !homestay) return undefined;
+    const timer = window.setTimeout(() => setIsCheckoutOpen(true), 0);
+    return () => window.clearTimeout(timer);
+  }, [vnpayCheckoutResult, isAuthenticated, homestay]);
   useEffect(() => {
     const handleSearchStateChange = (event) => {
       const nextSearch = event.detail || getStoredSearchState();
       setCheckIn(nextSearch.checkIn || '');
       setCheckOut(nextSearch.checkOut || '');
       setGuests(nextSearch.guests || '1');
+      setPromotionCode(nextSearch.promotionCode || '');
     };
 
     window.addEventListener(SEARCH_STATE_EVENT, handleSearchStateChange);
@@ -638,6 +732,7 @@ export default function HomestayDetail({ favorites = [], toggleFavorite = () => 
     ? homestay.serviceItems
     : (homestay?.services || []).map((name) => ({ name, serviceName: name }));
   const nights = calculateNights(checkIn, checkOut);
+  const minBookingDate = todayDateString();
   const roomTotal = Number(homestay?.pricePerNight || 0) * nights;
   const currentHomestayId = Number(homestay?.id || homestay?.homeId || id);
   const isFavorite = favorites.map(Number).includes(currentHomestayId);
@@ -650,7 +745,17 @@ export default function HomestayDetail({ favorites = [], toggleFavorite = () => 
   };
 
   const updateBookingSearch = (field, value) => {
-    const nextSearch = saveSearchState({ [field]: value });
+    if ((field === 'checkIn' || field === 'checkOut') && value && value < minBookingDate) return;
+
+    const nextFields = { [field]: value };
+    if (field === 'checkIn' && value && checkOut && checkOut <= value) {
+      nextFields.checkOut = '';
+    }
+    if (field === 'checkOut' && checkIn && value && value <= checkIn) {
+      nextFields.checkOut = '';
+    }
+
+    const nextSearch = saveSearchState(nextFields);
     setCheckIn(nextSearch.checkIn || '');
     setCheckOut(nextSearch.checkOut || '');
     setGuests(nextSearch.guests || '1');
@@ -684,6 +789,13 @@ export default function HomestayDetail({ favorites = [], toggleFavorite = () => 
     setIsCheckoutOpen(true);
   };
 
+
+  const closeCheckoutModal = () => {
+    setIsCheckoutOpen(false);
+    if (vnpayCheckoutResult) {
+      navigate(location.pathname, { replace: true });
+    }
+  };
   const goToAuth = (path) => {
     const redirect = encodeURIComponent(location.pathname + location.search);
     navigate(path + '?redirect=' + redirect);
@@ -832,8 +944,12 @@ export default function HomestayDetail({ favorites = [], toggleFavorite = () => 
                      <div className="flex flex-col gap-1">
                           <p className="mt-1 text-sm font-bold text-gray-500">Bắt đầu hoạt động: {formatDisplayDate(homestay.createdAt)}</p>
                           <div className="flex flex-wrap gap-3 text-xs font-black text-[#2C3E2B]">
-                        <span className="rounded-full bg-[#2C3E2B]/10 px-3 py-1.5">Check-in {formatTime(homestay.checkinTime, '14:00')}</span>
-                        <span className="rounded-full bg-[#2C3E2B]/10 px-3 py-1.5">Check-out {formatTime(homestay.checkoutTime, '12:00')}</span>
+                        <span className="rounded-full bg-[#2C3E2B]/10 px-3 py-1.5">
+                          Nhận phòng {formatTime(homestay.checkinTime, '14:00')} - {formatTime(homestay.checkinEndTime, '20:00')}
+                        </span>
+                        <span className="rounded-full bg-[#2C3E2B]/10 px-3 py-1.5">
+                          Trả phòng {formatTime(homestay.checkoutStartTime, '08:00')} - {formatTime(homestay.checkoutTime, '12:00')}
+                        </span>
                       </div>
                      </div>
                       
@@ -871,7 +987,11 @@ export default function HomestayDetail({ favorites = [], toggleFavorite = () => 
                           <div key={(service.serviceName || service.name || 'service') + index} className="rounded-2xl border border-gray-100 bg-[#F8F6F0] p-4">
                             <p className="font-black text-[#2C1E15]">{service.serviceName || service.name}</p>
                             {service.price !== undefined && service.price !== null && (
-                              <p className="mt-1 text-sm font-black text-[#6E473B]">{formatCurrency(service.price)} / ngày</p>
+                              <p className="mt-1 text-sm font-black text-[#6E473B]">
+                                {formatCurrency(service.price)} / {
+                                  getPricingUnitLabel(getServicePricingUnit(service)) || 'chưa cập nhật đơn vị'
+                                }
+                              </p>
                             )}
                             {service.description && <p className="mt-2 text-xs font-semibold leading-5 text-gray-500">{service.description}</p>}
                           </div>
@@ -901,6 +1021,7 @@ export default function HomestayDetail({ favorites = [], toggleFavorite = () => 
                     reviews={reviews}
                     ratingAverage={homestay.ratingAvg || homestay.rating}
                     ratingCount={homestay.reviewCount || homestay.reviewsCount}
+                    highlightReviewId={highlightedReviewId}
                   />
                 </div>
 
@@ -920,11 +1041,11 @@ export default function HomestayDetail({ favorites = [], toggleFavorite = () => 
                       <div className="grid grid-cols-2 divide-x divide-gray-200 border-b border-gray-200">
                         <label className="p-3">
                           <span className="text-[10px] font-black uppercase text-gray-500">Nhận phòng</span>
-                          <input type="date" value={checkIn} onChange={(event) => updateBookingSearch('checkIn', event.target.value)} className="mt-1 w-full bg-transparent text-xs font-bold outline-none" />
+                          <input type="date" min={minBookingDate} value={checkIn} onChange={(event) => updateBookingSearch('checkIn', event.target.value)} className="mt-1 w-full bg-transparent text-xs font-bold outline-none" />
                         </label>
                         <label className="p-3">
                           <span className="text-[10px] font-black uppercase text-gray-500">Trả phòng</span>
-                          <input type="date" value={checkOut} onChange={(event) => updateBookingSearch('checkOut', event.target.value)} className="mt-1 w-full bg-transparent text-xs font-bold outline-none" />
+                          <input type="date" min={checkIn || minBookingDate} value={checkOut} onChange={(event) => updateBookingSearch('checkOut', event.target.value)} className="mt-1 w-full bg-transparent text-xs font-bold outline-none" />
                         </label>
                       </div>
                       <div className="p-3">
@@ -1022,12 +1143,13 @@ export default function HomestayDetail({ favorites = [], toggleFavorite = () => 
           />
         )}
 
-        {isCheckoutOpen && (
+        {isCheckoutOpen && homestay && (
           <BookingCheckoutModal
             homestay={homestay}
             user={user}
-            bookingDefaults={{ checkIn, checkOut, guests: bookingGuests }}
-            onClose={() => setIsCheckoutOpen(false)}
+            bookingDefaults={{ checkIn, checkOut, guests: bookingGuests, promotionCode }}
+            initialResult={vnpayCheckoutResult}
+            onClose={closeCheckoutModal}
           />
         )}
 
@@ -1044,13 +1166,3 @@ export default function HomestayDetail({ favorites = [], toggleFavorite = () => 
     </UserLayout>
   );
 }
-
-
-
-
-
-
-
-
-
-

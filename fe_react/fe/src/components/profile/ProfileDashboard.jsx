@@ -1,4 +1,5 @@
-﻿import CustomerTierOverview, { CustomerTierSummary, useCustomerTierData } from './CustomerTierOverview';
+﻿import { useCustomerTierData } from '../../hooks/useCustomerTierData';
+import CustomerTierOverview, { CustomerTierSummary } from './CustomerTierOverview';
 
 function MenuCard({ title, items }) {
   return (
@@ -21,15 +22,17 @@ function MenuCard({ title, items }) {
   );
 }
 
-export default function ProfileDashboard({ userInfo, fileInputRef, handleAvatarChange, setCurrentView, setIsEditing, mySchedulesCount }) {
+export default function ProfileDashboard({ userInfo, fileInputRef, setCurrentView, setIsEditing, mySchedulesCount }) {
   const { tier, tiers, isLoading, errorMessage } = useCustomerTierData();
+  const avatarLabel = String(userInfo?.name || 'U').trim().charAt(0).toUpperCase() || 'U';
 
   const menuGroups = [
     {
       title: 'Quản lý tài khoản',
       items: [
         { label: 'Thông tin cá nhân', onClick: () => { setCurrentView('info'); setIsEditing(false); } },
-        { label: 'Đơn đặt phòng của bạn', onClick: () => setCurrentView('bookings') },
+        { label: 'Đơn đặt phòng của tôi', onClick: () => setCurrentView('bookings') },
+        { label: 'Khiếu nại của tôi', onClick: () => setCurrentView('complaints') },
       ],
     },
     {
@@ -42,7 +45,7 @@ export default function ProfileDashboard({ userInfo, fileInputRef, handleAvatarC
     {
       title: 'Hoạt động du lịch',
       items: [
-        { label: 'Tự tạo lịch trình riêng (' + mySchedulesCount + ')', onClick: () => setCurrentView('schedule') },
+        { label: 'Tạo lịch trình chuyến đi (' + mySchedulesCount + ')', onClick: () => setCurrentView('schedule') },
         { label: 'Đánh giá của tôi', onClick: () => setCurrentView('reviews') },
       ],
     },
@@ -56,19 +59,17 @@ export default function ProfileDashboard({ userInfo, fileInputRef, handleAvatarC
           <div className="flex items-center gap-4">
             <div className="relative h-14 w-14 shrink-0 md:h-16 md:w-16">
               <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full border-4 border-white/20 bg-[#2C3E2B] text-xl font-black shadow-xl">
-                {userInfo.avatar ? <img src={userInfo.avatar} alt="Avatar" className="h-full w-full object-cover" /> : userInfo.name.charAt(0)}
+                {userInfo.avatar ? <img src={userInfo.avatar} alt="Avatar" className="h-full w-full object-cover" /> : avatarLabel}
               </div>
               <button
                 type="button"
-                onClick={() => fileInputRef.current.click()}
+                onClick={() => fileInputRef.current?.click()}
                 className="absolute -bottom-1 -right-1 rounded-full border-2 border-[#202c3c] bg-[#6E473B] px-2 py-1 text-[10px] font-black text-white shadow-md transition hover:scale-105"
               >
                 Ảnh
               </button>
-              <input type="file" ref={fileInputRef} onChange={handleAvatarChange} accept="image/*" className="hidden" />
             </div>
             <div>
-              <p className="text-xs font-black uppercase text-[#F0B77A]">Tài khoản Cozygo</p>
               <h1 className="mt-1 font-serif text-2xl font-black md:text-3xl">Chào, {userInfo.name}</h1>
               <p className="mt-1 max-w-2xl text-xs font-semibold leading-5 text-gray-300 md:text-sm">
                 Quản lý hồ sơ, hành trình lưu trú và quyền lợi thành viên của bạn tại Cozygo.
@@ -92,3 +93,6 @@ export default function ProfileDashboard({ userInfo, fileInputRef, handleAvatarC
     </div>
   );
 }
+
+
+

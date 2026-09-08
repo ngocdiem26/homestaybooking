@@ -1,4 +1,4 @@
-import { HiCheck, HiCreditCard, HiShieldCheck, HiUser, HiCheckCircle } from 'react-icons/hi2';
+﻿import { HiCheck, HiCreditCard, HiShieldCheck, HiUser, HiCheckCircle } from 'react-icons/hi2';
 
 const steps = [
   { label: 'Thông tin KH', icon: HiUser },

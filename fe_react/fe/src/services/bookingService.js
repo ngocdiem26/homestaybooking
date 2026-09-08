@@ -22,6 +22,10 @@ export function getMyBookings() {
   return apiRequest('/api/bookings/me');
 }
 
+
+export function getMyPaymentTransactions() {
+  return apiRequest('/api/bookings/me/transactions');
+}
 export function cancelMyBooking(bookingId) {
   return apiRequest(`/api/bookings/me/${bookingId}/cancel`, {
     method: 'PATCH',

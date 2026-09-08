@@ -3,6 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import HostLayout from '../../layouts/HostLayout';
 import ModalPortal from '../../components/common/ModalPortal';
 import Pagination from '../../components/common/Pagination';
+import ManagementBackButton from '../../components/common/ManagementBackButton';
+import ManagementHeaderRow from '../../components/common/ManagementHeaderRow';
+import ManagementToolbar from '../../components/common/ManagementToolbar';
+import { isWithinDateFilter } from '../../utils/dateFilter';
 import { getHostComplaints } from '../../services/complaintService';
 
 function statusClass(status) {
@@ -19,6 +23,10 @@ export default function HostComplaints() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [dateFilter, setDateFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [selectedComplaint, setSelectedComplaint] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
@@ -53,9 +61,14 @@ export default function HostComplaints() {
 
   const filteredComplaints = useMemo(() => {
     const keyword = searchTerm.trim().toLowerCase();
-    if (!keyword) return complaints;
-    return complaints.filter((item) => [item.complaintCode, item.bookingCode, item.title, item.customerName, item.homestayName].filter(Boolean).some((value) => String(value).toLowerCase().includes(keyword)));
-  }, [complaints, searchTerm]);
+    return complaints.filter((item) => {
+      const matchesStatus = statusFilter === 'ALL' || item.status === statusFilter;
+      const matchesSearch = !keyword || [item.complaintCode, item.bookingCode, item.title, item.customerName, item.homestayName]
+        .filter(Boolean).some((value) => String(value).toLowerCase().includes(keyword));
+      const matchesDate = isWithinDateFilter(item.createdAt, dateFilter, dateFrom, dateTo);
+      return matchesStatus && matchesSearch && matchesDate;
+    });
+  }, [complaints, searchTerm, statusFilter, dateFilter, dateFrom, dateTo]);
 
   const totalPages = Math.ceil(filteredComplaints.length / itemsPerPage) || 1;
   const indexOfFirstItem = (currentPage - 1) * itemsPerPage;
@@ -64,15 +77,49 @@ export default function HostComplaints() {
 
   return (
     <HostLayout>
-      <div className="w-full px-6 py-8 text-left lg:px-10">
-        <button onClick={() => navigate('/host')} className="mb-5 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-black text-gray-600 shadow-sm transition hover:bg-gray-50">&lt; Về bảng điều khiển</button>
-        <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="w-full px-6 pb-8 pt-3 text-left lg:px-10">
+        <ManagementHeaderRow backButton={<ManagementBackButton onClick={() => navigate('/host')} />}>
+          <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div><p className="text-xs font-black uppercase tracking-[0.25em] text-[#B8794C]">Host support view</p><h1 className="font-classic text-3xl font-black text-[#2C1E15]">Khiếu nại liên quan homestay</h1><p className="mt-1 text-sm font-semibold text-gray-500">Chủ homestay chỉ được xem thông tin khiếu nại. Quyền xử lý thuộc admin.</p></div>
-            <button onClick={loadComplaints} className="rounded-2xl bg-[#2C3E2B] px-5 py-3 text-sm font-black text-white shadow">Làm mới</button>
           </div>
         </section>
-        <section className="mt-5 rounded-3xl border border-gray-200 bg-white p-4 shadow-sm"><input value={searchTerm} onChange={(event) => { setSearchTerm(event.target.value); setCurrentPage(1); }} className="h-11 w-full rounded-2xl border border-gray-200 px-4 text-sm font-semibold outline-none focus:border-[#2C3E2B]" placeholder="Tìm mã khiếu nại, mã đơn, khách hàng, homestay..." /></section>
+        </ManagementHeaderRow>
+        <ManagementToolbar
+          className="mt-5"
+          filters={[
+            {
+              label: 'Trạng thái',
+              value: statusFilter,
+              onChange: (value) => { setStatusFilter(value); setCurrentPage(1); },
+              options: [
+                { value: 'ALL', label: 'Tất cả' },
+                { value: 'PENDING', label: 'Chưa xử lý' },
+                { value: 'PROCESSING', label: 'Đang xử lý' },
+                { value: 'RESOLVED', label: 'Đã xử lý' },
+                { value: 'REJECTED', label: 'Từ chối' },
+              ],
+            },
+          ]}
+          dateFilter={dateFilter}
+          onDateFilterChange={(value) => { setDateFilter(value); setCurrentPage(1); }}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateFromChange={(value) => { setDateFrom(value); setCurrentPage(1); }}
+          onDateToChange={(value) => { setDateTo(value); setCurrentPage(1); }}
+          searchValue={searchTerm}
+          onSearchChange={(value) => { setSearchTerm(value); setCurrentPage(1); }}
+          searchPlaceholder="Tìm mã khiếu nại, mã đơn, khách hàng, homestay..."
+          onReset={() => {
+            setStatusFilter('ALL');
+            setSearchTerm('');
+            setDateFilter('all');
+            setDateFrom('');
+            setDateTo('');
+            setCurrentPage(1);
+            loadComplaints();
+          }}
+        />
         {error && <div className="mt-5 rounded-2xl bg-red-50 px-4 py-3 text-sm font-black text-red-600">{error}</div>}
         <section className="mt-5 overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
           <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left"><thead className="bg-[#F8F6F0] text-xs font-black uppercase tracking-wider text-gray-500"><tr><th className="px-5 py-4">Mã KN</th><th className="px-5 py-4">Khách hàng</th><th className="px-5 py-4">Homestay</th><th className="px-5 py-4">Tiêu đề</th><th className="px-5 py-4 text-center">Trạng thái</th><th className="px-5 py-4 text-right">Thao tác</th></tr></thead><tbody className="divide-y divide-gray-100 text-sm font-semibold text-gray-700">
@@ -89,3 +136,8 @@ export default function HostComplaints() {
 function HostComplaintDetail({ complaint, onClose }) {
   return <ModalPortal className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onBackdropClick={onClose}><div onClick={(event) => event.stopPropagation()} className="w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl"><header className="flex items-start justify-between bg-[#202c3c] px-6 py-5 text-white"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-[#E3B17A]">Chi tiết khiếu nại</p><h3 className="mt-1 text-2xl font-black">{complaint.title}</h3><p className="font-mono text-xs text-white/70">{complaint.complaintCode} · {complaint.bookingCode}</p></div><button onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xl font-black">×</button></header><div className="max-h-[70vh] space-y-4 overflow-y-auto p-6 text-sm font-semibold text-gray-600"><p><span className="inline-block w-32 text-gray-400">Khách hàng:</span><span className="font-black text-[#2C1E15]">{complaint.customerName}</span></p><p><span className="inline-block w-32 text-gray-400">Trạng thái:</span><span className="font-black text-[#2C1E15]">{complaint.statusLabel}</span></p><div className="rounded-2xl bg-[#F8F6F0] p-4"><p className="text-xs font-black uppercase text-gray-400">Nội dung</p><p className="mt-2 whitespace-pre-line text-[#2C1E15]">{complaint.description}</p></div><div className="rounded-2xl border border-gray-100 bg-white p-4"><p className="text-xs font-black uppercase text-gray-400">Phản hồi admin</p><p className="mt-2 whitespace-pre-line text-[#2C1E15]">{complaint.reply || 'Admin chưa gửi phản hồi.'}</p></div></div></div></ModalPortal>;
 }
+
+
+
+
+

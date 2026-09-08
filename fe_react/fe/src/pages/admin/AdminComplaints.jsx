@@ -1,7 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../layouts/AdminLayout';
 import Pagination from '../../components/common/Pagination';
+import ManagementBackButton from '../../components/common/ManagementBackButton';
+import ManagementHeaderRow from '../../components/common/ManagementHeaderRow';
+import ManagementToolbar from '../../components/common/ManagementToolbar';
+import PrettySelect from '../../components/common/PrettySelect';
+import { isWithinDateFilter } from '../../utils/dateFilter';
 import ModalPortal from '../../components/common/ModalPortal';
 import { getAdminComplaints, resolveAdminComplaint } from '../../services/complaintService';
 
@@ -31,6 +36,9 @@ export default function AdminComplaints() {
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [dateFilter, setDateFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [detailComplaint, setDetailComplaint] = useState(null);
   const [bookingComplaint, setBookingComplaint] = useState(null);
@@ -79,9 +87,10 @@ export default function AdminComplaints() {
       const matchStatus = statusFilter === 'ALL' || item.status === statusFilter;
       const matchSearch = !keyword || [item.complaintCode, item.bookingCode, item.title, item.customerName, item.customerEmail, item.homestayName]
         .filter(Boolean).some((value) => String(value).toLowerCase().includes(keyword));
-      return matchStatus && matchSearch;
+      const matchDate = isWithinDateFilter(item.createdAt, dateFilter, dateFrom, dateTo);
+      return matchStatus && matchSearch && matchDate;
     });
-  }, [complaints, searchTerm, statusFilter]);
+  }, [complaints, searchTerm, statusFilter, dateFilter, dateFrom, dateTo]);
 
   const totalPages = Math.ceil(filteredComplaints.length / itemsPerPage) || 1;
   const indexOfFirstItem = (currentPage - 1) * itemsPerPage;
@@ -145,10 +154,9 @@ export default function AdminComplaints() {
 
   return (
     <AdminLayout>
-      <div className="space-y-5 animate-fade-in text-left text-sm -mt-6">
-        <button onClick={() => navigate('/admin')} className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-black text-gray-600 shadow-sm transition hover:bg-gray-50">&lt; Về bảng điều khiển</button>
-
-        <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="space-y-4 animate-fade-in text-left text-sm">
+        <ManagementHeaderRow backButton={<ManagementBackButton onClick={() => navigate('/admin')} />}>
+          <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#2C3E2B]/10 text-2xl font-black text-[#2C3E2B]">!</div>
@@ -158,16 +166,38 @@ export default function AdminComplaints() {
                 <p className="mt-1 text-sm font-semibold text-gray-500">Admin là người xử lý cuối cùng và gửi kết quả qua email cho khách hàng.</p>
               </div>
             </div>
-            <button onClick={loadComplaints} className="rounded-2xl bg-[#2C3E2B] px-5 py-3 text-sm font-black text-white shadow transition hover:bg-[#1f2d1f]">Làm mới</button>
           </div>
         </section>
+        </ManagementHeaderRow>
 
-        <section className="flex flex-col gap-3 rounded-3xl border border-gray-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap gap-2">
-            {tabs.map((tab) => <button key={tab.key} onClick={() => { setStatusFilter(tab.key); setCurrentPage(1); }} className={(statusFilter === tab.key ? 'bg-[#2C3E2B] text-white shadow' : 'text-gray-500 hover:bg-gray-50') + ' rounded-xl px-4 py-2 text-xs font-black transition'}>{tab.label}</button>)}
-          </div>
-          <input value={searchTerm} onChange={(event) => { setSearchTerm(event.target.value); setCurrentPage(1); }} className="h-11 w-full rounded-2xl border border-gray-200 px-4 text-sm font-semibold outline-none focus:border-[#2C3E2B] lg:max-w-md" placeholder="Tìm mã khiếu nại, mã đơn, khách hàng, homestay..." />
-        </section>
+        <ManagementToolbar
+          filters={[
+            {
+              label: 'Trạng thái',
+              value: statusFilter,
+              onChange: (value) => { setStatusFilter(value); setCurrentPage(1); },
+              options: tabs.map((tab) => ({ value: tab.key, label: tab.label })),
+            },
+          ]}
+          dateFilter={dateFilter}
+          onDateFilterChange={(value) => { setDateFilter(value); setCurrentPage(1); }}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateFromChange={(value) => { setDateFrom(value); setCurrentPage(1); }}
+          onDateToChange={(value) => { setDateTo(value); setCurrentPage(1); }}
+          searchValue={searchTerm}
+          onSearchChange={(value) => { setSearchTerm(value); setCurrentPage(1); }}
+          searchPlaceholder="Tìm mã khiếu nại, mã đơn, khách hàng, homestay..."
+          onReset={() => {
+            setStatusFilter('ALL');
+            setSearchTerm('');
+            setDateFilter('all');
+            setDateFrom('');
+            setDateTo('');
+            setCurrentPage(1);
+            loadComplaints();
+          }}
+        />
 
         {notice && <div className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-black text-amber-700 ring-1 ring-amber-100">{notice}</div>}
         {error && <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-black text-red-600">{error}</div>}
@@ -197,16 +227,7 @@ export default function AdminComplaints() {
                     <td className="px-5 py-4 font-mono text-xs text-gray-500">{formatDateTime(item.createdAt)}</td>
                     <td className="px-5 py-4">
                       <div className="flex min-w-[360px] items-center justify-end gap-2">
-                        <select
-                          value={item.status}
-                          onChange={(event) => handleStatusChange(item, event.target.value)}
-                          className={(statusClass(item.status)) + ' h-10 rounded-xl border px-3 text-xs font-black outline-none transition focus:ring-2 focus:ring-[#2C3E2B]/20'}
-                        >
-                          <option value="PENDING">Chưa xử lý</option>
-                          <option value="PROCESSING">Đang xử lý</option>
-                          <option value="RESOLVED">Đã xử lý</option>
-                          <option value="REJECTED">Từ chối</option>
-                        </select>
+                        <PrettySelect value={item.status} onChange={(value) => handleStatusChange(item, value)} options={[{ value: 'PENDING', label: 'Chưa xử lý' }, { value: 'PROCESSING', label: 'Đang xử lý' }, { value: 'RESOLVED', label: 'Đã xử lý' }, { value: 'REJECTED', label: 'Từ chối' }]} buttonClassName={(statusClass(item.status)) + ' h-10 border px-3 text-xs font-black shadow-none focus:ring-2 focus:ring-[#2C3E2B]/20'} minWidth="min-w-[150px]" />
                         <button onClick={() => setDetailComplaint(item)} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 shadow-sm transition hover:bg-gray-100" title="Xem khiếu nại">
                           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-4 w-4">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
@@ -247,7 +268,7 @@ export default function AdminComplaints() {
             <header className="bg-[#202c3c] px-6 py-5 text-white"><p className="text-xs font-black uppercase tracking-[0.2em] text-[#E3B17A]">Gửi kết quả xử lý</p><h3 className="mt-1 text-2xl font-black">{replyComplaint.complaintCode}</h3><p className="text-sm text-white/70">Email khách: {replyComplaint.customerEmail}</p></header>
             <div className="space-y-4 p-6">
               <div className="rounded-2xl bg-[#F8F6F0] p-4"><p className="text-xs font-black uppercase text-gray-400">Nội dung khách gửi</p><p className="mt-2 whitespace-pre-line text-sm font-semibold text-[#2C1E15]">{replyComplaint.description}</p></div>
-              <label className="block space-y-2"><span className="text-sm font-black text-gray-500">Trạng thái xử lý</span><select value={replyStatus} onChange={(event) => setReplyStatus(event.target.value)} className="h-12 w-full rounded-2xl border border-gray-200 px-4 font-bold outline-none focus:border-[#2C3E2B]"><option value="RESOLVED">Đã xử lý</option><option value="REJECTED">Từ chối</option><option value="PROCESSING">Đang xử lý</option></select></label>
+              <label className="block space-y-2"><span className="text-sm font-black text-gray-500">Trạng thái xử lý</span><PrettySelect value={replyStatus} onChange={setReplyStatus} options={[{ value: 'RESOLVED', label: 'Đã xử lý' }, { value: 'REJECTED', label: 'Từ chối' }, { value: 'PROCESSING', label: 'Đang xử lý' }]} className="w-full" minWidth="min-w-full" buttonClassName="h-12 rounded-2xl px-4 text-sm" /></label>
               <label className="block space-y-2"><span className="text-sm font-black text-gray-500">Nội dung email phản hồi</span><textarea value={replyContent} onChange={(event) => setReplyContent(event.target.value)} rows={8} className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold outline-none focus:border-[#2C3E2B]" /></label>
             </div>
             <footer className="flex justify-end gap-3 border-t border-gray-100 bg-[#FAF8F3] px-6 py-4"><button type="button" onClick={() => setReplyComplaint(null)} className="rounded-2xl border border-gray-200 bg-white px-5 py-3 text-sm font-black text-gray-600">Hủy</button><button type="submit" className="rounded-2xl bg-[#2C3E2B] px-6 py-3 text-sm font-black text-white shadow">Gửi xử lý</button></footer>
@@ -302,3 +323,12 @@ function BookingComplaintModal({ complaint, onClose }) {
 }
 
 function Info({ label, value }) { return <p><span className="inline-block w-28 text-gray-400">{label}:</span><span className="font-black text-[#2C1E15]">{value}</span></p>; }
+
+
+
+
+
+
+
+
+

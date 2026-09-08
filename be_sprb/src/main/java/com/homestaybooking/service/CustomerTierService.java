@@ -74,6 +74,7 @@ public class CustomerTierService {
         }
 
         TierAccountRow updatedAccount = getTierAccount(userId);
+        ensureTierPromotionGrants(userId, resolvedTier.tierId(), updatedAccount == null ? LocalDateTime.now() : updatedAccount.tierStartedAt());
         TierRow nextTier = findNextTier(completedCount);
         return toCustomerTierResponse(user, resolvedTier, nextTier, completedCount, updatedAccount);
     }
@@ -82,10 +83,16 @@ public class CustomerTierService {
         Integer count = jdbcTemplate.queryForObject(
                 "select count(distinct b.booking_id) "
                         + "from bookings b "
-                        + "join booking_details bd on bd.booking_id = b.booking_id "
+                        + "join users u on u.user_id = b.user_id "
+                        + "left join booking_details bd on bd.booking_id = b.booking_id "
                         + "where b.user_id = ? "
-                        + "and upper(coalesce(b.booking_status, '')) = 'COMPLETED' "
-                        + "and bd.checkout_date >= date_sub(current_date, interval 2 year)",
+                        + "and coalesce(b.created_at, current_timestamp) >= coalesce(u.created_at, '1970-01-01 00:00:00') "
+                        + "and upper(coalesce(b.booking_status, '')) not in ('CANCELLED','CANCELED','EXPIRED','NO_SHOW','REJECTED','DELETED') "
+                        + "and (upper(coalesce(b.booking_status, '')) in ('COMPLETED','DONE','FINISHED') "
+                        + "or ((upper(coalesce(b.payment_status, '')) in ('PAID','SUCCESS','COMPLETED','DA_THANH_TOAN') "
+                        + "or exists (select 1 from payments p where p.booking_id = b.booking_id and upper(coalesce(p.payment_status, '')) in ('PAID','SUCCESS','COMPLETED','DA_THANH_TOAN'))) "
+                        + "and bd.checkin_date is not null "
+                        + "and bd.checkin_date < current_date))",
                 Integer.class,
                 userId
         );
@@ -95,7 +102,7 @@ public class CustomerTierService {
     public TierRow resolveTierByCompletedBookings(Integer completedCount) {
         List<TierRow> tiers = getActiveTiers();
         if (tiers.isEmpty()) {
-            throw new AppException("Chưa cấu hình cấp bậc khách hàng");
+            throw new AppException("Chưa cấu hinh cấp bậc thành viên nào trong hệ thống");
         }
         return tiers.stream()
                 .filter(tier -> tier.minCompletedBookings24m() <= completedCount)
@@ -122,7 +129,7 @@ public class CustomerTierService {
                 .completedBookings24m(completed)
                 .remainingBookings(Math.max(0, required - completed))
                 .progressPercent(calculateProgress(completed, required))
-                .promotions(getTierPromotions(tier.tierId()))
+                .promotions(getTierPromotions(tier.tierId(), account.getUserId()))
                 .build();
     }
 
@@ -189,18 +196,101 @@ public class CustomerTierService {
         }
     }
 
-    private List<TierPromotionResponse> getTierPromotions(Integer tierId) {
+    @Transactional
+    public void ensureTierPromotionGrants(Integer userId) {
+        if (userId == null) {
+            return;
+        }
+        expireUserPromotionGrants(userId);
+        TierAccountRow account = getTierAccount(userId);
+        if (account == null) {
+            recalculateTier(userId);
+            return;
+        }
+        if (account.currentTierId() == null) {
+            return;
+        }
+        ensureTierPromotionGrants(userId, account.currentTierId(), account.tierStartedAt());
+    }
+
+    private void ensureTierPromotionGrants(Integer userId, Integer currentTierId, LocalDateTime unlockedAt) {
+        if (userId == null || currentTierId == null) {
+            return;
+        }
+        LocalDateTime grantTime = unlockedAt == null ? LocalDateTime.now() : unlockedAt;
+        jdbcTemplate.update(
+                "insert ignore into promotion_users "
+                        + "(promotion_id, user_id, granted_at, valid_from, valid_until, user_promotion_status, granted_reason, granted_tier_id, usage_limit, used_count) "
+                        + "select p.promotion_id, ?, ?, ?, timestampadd(day, coalesce(pt.validity_days, 30), ?), "
+                        + "'ACTIVE', 'TIER_UPGRADE', pt.tier_id, coalesce(nullif(p.usage_limit_per_user, 0), 1), 0 "
+                        + "from promotions p "
+                        + "join promotion_tiers pt on pt.promotion_id = p.promotion_id "
+                        + "join loyalty_tiers promo_tier on promo_tier.tier_id = pt.tier_id "
+                        + "join loyalty_tiers current_tier on current_tier.tier_id = ? "
+                        + "where upper(coalesce(p.status, 'ACTIVE')) = 'ACTIVE' "
+                        + "and upper(coalesce(p.promotion_scope, 'GLOBAL')) in ('TIER', 'HOMESTAY_TIER') "
+                        + "and coalesce(promo_tier.min_completed_bookings_24m, 0) <= coalesce(current_tier.min_completed_bookings_24m, 0)",
+                userId,
+                Timestamp.valueOf(grantTime),
+                Timestamp.valueOf(grantTime),
+                Timestamp.valueOf(grantTime),
+                currentTierId
+        );
+        refreshTierPromotionGrantWindows(userId, currentTierId, grantTime);
+        expireUserPromotionGrants(userId);
+    }
+
+    private void refreshTierPromotionGrantWindows(Integer userId, Integer currentTierId, LocalDateTime grantTime) {
+        jdbcTemplate.update(
+                "update promotion_users pu "
+                        + "join promotions p on p.promotion_id = pu.promotion_id "
+                        + "join promotion_tiers pt on pt.promotion_id = p.promotion_id "
+                        + "join loyalty_tiers promo_tier on promo_tier.tier_id = pt.tier_id "
+                        + "join loyalty_tiers current_tier on current_tier.tier_id = ? "
+                        + "set pu.valid_from = coalesce(pu.valid_from, ?), "
+                        + "pu.valid_until = coalesce(pu.valid_until, timestampadd(day, coalesce(pt.validity_days, 30), coalesce(pu.valid_from, ?))), "
+                        + "pu.granted_reason = coalesce(pu.granted_reason, 'TIER_UPGRADE'), "
+                        + "pu.granted_tier_id = coalesce(pu.granted_tier_id, pt.tier_id), "
+                        + "pu.usage_limit = greatest(coalesce(pu.usage_limit, 1), coalesce(nullif(p.usage_limit_per_user, 0), 1)), "
+                        + "pu.updated_at = current_timestamp "
+                        + "where pu.user_id = ? "
+                        + "and upper(coalesce(p.status, 'ACTIVE')) = 'ACTIVE' "
+                        + "and upper(coalesce(p.promotion_scope, 'GLOBAL')) in ('TIER', 'HOMESTAY_TIER') "
+                        + "and coalesce(promo_tier.min_completed_bookings_24m, 0) <= coalesce(current_tier.min_completed_bookings_24m, 0) "
+                        + "and (pu.valid_until is null or pu.granted_reason is null or pu.granted_tier_id is null)",
+                currentTierId,
+                Timestamp.valueOf(grantTime),
+                Timestamp.valueOf(grantTime),
+                userId
+        );
+    }
+
+    private void expireUserPromotionGrants(Integer userId) {
+        jdbcTemplate.update(
+                "update promotion_users set user_promotion_status = 'EXPIRED' "
+                        + "where user_id = ? and upper(coalesce(user_promotion_status, 'ACTIVE')) = 'ACTIVE' "
+                        + "and valid_until is not null and valid_until < now()",
+                userId
+        );
+    }
+
+    private List<TierPromotionResponse> getTierPromotions(Integer tierId, Integer userId) {
         try {
             return jdbcTemplate.query(
                     "select p.promotion_id, p.promotion_name, p.promotion_code, p.discount_type, p.discount_value, "
-                            + "p.max_discount, p.min_order_amount, p.start_date, p.end_date, p.status "
+                            + "p.max_discount, p.min_order_amount, p.start_date, p.end_date, p.status, "
+                            + "pu.valid_from as user_valid_from, pu.valid_until as user_valid_until, "
+                            + "pu.user_promotion_status, pu.usage_limit, pu.used_count, "
+                            + "case when pu.promotion_id is not null and (upper(coalesce(pu.user_promotion_status, 'ACTIVE')) in ('USED_UP', 'EXPIRED', 'REVOKED') "
+                            + "or coalesce(pu.used_count, 0) >= coalesce(pu.usage_limit, 1)) then true else false end as used_by_current_user "
                             + "from promotions p "
                             + "join promotion_tiers pt on pt.promotion_id = p.promotion_id "
+                            + "left join promotion_users pu on pu.promotion_id = p.promotion_id and pu.user_id = ? "
                             + "where pt.tier_id = ? "
                             + "and upper(coalesce(p.status, 'ACTIVE')) = 'ACTIVE' "
-                            + "and current_date between p.start_date and p.end_date "
-                            + "order by p.end_date asc, p.promotion_id desc",
-                    (rs, rowNum) -> TierPromotionResponse.builder()
+                            + "and (p.start_date is null or current_date >= p.start_date) "
+                            + "and (p.end_date is null or current_date <= p.end_date) "
+                            + "order by case when pu.valid_until is null then 1 else 0 end, pu.valid_until asc, p.promotion_id desc",                    (rs, rowNum) -> TierPromotionResponse.builder()
                             .promotionId(rs.getInt("promotion_id"))
                             .promotionName(rs.getString("promotion_name"))
                             .promotionCode(rs.getString("promotion_code"))
@@ -212,7 +302,14 @@ public class CustomerTierService {
                             .endDate(toLocalDate(rs.getDate("end_date")))
                             .status(rs.getString("status"))
                             .theme(null)
+                            .usedByCurrentUser(rs.getBoolean("used_by_current_user"))
+                            .userValidFrom(toLocalDateTime(rs.getTimestamp("user_valid_from")))
+                            .userValidUntil(toLocalDateTime(rs.getTimestamp("user_valid_until")))
+                            .userPromotionStatus(rs.getString("user_promotion_status"))
+                            .usageLimit((Integer) rs.getObject("usage_limit"))
+                            .usedCount((Integer) rs.getObject("used_count"))
                             .build(),
+                    userId,
                     tierId
             );
         } catch (DataAccessException exception) {

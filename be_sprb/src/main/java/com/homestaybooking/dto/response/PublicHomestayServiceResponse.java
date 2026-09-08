@@ -21,5 +21,6 @@ public class PublicHomestayServiceResponse {
     private String name;
     private String description;
     private BigDecimal price;
+    private String pricingUnit;
     private String status;
 }

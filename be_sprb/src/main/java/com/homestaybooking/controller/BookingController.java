@@ -7,6 +7,7 @@ import com.homestaybooking.dto.response.BookingListItemResponse;
 import com.homestaybooking.dto.response.BookingPaymentStatusResponse;
 import com.homestaybooking.dto.response.BookingPriceQuoteResponse;
 import com.homestaybooking.dto.response.BookingResponse;
+import com.homestaybooking.dto.response.PaymentTransactionResponse;
 import com.homestaybooking.service.BookingService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,12 @@ public class BookingController {
         return bookingService.getMyBookings(authorizationHeader);
     }
 
+    @GetMapping("/me/transactions")
+    public List<PaymentTransactionResponse> getMyPaymentTransactions(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader
+    ) {
+        return bookingService.getMyPaymentTransactions(authorizationHeader);
+    }
     @PatchMapping("/me/{bookingId}/cancel")
     public BookingListItemResponse cancelMyBooking(
             @PathVariable Integer bookingId,

@@ -44,19 +44,31 @@ public class VnpayController {
     @GetMapping("/return")
     public RedirectView paymentReturn(@RequestParam Map<String, String> params) {
         try {
-            BookingPaymentStatusResponse result = bookingService.handleVnpayReturn(params);
-            return new RedirectView(vnpayService.frontendResultUrl(
-                    "success",
+            BookingPaymentStatusResponse callbackResult = bookingService.handleVnpayReturn(params);
+
+            // Đọc lại DB sau khi transaction callback đã commit để tránh snapshot cũ
+            // khi IPN và Return đến gần như đồng thời.
+            BookingPaymentStatusResponse result = bookingService.getPaymentStatus(callbackResult.getBookingId());
+
+            boolean paid = "PAID".equalsIgnoreCase(result.getPaymentStatus());
+            return new RedirectView(vnpayService.frontendCheckoutResultUrl(
+                    paid ? "success" : "failed",
+                    result.getHomeId(),
                     String.valueOf(result.getBookingId()),
                     result.getBookingCode(),
-                    "Thanh toan VNPAY thanh cong"
+                    result.getBookingStatus(),
+                    result.getPaymentStatus(),
+                    paid ? "Thanh toán VNPAY thành công" : "Thanh toán VNPAY chưa hoàn tất"
             ));
         } catch (AppException exception) {
             String status = isInvalidSignature(exception) ? "invalid-signature" : "failed";
-            return new RedirectView(vnpayService.frontendResultUrl(
+            return new RedirectView(vnpayService.frontendCheckoutResultUrl(
                     status,
+                    null,
                     params.get("vnp_TxnRef"),
                     params.get("vnp_TxnRef"),
+                    null,
+                    null,
                     exception.getMessage()
             ));
         }

@@ -27,6 +27,9 @@ public class Promotion {
     @Column(name = "promotion_code", nullable = false, unique = true, length = 20)
     private String promotionCode;
 
+    @Column(name = "promotion_scope", nullable = false, length = 30)
+    private String promotionScope;
+
     @Column(name = "discount_type", nullable = false, length = 20)
     private String discountType;
 
@@ -67,6 +70,9 @@ public class Promotion {
     public void prePersist() {
         if (status == null) {
             status = "ACTIVE";
+        }
+        if (promotionScope == null) {
+            promotionScope = "GLOBAL";
         }
         if (createdAt == null) {
             createdAt = LocalDateTime.now();

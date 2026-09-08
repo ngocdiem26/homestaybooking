@@ -1,8 +1,12 @@
-import { apiRequest } from '../api/axiosClient';
+﻿import { apiRequest } from '../api/axiosClient';
 import { ADMIN_PROMOTION_ENDPOINTS } from '../api/endpoints';
 
 export function getAdminPromotions() {
   return apiRequest(ADMIN_PROMOTION_ENDPOINTS.LIST);
+}
+
+export function getAdminPromotionTargets() {
+  return apiRequest(ADMIN_PROMOTION_ENDPOINTS.TARGETS);
 }
 
 export function createAdminPromotion(payload) {
@@ -31,3 +35,4 @@ export function deleteAdminPromotion(promotionId) {
     method: 'DELETE',
   });
 }
+

@@ -1,37 +1,65 @@
-export default function Pagination({
+﻿export default function Pagination({
   currentPage,
   totalPages,
   setCurrentPage,
-  totalItems,
+  onPageChange,
+  totalItems = 0,
   indexOfFirstItem,
   indexOfLastItem,
-  itemName = "mục",
+  itemsPerPage,
+  itemName = 'mục',
 }) {
-  if (totalPages <= 1) return null;
+  const pageCount = Math.max(1, Number(totalPages || 1));
+  const activePage = Math.min(Math.max(1, Number(currentPage || 1)), pageCount);
+
+  const changePage = (nextPageOrUpdater) => {
+    const rawNextPage = typeof nextPageOrUpdater === 'function'
+      ? nextPageOrUpdater(activePage)
+      : nextPageOrUpdater;
+    const nextPage = Math.min(Math.max(1, Number(rawNextPage || 1)), pageCount);
+
+    if (onPageChange) {
+      onPageChange(nextPage);
+      return;
+    }
+
+    if (setCurrentPage) {
+      setCurrentPage(nextPage);
+    }
+  };
+
+  const firstItem = typeof indexOfFirstItem === 'number'
+    ? indexOfFirstItem
+    : (activePage - 1) * (itemsPerPage || 0);
+  const lastItem = typeof indexOfLastItem === 'number'
+    ? indexOfLastItem
+    : firstItem + (itemsPerPage || 0);
+  const start = totalItems > 0 ? firstItem + 1 : 0;
+  const end = Math.min(lastItem, totalItems);
 
   return (
-    <div className="bg-gray-50/50 p-4 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-gray-500 select-none">
+    <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50/50 p-4 text-xs font-bold text-gray-500 select-none">
       <p>
-        Hiển thị {indexOfFirstItem + 1} - {Math.min(indexOfLastItem, totalItems)} trong tổng số {totalItems} {itemName}
+        Hiển thị {start} - {end} trong tổng số {totalItems} {itemName}
       </p>
 
       <div className="flex items-center space-x-1">
         <button
-          disabled={currentPage === 1}
-          onClick={() => setCurrentPage((prev) => prev - 1)}
-          className="px-3 py-1.5 rounded-lg border bg-white text-gray-600 disabled:opacity-40 transition cursor-pointer hover:bg-gray-50"
+          disabled={activePage === 1}
+          onClick={() => changePage((prev) => Math.max(1, prev - 1))}
+          className="rounded-lg border bg-white px-3 py-1.5 text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
           type="button"
         >
           ‹ Trước
         </button>
 
-        {Array.from({ length: totalPages }, (_, i) => (
+        {Array.from({ length: pageCount }, (_, i) => (
           <button
             key={i + 1}
-            onClick={() => setCurrentPage(i + 1)}
-            className={`w-8 h-8 rounded-lg border transition cursor-pointer ${
-              currentPage === i + 1
-                ? 'bg-[#2C3E2B] text-white border-[#2C3E2B] shadow-sm'
+            onClick={() => changePage(i + 1)}
+            className={`h-8 w-8 rounded-lg border transition ${
+              activePage === i + 1
+                ? 'border-[#2C3E2B] bg-[#2C3E2B] text-white shadow-sm'
                 : 'bg-white text-gray-600 hover:bg-gray-100'
             }`}
             type="button"
@@ -41,9 +69,9 @@ export default function Pagination({
         ))}
 
         <button
-          disabled={currentPage === totalPages}
-          onClick={() => setCurrentPage((prev) => prev + 1)}
-          className="px-3 py-1.5 rounded-lg border bg-white text-gray-600 disabled:opacity-40 transition cursor-pointer hover:bg-gray-50"
+          disabled={activePage === pageCount}
+          onClick={() => changePage((prev) => Math.min(pageCount, prev + 1))}
+          className="rounded-lg border bg-white px-3 py-1.5 text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
           type="button"
         >
           Sau ›

@@ -35,7 +35,27 @@ public class ReviewJdbcRepository {
     }
 
     public List<ReviewResponse> findFeaturedReviews(int limit) {
-        return jdbcTemplate.query(reviewSelectSql("where r.review_status = 'VISIBLE'", "order by r.created_at desc limit ?"), this::mapReview, limit);
+        String whereClause = """
+                join (
+                    select review_id
+                    from (
+                        select r2.review_id,
+                               row_number() over (
+                                   partition by r2.home_id
+                                   order by r2.created_at desc, r2.review_id desc
+                               ) as review_rank
+                        from reviews r2
+                        join homestays h2 on h2.home_id = r2.home_id
+                        where r2.review_status = 'VISIBLE'
+                          and r2.rating = 5
+                          and coalesce(h2.rating_avg, 0) > 0
+                    ) ranked_reviews
+                    where review_rank = 1
+                ) featured_reviews on featured_reviews.review_id = r.review_id
+                where r.review_status = 'VISIBLE' and r.rating = 5
+                """;
+        String tailClause = "order by h.rating_avg desc, h.rating_count desc, r.created_at desc, r.review_id desc limit ?";
+        return jdbcTemplate.query(reviewSelectSql(whereClause, tailClause), this::mapReview, limit);
     }
 
     public List<ReviewResponse> findAdminReviews() {
@@ -96,7 +116,7 @@ public class ReviewJdbcRepository {
                 where b.user_id = ? and b.home_id = ?
                   and upper(coalesce(b.payment_status, '')) = 'PAID'
                   and upper(coalesce(b.booking_status, '')) not in ('CANCELLED','EXPIRED','NO_SHOW','REJECTED')
-                  and (upper(coalesce(b.booking_status, '')) = 'COMPLETED' or bd.checkin_date < current_date)
+                  and (upper(coalesce(b.booking_status, '')) = 'COMPLETED' or bd.checkout_date < current_date)
                   and not exists (select 1 from reviews r where r.booking_id = b.booking_id and r.user_id = b.user_id and r.review_status <> 'DELETED')
                 order by bd.checkin_date desc, b.booking_id desc
                 limit 1
@@ -124,7 +144,7 @@ public class ReviewJdbcRepository {
                 where b.user_id = ? and b.home_id = ? and b.booking_id = ?
                   and upper(coalesce(b.payment_status, '')) = 'PAID'
                   and upper(coalesce(b.booking_status, '')) not in ('CANCELLED','EXPIRED','NO_SHOW','REJECTED')
-                  and (upper(coalesce(b.booking_status, '')) = 'COMPLETED' or bd.checkin_date < current_date)
+                  and (upper(coalesce(b.booking_status, '')) = 'COMPLETED' or bd.checkout_date < current_date)
                   and not exists (select 1 from reviews r where r.booking_id = b.booking_id and r.user_id = b.user_id and r.review_status <> 'DELETED')
                 limit 1
                 """,
@@ -152,7 +172,7 @@ public class ReviewJdbcRepository {
                 where b.user_id = ? and b.home_id = ?
                   and upper(coalesce(b.payment_status, '')) = 'PAID'
                   and upper(coalesce(b.booking_status, '')) not in ('CANCELLED','EXPIRED','NO_SHOW','REJECTED')
-                  and (upper(coalesce(b.booking_status, '')) = 'COMPLETED' or bd.checkin_date < current_date)
+                  and (upper(coalesce(b.booking_status, '')) = 'COMPLETED' or bd.checkout_date < current_date)
                 """,
                 Integer.class,
                 userId,
@@ -220,7 +240,7 @@ public class ReviewJdbcRepository {
                 """,
                 reviewStatus,
                 safe(result.getAdminReviewStatus(), "NONE"),
-                safe(result.getModerationStatus(), "AI_SAFE"),
+                limitText(safe(result.getModerationStatus(), "AI_SAFE"), 30),
                 safe(result.getModerationAction(), "ALLOW"),
                 limitText(result.getModerationReason(), 250),
                 result.getToxicityScore(),

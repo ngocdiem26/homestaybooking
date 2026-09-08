@@ -1,4 +1,4 @@
-import { apiRequest } from '../api/axiosClient';
+﻿import { apiRequest } from '../api/axiosClient';
 
 export function getMyComplaints() {
   return apiRequest('/api/customer/complaints');
@@ -49,3 +49,4 @@ export function escalateComplaint() {
 export function closeComplaint() {
   return Promise.reject(new Error('Khiếu nại chỉ được đóng sau khi admin xử lý.'));
 }
+

@@ -1,6 +1,7 @@
 package com.homestaybooking.controller;
 
 import com.homestaybooking.dto.request.UpdateAvatarRequest;
+import com.homestaybooking.dto.request.UpdateProfileRequest;
 import com.homestaybooking.dto.response.UserProfileResponse;
 import com.homestaybooking.service.UserProfileService;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,13 @@ public class UserProfileController {
         return userProfileService.getMyProfile(authorizationHeader);
     }
 
+    @PutMapping("/me")
+    public UserProfileResponse updateMyProfile(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @RequestBody UpdateProfileRequest request
+    ) {
+        return userProfileService.updateMyProfile(authorizationHeader, request);
+    }
     @PutMapping("/me/avatar")
     public UserProfileResponse updateMyAvatar(
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader,

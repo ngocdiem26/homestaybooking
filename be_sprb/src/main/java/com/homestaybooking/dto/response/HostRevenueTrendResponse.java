@@ -10,5 +10,8 @@ import java.math.BigDecimal;
 public class HostRevenueTrendResponse {
     private String period;
     private BigDecimal revenue;
+    private BigDecimal grossBookingAmount;
+    private BigDecimal commissionDeducted;
+    private BigDecimal pendingPayout;
     private Integer bookingCount;
 }

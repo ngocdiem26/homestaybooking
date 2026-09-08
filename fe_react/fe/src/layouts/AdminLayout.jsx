@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+﻿import { useNavigate } from 'react-router-dom';
 import Logo from '../components/common/Logo';
 import { useAuth } from '../hooks/useAuth';
 
@@ -43,7 +43,7 @@ export default function AdminLayout({ children }) {
         </div>
       </header>
 
-      <main className="flex-grow py-12 px-4 sm:px-6 lg:px-8 w-full z-10 relative">
+      <main className="flex-grow px-4 py-4 sm:px-6 lg:px-8 w-full z-10 relative">
         <div className="max-w-7xl mx-auto">{children}</div>
       </main>
 
@@ -56,3 +56,6 @@ export default function AdminLayout({ children }) {
     </div>
   );
 }
+
+
+

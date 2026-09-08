@@ -11,11 +11,11 @@ import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
-import java.text.SimpleDateFormat;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,7 +24,13 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class VnpayService {
 
+    private static final ZoneId VNPAY_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final DateTimeFormatter VNPAY_DATE_TIME_FORMAT =
+            DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+
+
     private static final String DEFAULT_FRONTEND_RESULT_URL = "http://localhost:5173/payment/result";
+    private static final String DEFAULT_FRONTEND_BASE_URL = "http://localhost:5173";
 
     private final VnpayProperties properties;
 
@@ -36,10 +42,9 @@ public class VnpayService {
     ) {
         validateConfig();
 
-        String createDate = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
-        Calendar expireCalendar = Calendar.getInstance();
-        expireCalendar.add(Calendar.MINUTE, 15);
-        String expireDate = new SimpleDateFormat("yyyyMMddHHmmss").format(expireCalendar.getTime());
+        ZonedDateTime now = ZonedDateTime.now(VNPAY_ZONE);
+        String createDate = now.format(VNPAY_DATE_TIME_FORMAT);
+        String expireDate = now.plusMinutes(15).format(VNPAY_DATE_TIME_FORMAT);
 
         Map<String, String> params = new HashMap<>();
         params.put("vnp_Version", "2.1.0");
@@ -85,6 +90,30 @@ public class VnpayService {
         return trimOrDefault(properties.getFrontendResultUrl(), DEFAULT_FRONTEND_RESULT_URL) + "?" + buildHashData(params);
     }
 
+
+    public String frontendCheckoutResultUrl(
+            String status,
+            Integer homeId,
+            String bookingId,
+            String bookingCode,
+            String bookingStatus,
+            String paymentStatus,
+            String message
+    ) {
+        if (homeId == null) {
+            return frontendResultUrl(status, bookingId, bookingCode, message);
+        }
+
+        Map<String, String> params = new HashMap<>();
+        params.put("checkout", "vnpay-result");
+        params.put("status", status);
+        params.put("bookingId", bookingId);
+        params.put("bookingCode", bookingCode);
+        params.put("bookingStatus", bookingStatus);
+        params.put("paymentStatus", paymentStatus);
+        params.put("message", message);
+        return frontendBaseUrl() + "/homestay/" + homeId + "?" + buildHashData(params);
+    }
     public String buildHashData(Map<String, String> params) {
         List<String> fieldNames = new ArrayList<>(params.keySet());
         Collections.sort(fieldNames);
@@ -112,10 +141,26 @@ public class VnpayService {
             }
             return hash.toString();
         } catch (Exception exception) {
-            throw new IllegalStateException("Khong the tao chu ky VNPAY", exception);
+            throw new IllegalStateException("Không thể tạo chữ ký VNPAY", exception);
         }
     }
 
+
+    private String frontendBaseUrl() {
+        String configured = trimOrDefault(properties.getFrontendResultUrl(), DEFAULT_FRONTEND_RESULT_URL);
+        if (configured.endsWith("/payment/result")) {
+            return configured.substring(0, configured.length() - "/payment/result".length());
+        }
+        int schemeIndex = configured.indexOf("://");
+        if (schemeIndex > -1) {
+            int pathIndex = configured.indexOf('/', schemeIndex + 3);
+            if (pathIndex > -1) {
+                return configured.substring(0, pathIndex);
+            }
+            return configured;
+        }
+        return DEFAULT_FRONTEND_BASE_URL;
+    }
     private String encode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
@@ -167,7 +212,7 @@ public class VnpayService {
 
     private String toVnpayAmount(BigDecimal amount) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new AppException("So tien thanh toan VNPAY khong hop le");
+            throw new AppException("Số tiền thanh toán VNPAY không hợp lệ");
         }
         return amount.multiply(BigDecimal.valueOf(100)).toBigInteger().toString();
     }

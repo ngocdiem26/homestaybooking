@@ -14,6 +14,9 @@ public class HostRevenueHomestayResponse {
     private Integer bookingCount;
     private Integer completedCount;
     private BigDecimal revenue;
+    private BigDecimal bookingAmount;
+    private BigDecimal commissionAmount;
+    private BigDecimal hostReceivableAmount;
     private BigDecimal roomRevenue;
     private BigDecimal serviceRevenue;
     private BigDecimal averageRating;

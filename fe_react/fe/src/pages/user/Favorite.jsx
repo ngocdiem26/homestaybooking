@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { HiChevronLeft, HiChevronRight } from 'react-icons/hi2';
 import UserLayout from '../../layouts/UserLayout';
@@ -34,7 +34,7 @@ function FavoriteSlider({ items, favoriteIds, onToggleFavorite, emptyState }) {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="font-classic text-3xl font-bold text-[#2C1E15] md:text-4xl">
-              <span className="mr-3 align-middle text-3xl md:text-4xl">💗</span>
+              <span className="mr-3 align-text-top text-3xl md:text-4xl">❤️</span>
               Danh sách yêu thích của bạn
             </h1>
             <p className="mt-2 text-sm font-semibold text-[#9AA4B5]">
@@ -162,7 +162,8 @@ export default function Favorites({ favorites = [], toggleFavorite }) {
 
   const emptyFavorites = useMemo(() => (
     <div className="mx-auto mt-2 flex min-h-[345px] max-w-[560px] flex-col items-center justify-center rounded-[22px] border border-dashed border-gray-300 bg-white px-10 py-14 text-center shadow-sm">
-      <div className="mb-5 text-5xl drop-shadow-sm">🤍</div>
+      <div className="mb-5 text-5xl drop-shadow-sm"><i className="fa-solid fa-heart"></i></div>
+
       <h3 className="font-classic text-xl font-bold text-[#2C1E15]">Chưa có homestay yêu thích nào</h3>
       <p className="mt-5 max-w-[380px] text-sm font-semibold leading-6 text-[#9AA4B5]">
         Hãy duyệt quanh trang chủ và bấm vào biểu tượng trái tim trên các căn hộ gỗ để lưu giữ chúng tại đây.
@@ -211,3 +212,4 @@ export default function Favorites({ favorites = [], toggleFavorite }) {
     </UserLayout>
   );
 }
+

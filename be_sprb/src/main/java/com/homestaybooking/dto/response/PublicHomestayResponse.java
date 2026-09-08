@@ -52,6 +52,8 @@ public class PublicHomestayResponse {
     private Integer livingRoomCount;
     private Integer bedCount;
     private LocalTime checkinTime;
+    private LocalTime checkinEndTime;
+    private LocalTime checkoutStartTime;
     private LocalTime checkoutTime;
     private String roomType;
     private String details;

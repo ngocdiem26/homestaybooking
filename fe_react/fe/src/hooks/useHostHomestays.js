@@ -1,5 +1,7 @@
+﻿
 import { useEffect, useMemo, useState } from 'react';
 import { emptyHostHomestayForm } from '../data/hostHomestayData';
+import { isWithinDateFilter, pickDateValue } from '../utils/dateFilter';
 import {
   createHostHomestay,
   deleteHostHomestay,
@@ -8,7 +10,22 @@ import {
   uploadHostHomestayImages,
 } from '../services/hostHomestayService';
 
-const ITEMS_PER_PAGE = 1;
+const ITEMS_PER_PAGE = 10;
+
+const DEFAULT_CHECKIN_TIME = '14:00';
+const DEFAULT_CHECKIN_END_TIME = '20:00';
+const DEFAULT_CHECKOUT_START_TIME = '08:00';
+const DEFAULT_CHECKOUT_TIME = '12:00';
+
+function createEmptyHomestayForm() {
+  return {
+    ...emptyHostHomestayForm,
+    checkinTime: emptyHostHomestayForm.checkinTime || DEFAULT_CHECKIN_TIME,
+    checkinEndTime: emptyHostHomestayForm.checkinEndTime || DEFAULT_CHECKIN_END_TIME,
+    checkoutStartTime: emptyHostHomestayForm.checkoutStartTime || DEFAULT_CHECKOUT_START_TIME,
+    checkoutTime: emptyHostHomestayForm.checkoutTime || DEFAULT_CHECKOUT_TIME,
+  };
+}
 
 function normalizeHomestayPayload(formFields) {
   return {
@@ -65,13 +82,16 @@ export function useHostHomestays() {
   const [searchTerm, setSearchTerm] = useState('');
   const [cityFilter, setCityFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [dateFilter, setDateFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingHomestay, setEditingHomestay] = useState(null);
   const [selectedHomestay, setSelectedHomestay] = useState(null);
   const [detailHomestay, setDetailHomestay] = useState(null);
   const [configTab, setConfigTab] = useState('images');
-  const [formFields, setFormFields] = useState(emptyHostHomestayForm);
+  const [formFields, setFormFields] = useState(createEmptyHomestayForm);
   const [newAmenityText, setNewAmenityText] = useState('');
   const [newServiceName, setNewServiceName] = useState('');
   const [newServicePrice, setNewServicePrice] = useState('');
@@ -110,10 +130,16 @@ export function useHostHomestays() {
         homestay.address.toLowerCase().includes(keyword);
       const matchesCity = cityFilter === 'All' || homestay.city === cityFilter;
       const matchesStatus = statusFilter === 'All' || homestay.status === statusFilter;
+      const matchesDate = isWithinDateFilter(
+        pickDateValue(homestay, ['createdAt', 'updatedAt']),
+        dateFilter,
+        dateFrom,
+        dateTo
+      );
 
-      return matchesKeyword && matchesCity && matchesStatus;
+      return matchesKeyword && matchesCity && matchesStatus && matchesDate;
     });
-  }, [cityFilter, homestays, searchTerm, statusFilter]);
+  }, [cityFilter, dateFilter, dateFrom, dateTo, homestays, searchTerm, statusFilter]);
 
   const totalPages = Math.ceil(filteredHomestays.length / ITEMS_PER_PAGE);
   const indexOfFirstHomestay = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -139,13 +165,16 @@ export function useHostHomestays() {
     setSearchTerm('');
     setCityFilter('All');
     setStatusFilter('All');
+    setDateFilter('all');
+    setDateFrom('');
+    setDateTo('');
     setCurrentPage(1);
     loadHomestays();
   };
 
   const openAdd = () => {
     setEditingHomestay(null);
-    setFormFields(emptyHostHomestayForm);
+    setFormFields(createEmptyHomestayForm());
     setIsFormOpen(true);
   };
 
@@ -165,8 +194,10 @@ export function useHostHomestays() {
       livingRoom: homestay.livingRoom,
       kitchen: homestay.kitchen,
       beds: homestay.beds ?? 1,
-      checkinTime: homestay.checkinTime || '14:00',
-      checkoutTime: homestay.checkoutTime || '12:00',
+      checkinTime: homestay.checkinTime || DEFAULT_CHECKIN_TIME,
+      checkinEndTime: homestay.checkinEndTime || DEFAULT_CHECKIN_END_TIME,
+      checkoutStartTime: homestay.checkoutStartTime || DEFAULT_CHECKOUT_START_TIME,
+      checkoutTime: homestay.checkoutTime || DEFAULT_CHECKOUT_TIME,
       latitude: homestay.latitude ?? '',
       longitude: homestay.longitude ?? '',
     });
@@ -176,7 +207,7 @@ export function useHostHomestays() {
   const closeForm = () => {
     setIsFormOpen(false);
     setEditingHomestay(null);
-    setFormFields(emptyHostHomestayForm);
+    setFormFields(createEmptyHomestayForm());
   };
 
   const saveHomestay = async (event, extraConfig = {}) => {
@@ -209,15 +240,20 @@ export function useHostHomestays() {
     }
   };
 
-  const deleteHomestay = async (id) => {
+  const deleteHomestay = async (id, options = {}) => {
     const target = homestays.find((homestay) => homestay.id === id);
-    if (!target || !window.confirm('Xóa homestay ' + id + '?')) return;
+    if (!target) return false;
+
+    const shouldSkipConfirm = Boolean(options?.skipConfirm);
+    if (!shouldSkipConfirm && !window.confirm('Xóa homestay ' + id + '?')) return false;
 
     try {
       await deleteHostHomestay(target.homeId);
       setHomestays((current) => current.filter((homestay) => homestay.id !== id));
+      return true;
     } catch (requestError) {
       setError(requestError.message || 'Không xóa được homestay');
+      return false;
     }
   };
 
@@ -381,6 +417,9 @@ export function useHostHomestays() {
     deleteImage,
     deleteRule,
     deleteService,
+    dateFilter,
+    dateFrom,
+    dateTo,
     detailHomestay,
     editingHomestay,
     error,
@@ -406,6 +445,9 @@ export function useHostHomestays() {
     setCity,
     setConfigTab,
     setCurrentPage,
+    setDateFilter,
+    setDateFrom,
+    setDateTo,
     setDetailHomestay,
     setFormFields,
     setMainImage,
@@ -420,3 +462,4 @@ export function useHostHomestays() {
     totalPages,
   };
 }
+

@@ -1,4 +1,4 @@
-import homeImg from '../../assets/images/nha2.jpg';
+﻿import homeImg from '../../assets/images/nha2.jpg';
 
 export default function AuthLeftPanel() {
   return (

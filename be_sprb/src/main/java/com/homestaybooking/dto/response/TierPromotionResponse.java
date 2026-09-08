@@ -8,6 +8,7 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -27,4 +28,10 @@ public class TierPromotionResponse {
     private LocalDate endDate;
     private String status;
     private String theme;
+    private Boolean usedByCurrentUser;
+    private LocalDateTime userValidFrom;
+    private LocalDateTime userValidUntil;
+    private String userPromotionStatus;
+    private Integer usageLimit;
+    private Integer usedCount;
 }

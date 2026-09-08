@@ -33,6 +33,8 @@ public class HostHomestayRequest {
     private Integer livingRoomCount;
     private Integer bedCount;
     private LocalTime checkinTime;
+    private LocalTime checkinEndTime;
+    private LocalTime checkoutStartTime;
     private LocalTime checkoutTime;
     private List<HostHomestayImageRequest> images = new ArrayList<>();
     private List<String> amenities = new ArrayList<>();

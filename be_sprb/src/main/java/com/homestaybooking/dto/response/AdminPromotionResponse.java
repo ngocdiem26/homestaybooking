@@ -6,6 +6,7 @@ import lombok.Getter;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Builder
@@ -14,6 +15,7 @@ public class AdminPromotionResponse {
     private Integer promotionId;
     private String promotionName;
     private String promotionCode;
+    private String promotionScope;
     private String discountType;
     private BigDecimal discountValue;
     private LocalDate startDate;
@@ -26,4 +28,10 @@ public class AdminPromotionResponse {
     private Integer usageLimitTotal;
     private Integer usageLimitPerUser;
     private String status;
+    private List<Integer> userIds;
+    private List<Integer> homeIds;
+    private List<Integer> tierIds;
+    private List<PromotionTargetOptionResponse> assignedUsers;
+    private List<PromotionTargetOptionResponse> assignedHomestays;
+    private List<PromotionTargetOptionResponse> assignedTiers;
 }

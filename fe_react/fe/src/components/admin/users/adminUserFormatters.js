@@ -1,4 +1,4 @@
-export function getRoleLabel(role) {
+﻿export function getRoleLabel(role) {
   const labels = {
     ADMIN: 'Quản trị viên',
     CUSTOMER: 'Khách hàng',
@@ -33,3 +33,4 @@ export function getGenderLabel(gender) {
 export function getAvatarLabel(name) {
   return (name || '?').trim().charAt(0).toUpperCase();
 }
+

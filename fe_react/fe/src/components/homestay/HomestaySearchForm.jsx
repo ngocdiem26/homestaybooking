@@ -15,6 +15,10 @@ import {
   saveDestinationToHistory,
   removeDestinationFromHistory,
   clearSearchHistory,
+  loadAccountSearchHistory,
+  saveDestinationToAccountHistory,
+  removeDestinationFromAccountHistory,
+  clearAccountSearchHistory,
 } from '../../services/searchHistoryService';
 
 import { getStoredSearchState, saveSearchState, SEARCH_STATE_EVENT } from '../../services/searchState';
@@ -35,6 +39,22 @@ const [searchHistory, setSearchHistory] = useState(() => getStoredSearchHistory(
 
   const dropdownRef = useRef(null);
   const dateDropdownRef = useRef(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    loadAccountSearchHistory()
+      .then((history) => {
+        if (isMounted) setSearchHistory(history);
+      })
+      .catch(() => {
+        if (isMounted) setSearchHistory(getStoredSearchHistory());
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const handleSearchStateChange = (event) => {
@@ -85,6 +105,9 @@ const [searchHistory, setSearchHistory] = useState(() => getStoredSearchHistory(
     e.stopPropagation();
     const nextHistory = removeDestinationFromHistory(item);
     setSearchHistory(nextHistory);
+    removeDestinationFromAccountHistory(item)
+      .then(setSearchHistory)
+      .catch(() => {});
   };
 
   const handleSubmit = (event) => {
@@ -95,6 +118,9 @@ const [searchHistory, setSearchHistory] = useState(() => getStoredSearchHistory(
     if (savedSearch.destination?.trim()) {
       const nextHistory = saveDestinationToHistory(savedSearch.destination);
       setSearchHistory(nextHistory);
+      saveDestinationToAccountHistory(savedSearch.destination)
+        .then(setSearchHistory)
+        .catch(() => {});
     }
 
     onSearch?.(savedSearch);
@@ -119,8 +145,11 @@ const [searchHistory, setSearchHistory] = useState(() => getStoredSearchHistory(
     return `Ngày ${date.getDate()} thg ${date.getMonth() + 1}`;
   };
 
+  const todayDateString = toDateValue(new Date());
+
   const handleSelectDay = (date) => {
     const dateString = toDateValue(date);
+    if (dateString < todayDateString) return;
 
     if (!search.checkIn || (search.checkIn && search.checkOut)) {
       updateSearch(curr => ({ ...curr, checkIn: dateString, checkOut: '' }));
@@ -155,6 +184,7 @@ const [searchHistory, setSearchHistory] = useState(() => getStoredSearchHistory(
     for (let day = 1; day <= totalDays; day++) {
       const thisDate = new Date(year, month, day);
       const thisDateStr = toDateValue(thisDate);
+      const isPastDate = thisDateStr < todayDateString;
       const hoverRangeEnd = search.checkIn && !search.checkOut && hoverDate && hoverDate >= search.checkIn ? hoverDate : null;
       
       const isCheckIn = search.checkIn === thisDateStr;
@@ -170,13 +200,15 @@ const [searchHistory, setSearchHistory] = useState(() => getStoredSearchHistory(
         <button
           key={`day-${day}`}
           type="button"
+          disabled={isPastDate}
           onClick={() => handleSelectDay(thisDate)}
-          onMouseEnter={() => setHoverDate(thisDateStr)}
-          className={`h-9 w-full rounded-lg text-xs font-bold transition-all relative flex items-center justify-center border-none cursor-pointer
-            ${isCheckIn || isCheckOut ? 'bg-[#2C3E2B] text-white shadow-sm z-10' : ''}
-            ${isInSelectedRange ? 'bg-[#2C3E2B]/10 text-[#2C3E2B] rounded-none' : ''}
-            ${isInHoverRange && !isCheckIn && !isCheckOut ? 'bg-gray-200 text-gray-700 rounded-none' : ''}
-            ${!isCheckIn && !isCheckOut && !isInSelectedRange && !isInHoverRange ? 'bg-transparent text-gray-700 hover:bg-gray-100' : ''}`}
+          onMouseEnter={() => !isPastDate && setHoverDate(thisDateStr)}
+          className={`h-9 w-full rounded-lg text-xs font-bold transition-all relative flex items-center justify-center border-none
+            ${isPastDate ? 'cursor-not-allowed bg-gray-100 text-gray-300 line-through opacity-70' : 'cursor-pointer'}
+            ${!isPastDate && (isCheckIn || isCheckOut) ? 'bg-[#2C3E2B] text-white shadow-sm z-10' : ''}
+            ${!isPastDate && isInSelectedRange ? 'bg-[#2C3E2B]/10 text-[#2C3E2B] rounded-none' : ''}
+            ${!isPastDate && isInHoverRange && !isCheckIn && !isCheckOut ? 'bg-gray-200 text-gray-700 rounded-none' : ''}
+            ${!isPastDate && !isCheckIn && !isCheckOut && !isInSelectedRange && !isInHoverRange ? 'bg-transparent text-gray-700 hover:bg-gray-100' : ''}`}
         >
           {day}
         </button>
@@ -276,7 +308,7 @@ const [searchHistory, setSearchHistory] = useState(() => getStoredSearchHistory(
           <div className="mb-4">
             <div className="px-5 flex items-center justify-between">
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                <HiClock size={12} /> Tìm kiếm gần đây
+                <HiClock size={12} /> Lịch sử tìm kiếm
               </p>
 
               {searchHistory.length > 0 && (
@@ -286,6 +318,9 @@ const [searchHistory, setSearchHistory] = useState(() => getStoredSearchHistory(
                     event.stopPropagation();
                     const nextHistory = clearSearchHistory();
                     setSearchHistory(nextHistory);
+                    clearAccountSearchHistory()
+                      .then(setSearchHistory)
+                      .catch(() => {});
                   }}
                   className="text-[10px] font-bold text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer"
                 >
@@ -395,7 +430,7 @@ const [searchHistory, setSearchHistory] = useState(() => getStoredSearchHistory(
 
           </div>
 
-          {/* Chân bảng hiển thị thông tin tóm tắt */}
+          {/* Ch�n b?ng hi?n th? th�ng tin t�m t?t */}
           <div className="mt-4 pt-3 border-t border-gray-100 flex flex-wrap justify-between items-center gap-2">
             <div className="text-xs font-medium text-gray-500">
               {search.checkIn && (

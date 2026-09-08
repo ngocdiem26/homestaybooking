@@ -31,8 +31,11 @@ export async function apiRequest(endpoint, options = {}) {
   const data = await parseResponse(response);
 
   if (!response.ok) {
-    const message = data?.message || data?.error || data || 'Request failed';
-    throw new Error(message);
+    const message = data?.reason || data?.message || data?.error || data || 'Request failed';
+    const error = new Error(message);
+    error.code = data?.code;
+    error.details = data;
+    throw error;
   }
 
   return data;
